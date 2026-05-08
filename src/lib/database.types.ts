@@ -112,6 +112,30 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["candidate_positions"]["Insert"]>
         Relationships: []
       }
+      candidate_programs: {
+        Row: {
+          candidate_id: string
+          content: string
+          created_at: string
+          id: string
+          intro: string | null
+          order_index: number
+          theme_id: string
+          updated_at: string
+        }
+        Insert: {
+          candidate_id: string
+          content: string
+          created_at?: string
+          id?: string
+          intro?: string | null
+          order_index?: number
+          theme_id: string
+          updated_at?: string
+        }
+        Update: Partial<Database["public"]["Tables"]["candidate_programs"]["Insert"]>
+        Relationships: []
+      }
       candidate_proposals: {
         Row: {
           candidate_id: string

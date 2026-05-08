@@ -13,6 +13,7 @@ import { PoliticalMatchCard } from './components/PoliticalMatchCard';
 import { ExplorerSection } from './components/ExplorerSection';
 import { FeaturedArticleCard } from './components/FeaturedArticleCard';
 import { CandidatesList } from './components/CandidatesList';
+import { ProgrammesList } from './components/ProgrammesList';
 import { MoreMenu } from './components/MoreMenu';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
@@ -153,7 +154,16 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && (
+          {activeTab === 'explorer' && explorerView === 'programmes' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+               <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
+                 <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
+               </button>
+               <ProgrammesList />
+            </div>
+          )}
+
+          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
                <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
                  <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
