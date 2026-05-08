@@ -55,6 +55,10 @@ jobs:
         run: npm ci
 
       - name: Build web app (Vite)
+        env:
+          # Supabase publishable key — designed to be embedded client-side; RLS guards the data.
+          VITE_SUPABASE_URL: https://oyvqvfawcxlnvpgloicx.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nycw__S1NdZYIVyu4LH4SQ_830IdXPA
         run: npm run build
 
       - name: Capacitor sync (Android)
