@@ -106,7 +106,6 @@ function pickImage(item: any): string | null {
       if (u) return String(u);
     }
   }
-  // Try first <img> in description
   const html = pickText(item.description ?? item.summary ?? item.content ?? item["content:encoded"]);
   const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
   return m ? m[1] : null;
@@ -182,48 +181,55 @@ async function fetchSourceItems(rssUrl: string): Promise<NormalizedItem[]> {
   }
 }
 
-interface Refs {
-  candidateAliases: { candidate_id: string; alias: string }[];
-  partyAliases: { party_id: string; alias: string }[];
-  themeKeywords: { theme_id: string; keyword: string }[];
+// Word-boundary regex that respects Unicode letter/digit, so "EPR" won't
+// match inside "reproché" and "ISF" won't match inside "satisfaisant".
+function makePattern(keyword: string): RegExp {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu");
 }
 
-function tagArticle(item: NormalizedItem, refs: Refs) {
-  const title = item.title.toLowerCase();
-  const summary = item.summary.toLowerCase();
-  const haystack = `${title} ${summary}`;
+interface CandidateAlias { candidate_id: string; alias: string; regex: RegExp }
+interface PartyAlias    { party_id: string;    alias: string; regex: RegExp }
+interface ThemeKeyword  { theme_id: string;    keyword: string; regex: RegExp }
 
+interface Refs {
+  candidateAliases: CandidateAlias[];
+  partyAliases: PartyAlias[];
+  themeKeywords: ThemeKeyword[];
+}
+
+function tagArticle(title: string, summary: string, refs: Refs) {
   const candidateScores = new Map<string, number>();
   for (const a of refs.candidateAliases) {
-    const needle = a.alias.toLowerCase();
-    if (!needle) continue;
     let score = 0;
-    if (title.includes(needle)) score += 2;
-    if (summary.includes(needle)) score += 1;
-    if (score > 0) candidateScores.set(a.candidate_id, (candidateScores.get(a.candidate_id) ?? 0) + score);
+    if (a.regex.test(title)) score += 2;
+    if (a.regex.test(summary)) score += 1;
+    if (score > 0) {
+      candidateScores.set(a.candidate_id, (candidateScores.get(a.candidate_id) ?? 0) + score);
+    }
   }
   const partyScores = new Map<string, number>();
   for (const a of refs.partyAliases) {
-    const needle = a.alias.toLowerCase();
-    if (!needle) continue;
     let score = 0;
-    if (title.includes(needle)) score += 2;
-    if (summary.includes(needle)) score += 1;
-    if (score > 0) partyScores.set(a.party_id, (partyScores.get(a.party_id) ?? 0) + score);
+    if (a.regex.test(title)) score += 2;
+    if (a.regex.test(summary)) score += 1;
+    if (score > 0) {
+      partyScores.set(a.party_id, (partyScores.get(a.party_id) ?? 0) + score);
+    }
   }
   const themeScores = new Map<string, number>();
   for (const k of refs.themeKeywords) {
-    const needle = k.keyword.toLowerCase();
-    if (!needle) continue;
     let score = 0;
-    if (title.includes(needle)) score += 2;
-    if (haystack.includes(needle)) score += 1;
-    if (score > 0) themeScores.set(k.theme_id, (themeScores.get(k.theme_id) ?? 0) + score);
+    if (k.regex.test(title)) score += 2;
+    if (k.regex.test(summary)) score += 1;
+    if (score > 0) {
+      themeScores.set(k.theme_id, (themeScores.get(k.theme_id) ?? 0) + score);
+    }
   }
   return {
     candidates: [...candidateScores.entries()].map(([id, s]) => ({ id, score: s })),
-    parties: [...partyScores.entries()].map(([id, s]) => ({ id, score: s })),
-    themes: [...themeScores.entries()].map(([id, s]) => ({ id, score: s })),
+    parties:    [...partyScores.entries()].map(([id, s])    => ({ id, score: s })),
+    themes:     [...themeScores.entries()].map(([id, s])    => ({ id, score: s })),
   };
 }
 
@@ -237,9 +243,9 @@ async function loadRefs(): Promise<Refs> {
   if (p.error) throw p.error;
   if (t.error) throw t.error;
   return {
-    candidateAliases: c.data ?? [],
-    partyAliases: p.data ?? [],
-    themeKeywords: t.data ?? [],
+    candidateAliases: (c.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias) })),
+    partyAliases:     (p.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias) })),
+    themeKeywords:    (t.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.keyword) })),
   };
 }
 
@@ -271,7 +277,6 @@ async function ingestSource(source: SourceRow, refs: Refs) {
     return { source: source.slug, inserted: 0, total: 0 };
   }
 
-  // Lookup which guids already exist for this source (single round-trip)
   const guids = items.map((i) => i.guid);
   const { data: existing } = await supabase
     .from("news_articles")
@@ -302,40 +307,108 @@ async function ingestSource(source: SourceRow, refs: Refs) {
       .single();
     if (error || !data) continue;
     inserted++;
-    const tags = tagArticle(item, refs);
+    const tags = tagArticle(item.title, item.summary, refs);
     if (tags.candidates.length) {
-      await supabase
-        .from("article_candidates")
+      await supabase.from("article_candidates")
         .insert(tags.candidates.map((t) => ({ article_id: data.id, candidate_id: t.id, score: t.score })));
     }
     if (tags.parties.length) {
-      await supabase
-        .from("article_parties")
+      await supabase.from("article_parties")
         .insert(tags.parties.map((t) => ({ article_id: data.id, party_id: t.id, score: t.score })));
     }
     if (tags.themes.length) {
-      await supabase
-        .from("article_themes")
+      await supabase.from("article_themes")
         .insert(tags.themes.map((t) => ({ article_id: data.id, theme_id: t.id, score: t.score })));
     }
   }
 
   await supabase
     .from("news_sources")
-    .update({
-      last_fetched_at: new Date().toISOString(),
-      last_fetch_error: null,
-    })
+    .update({ last_fetched_at: new Date().toISOString(), last_fetch_error: null })
     .eq("id", source.id);
 
   return { source: source.slug, inserted, total: items.length };
 }
 
+// ---------- Re-tag mode ----------
+async function retagAllArticles(refs: Refs) {
+  // Wipe existing tags
+  await supabase.from("article_themes").delete().not("article_id", "is", null);
+  await supabase.from("article_candidates").delete().not("article_id", "is", null);
+  await supabase.from("article_parties").delete().not("article_id", "is", null);
+
+  let offset = 0;
+  const pageSize = 500;
+  let totalRetagged = 0;
+  let totalThemeRows = 0;
+  let totalCandidateRows = 0;
+  let totalPartyRows = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("news_articles")
+      .select("id, title, summary")
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    const themeRows: any[] = [];
+    const candidateRows: any[] = [];
+    const partyRows: any[] = [];
+
+    for (const row of data) {
+      const tags = tagArticle(row.title ?? "", row.summary ?? "", refs);
+      for (const t of tags.themes)     themeRows.push({ article_id: row.id, theme_id: t.id, score: t.score });
+      for (const c of tags.candidates) candidateRows.push({ article_id: row.id, candidate_id: c.id, score: c.score });
+      for (const p of tags.parties)    partyRows.push({ article_id: row.id, party_id: p.id, score: p.score });
+      totalRetagged++;
+    }
+
+    // Insert in chunks of 500 to keep payloads bounded
+    const chunk = <T,>(arr: T[], n: number) => {
+      const out: T[][] = [];
+      for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+      return out;
+    };
+
+    for (const c of chunk(themeRows, 500))     await supabase.from("article_themes").insert(c);
+    for (const c of chunk(candidateRows, 500)) await supabase.from("article_candidates").insert(c);
+    for (const c of chunk(partyRows, 500))     await supabase.from("article_parties").insert(c);
+
+    totalThemeRows += themeRows.length;
+    totalCandidateRows += candidateRows.length;
+    totalPartyRows += partyRows.length;
+
+    if (data.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return {
+    retagged: totalRetagged,
+    theme_rows: totalThemeRows,
+    candidate_rows: totalCandidateRows,
+    party_rows: totalPartyRows,
+  };
+}
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   const onlySlug = url.searchParams.get("source");
+  const retag = url.searchParams.get("retag") === "true";
 
-  const sourcesQuery = supabase.from("news_sources").select("id, slug, name, rss_url, is_factcheck").eq("is_active", true);
+  if (retag) {
+    const refs = await loadRefs();
+    const result = await retagAllArticles(refs);
+    return new Response(JSON.stringify({ retag: result }, null, 2), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const sourcesQuery = supabase
+    .from("news_sources")
+    .select("id, slug, name, rss_url, is_factcheck")
+    .eq("is_active", true);
   if (onlySlug) sourcesQuery.eq("slug", onlySlug);
   const { data: sources, error: srcErr } = await sourcesQuery;
   if (srcErr) return new Response(JSON.stringify({ error: srcErr.message }), { status: 500 });
