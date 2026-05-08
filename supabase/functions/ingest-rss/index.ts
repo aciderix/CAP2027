@@ -1,0 +1,355 @@
+// deno-lint-ignore-file no-explicit-any
+import { createClient } from "jsr:@supabase/supabase-js@2";
+import { XMLParser } from "https://esm.sh/fast-xml-parser@4.5.0";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
+});
+
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  trimValues: true,
+  parseTagValue: false,
+  parseAttributeValue: false,
+  textNodeName: "#text",
+});
+
+const VERDICT_RULES: Array<[RegExp, string]> = [
+  [/\b(faux|c'est faux|fake|infox|intox)\b/i, "faux"],
+  [/\btrompeur|trompeuse\b/i, "trompeur"],
+  [/\b(c'est vrai|exact|véridique|confirmé)\b/i, "vrai"],
+  [/\bpartiellement|en partie\b/i, "partiel"],
+];
+
+interface NormalizedItem {
+  guid: string;
+  url: string;
+  title: string;
+  summary: string;
+  image_url: string | null;
+  author: string | null;
+  published_at: string;
+}
+
+function ensureArray<T>(x: T | T[] | undefined | null): T[] {
+  if (x === undefined || x === null) return [];
+  return Array.isArray(x) ? x : [x];
+}
+
+function pickText(v: any): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number") return String(v);
+  if (typeof v === "object") {
+    if ("#text" in v) return String((v as any)["#text"] ?? "");
+    if ("@_href" in v) return String((v as any)["@_href"] ?? "");
+  }
+  return "";
+}
+
+function stripHtml(s: string): string {
+  return s
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function pickLink(item: any): string {
+  if (typeof item.link === "string") return item.link;
+  if (Array.isArray(item.link)) {
+    const alt = item.link.find((l: any) => l && l["@_rel"] !== "self" && l["@_href"]);
+    if (alt) return String(alt["@_href"]);
+    const first = item.link.find((l: any) => l && l["@_href"]);
+    if (first) return String(first["@_href"]);
+    return String(item.link[0] ?? "");
+  }
+  if (item.link && typeof item.link === "object") {
+    if (item.link["@_href"]) return String(item.link["@_href"]);
+    if (item.link["#text"]) return String(item.link["#text"]);
+  }
+  return "";
+}
+
+function pickImage(item: any): string | null {
+  const enclosure = item.enclosure;
+  if (enclosure) {
+    const arr = ensureArray(enclosure);
+    for (const e of arr) {
+      const t = e?.["@_type"] ?? "";
+      const u = e?.["@_url"] ?? "";
+      if (u && (t.startsWith?.("image") || /\.(jpe?g|png|webp|gif)/i.test(u))) return String(u);
+    }
+  }
+  const mediaContent = item["media:content"] ?? item.content;
+  if (mediaContent) {
+    const arr = ensureArray(mediaContent);
+    for (const m of arr) {
+      const u = m?.["@_url"];
+      if (u) return String(u);
+    }
+  }
+  const mediaThumb = item["media:thumbnail"];
+  if (mediaThumb) {
+    const arr = ensureArray(mediaThumb);
+    for (const m of arr) {
+      const u = m?.["@_url"];
+      if (u) return String(u);
+    }
+  }
+  // Try first <img> in description
+  const html = pickText(item.description ?? item.summary ?? item.content ?? item["content:encoded"]);
+  const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+  return m ? m[1] : null;
+}
+
+function parseDate(item: any): string {
+  const raw =
+    pickText(item.pubDate) ||
+    pickText(item.published) ||
+    pickText(item.updated) ||
+    pickText(item["dc:date"]);
+  if (!raw) return new Date().toISOString();
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return new Date().toISOString();
+  return d.toISOString();
+}
+
+function detectVerdict(title: string, summary: string): string | null {
+  const txt = `${title} ${summary}`;
+  for (const [re, verdict] of VERDICT_RULES) {
+    if (re.test(txt)) return verdict;
+  }
+  return null;
+}
+
+function normalize(item: any): NormalizedItem | null {
+  const title = stripHtml(pickText(item.title));
+  if (!title) return null;
+  const url = stripHtml(pickLink(item));
+  if (!url) return null;
+  const guidRaw = pickText(item.guid) || pickText(item.id) || url;
+  const guid = String(guidRaw).slice(0, 500);
+  const summary = stripHtml(
+    pickText(item.description) ||
+      pickText(item.summary) ||
+      pickText(item["content:encoded"]) ||
+      pickText(item.content),
+  ).slice(0, 2000);
+  return {
+    guid,
+    url,
+    title: title.slice(0, 500),
+    summary,
+    image_url: pickImage(item),
+    author: stripHtml(pickText(item.author) || pickText(item["dc:creator"])).slice(0, 200) || null,
+    published_at: parseDate(item),
+  };
+}
+
+async function fetchSourceItems(rssUrl: string): Promise<NormalizedItem[]> {
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 20_000);
+  try {
+    const res = await fetch(rssUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5",
+        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+      },
+      signal: ctrl.signal,
+      redirect: "follow",
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const xml = await res.text();
+    const parsed = xmlParser.parse(xml);
+    let items: any[] = [];
+    if (parsed?.rss?.channel) items = ensureArray(parsed.rss.channel.item);
+    else if (parsed?.feed) items = ensureArray(parsed.feed.entry);
+    else if (parsed?.["rdf:RDF"]) items = ensureArray(parsed["rdf:RDF"].item);
+    return items.map(normalize).filter((x): x is NormalizedItem => x !== null);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+interface Refs {
+  candidateAliases: { candidate_id: string; alias: string }[];
+  partyAliases: { party_id: string; alias: string }[];
+  themeKeywords: { theme_id: string; keyword: string }[];
+}
+
+function tagArticle(item: NormalizedItem, refs: Refs) {
+  const title = item.title.toLowerCase();
+  const summary = item.summary.toLowerCase();
+  const haystack = `${title} ${summary}`;
+
+  const candidateScores = new Map<string, number>();
+  for (const a of refs.candidateAliases) {
+    const needle = a.alias.toLowerCase();
+    if (!needle) continue;
+    let score = 0;
+    if (title.includes(needle)) score += 2;
+    if (summary.includes(needle)) score += 1;
+    if (score > 0) candidateScores.set(a.candidate_id, (candidateScores.get(a.candidate_id) ?? 0) + score);
+  }
+  const partyScores = new Map<string, number>();
+  for (const a of refs.partyAliases) {
+    const needle = a.alias.toLowerCase();
+    if (!needle) continue;
+    let score = 0;
+    if (title.includes(needle)) score += 2;
+    if (summary.includes(needle)) score += 1;
+    if (score > 0) partyScores.set(a.party_id, (partyScores.get(a.party_id) ?? 0) + score);
+  }
+  const themeScores = new Map<string, number>();
+  for (const k of refs.themeKeywords) {
+    const needle = k.keyword.toLowerCase();
+    if (!needle) continue;
+    let score = 0;
+    if (title.includes(needle)) score += 2;
+    if (haystack.includes(needle)) score += 1;
+    if (score > 0) themeScores.set(k.theme_id, (themeScores.get(k.theme_id) ?? 0) + score);
+  }
+  return {
+    candidates: [...candidateScores.entries()].map(([id, s]) => ({ id, score: s })),
+    parties: [...partyScores.entries()].map(([id, s]) => ({ id, score: s })),
+    themes: [...themeScores.entries()].map(([id, s]) => ({ id, score: s })),
+  };
+}
+
+async function loadRefs(): Promise<Refs> {
+  const [c, p, t] = await Promise.all([
+    supabase.from("candidate_aliases").select("candidate_id, alias"),
+    supabase.from("party_aliases").select("party_id, alias"),
+    supabase.from("theme_keywords").select("theme_id, keyword"),
+  ]);
+  if (c.error) throw c.error;
+  if (p.error) throw p.error;
+  if (t.error) throw t.error;
+  return {
+    candidateAliases: c.data ?? [],
+    partyAliases: p.data ?? [],
+    themeKeywords: t.data ?? [],
+  };
+}
+
+interface SourceRow {
+  id: string;
+  slug: string;
+  name: string;
+  rss_url: string;
+  is_factcheck: boolean;
+}
+
+async function ingestSource(source: SourceRow, refs: Refs) {
+  let items: NormalizedItem[];
+  try {
+    items = await fetchSourceItems(source.rss_url);
+  } catch (err) {
+    await supabase
+      .from("news_sources")
+      .update({ last_fetch_error: String(err).slice(0, 500), last_fetched_at: new Date().toISOString() })
+      .eq("id", source.id);
+    return { source: source.slug, error: String(err) };
+  }
+
+  if (items.length === 0) {
+    await supabase
+      .from("news_sources")
+      .update({ last_fetch_error: "no items parsed", last_fetched_at: new Date().toISOString() })
+      .eq("id", source.id);
+    return { source: source.slug, inserted: 0, total: 0 };
+  }
+
+  // Lookup which guids already exist for this source (single round-trip)
+  const guids = items.map((i) => i.guid);
+  const { data: existing } = await supabase
+    .from("news_articles")
+    .select("guid")
+    .eq("source_id", source.id)
+    .in("guid", guids);
+  const existingSet = new Set((existing ?? []).map((e) => e.guid));
+
+  const fresh = items.filter((i) => !existingSet.has(i.guid));
+  let inserted = 0;
+  for (const item of fresh) {
+    const verdict = source.is_factcheck ? detectVerdict(item.title, item.summary) : null;
+    const { data, error } = await supabase
+      .from("news_articles")
+      .insert({
+        source_id: source.id,
+        guid: item.guid,
+        url: item.url,
+        title: item.title,
+        summary: item.summary,
+        image_url: item.image_url,
+        author: item.author,
+        published_at: item.published_at,
+        is_factcheck: source.is_factcheck,
+        verdict,
+      })
+      .select("id")
+      .single();
+    if (error || !data) continue;
+    inserted++;
+    const tags = tagArticle(item, refs);
+    if (tags.candidates.length) {
+      await supabase
+        .from("article_candidates")
+        .insert(tags.candidates.map((t) => ({ article_id: data.id, candidate_id: t.id, score: t.score })));
+    }
+    if (tags.parties.length) {
+      await supabase
+        .from("article_parties")
+        .insert(tags.parties.map((t) => ({ article_id: data.id, party_id: t.id, score: t.score })));
+    }
+    if (tags.themes.length) {
+      await supabase
+        .from("article_themes")
+        .insert(tags.themes.map((t) => ({ article_id: data.id, theme_id: t.id, score: t.score })));
+    }
+  }
+
+  await supabase
+    .from("news_sources")
+    .update({
+      last_fetched_at: new Date().toISOString(),
+      last_fetch_error: null,
+    })
+    .eq("id", source.id);
+
+  return { source: source.slug, inserted, total: items.length };
+}
+
+Deno.serve(async (req) => {
+  const url = new URL(req.url);
+  const onlySlug = url.searchParams.get("source");
+
+  const sourcesQuery = supabase.from("news_sources").select("id, slug, name, rss_url, is_factcheck").eq("is_active", true);
+  if (onlySlug) sourcesQuery.eq("slug", onlySlug);
+  const { data: sources, error: srcErr } = await sourcesQuery;
+  if (srcErr) return new Response(JSON.stringify({ error: srcErr.message }), { status: 500 });
+  if (!sources || sources.length === 0) {
+    return new Response(JSON.stringify({ results: [], note: "no active sources" }));
+  }
+
+  const refs = await loadRefs();
+  const results: any[] = [];
+  for (const s of sources as SourceRow[]) {
+    const res = await ingestSource(s, refs);
+    results.push(res);
+  }
+  return new Response(JSON.stringify({ results }, null, 2), {
+    headers: { "Content-Type": "application/json" },
+  });
+});

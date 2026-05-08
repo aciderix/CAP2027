@@ -230,6 +230,108 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["parties"]["Insert"]>
         Relationships: []
       }
+      news_sources: {
+        Row: {
+          id: string
+          slug: string
+          name: string
+          homepage_url: string | null
+          rss_url: string
+          orientation: string
+          color: string | null
+          is_factcheck: boolean
+          is_active: boolean
+          last_fetched_at: string | null
+          last_fetch_error: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          slug: string
+          name: string
+          homepage_url?: string | null
+          rss_url: string
+          orientation: string
+          color?: string | null
+          is_factcheck?: boolean
+          is_active?: boolean
+          last_fetched_at?: string | null
+          last_fetch_error?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database["public"]["Tables"]["news_sources"]["Insert"]>
+        Relationships: []
+      }
+      news_articles: {
+        Row: {
+          id: string
+          source_id: string
+          guid: string
+          url: string
+          title: string
+          summary: string | null
+          image_url: string | null
+          author: string | null
+          published_at: string
+          fetched_at: string
+          is_factcheck: boolean
+          verdict: string | null
+        }
+        Insert: {
+          id?: string
+          source_id: string
+          guid: string
+          url: string
+          title: string
+          summary?: string | null
+          image_url?: string | null
+          author?: string | null
+          published_at: string
+          fetched_at?: string
+          is_factcheck?: boolean
+          verdict?: string | null
+        }
+        Update: Partial<Database["public"]["Tables"]["news_articles"]["Insert"]>
+        Relationships: []
+      }
+      candidate_aliases: {
+        Row: { id: string; candidate_id: string; alias: string; created_at: string }
+        Insert: { id?: string; candidate_id: string; alias: string; created_at?: string }
+        Update: Partial<Database["public"]["Tables"]["candidate_aliases"]["Insert"]>
+        Relationships: []
+      }
+      party_aliases: {
+        Row: { id: string; party_id: string; alias: string; created_at: string }
+        Insert: { id?: string; party_id: string; alias: string; created_at?: string }
+        Update: Partial<Database["public"]["Tables"]["party_aliases"]["Insert"]>
+        Relationships: []
+      }
+      theme_keywords: {
+        Row: { id: string; theme_id: string; keyword: string; created_at: string }
+        Insert: { id?: string; theme_id: string; keyword: string; created_at?: string }
+        Update: Partial<Database["public"]["Tables"]["theme_keywords"]["Insert"]>
+        Relationships: []
+      }
+      article_candidates: {
+        Row: { article_id: string; candidate_id: string; score: number }
+        Insert: { article_id: string; candidate_id: string; score?: number }
+        Update: Partial<Database["public"]["Tables"]["article_candidates"]["Insert"]>
+        Relationships: []
+      }
+      article_parties: {
+        Row: { article_id: string; party_id: string; score: number }
+        Insert: { article_id: string; party_id: string; score?: number }
+        Update: Partial<Database["public"]["Tables"]["article_parties"]["Insert"]>
+        Relationships: []
+      }
+      article_themes: {
+        Row: { article_id: string; theme_id: string; score: number }
+        Insert: { article_id: string; theme_id: string; score?: number }
+        Update: Partial<Database["public"]["Tables"]["article_themes"]["Insert"]>
+        Relationships: []
+      }
       themes: {
         Row: {
           color: string | null

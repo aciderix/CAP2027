@@ -15,6 +15,7 @@ import { FeaturedArticleCard } from './components/FeaturedArticleCard';
 import { CandidatesList } from './components/CandidatesList';
 import { ProgrammesList } from './components/ProgrammesList';
 import { Comparateur } from './components/Comparateur';
+import { NewsFeed } from './components/NewsFeed';
 import { MoreMenu } from './components/MoreMenu';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
@@ -106,7 +107,7 @@ export default function App() {
           className="flex flex-col gap-4 sm:gap-6 mb-8"
         >
           {/* Main Welcome/Title Card */}
-          {activeTab !== 'accueil' && activeTab !== 'explorer' && (
+          {activeTab !== 'accueil' && activeTab !== 'explorer' && activeTab !== 'actualites' && (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sm:p-10">
               <h1 className="text-2xl sm:text-3xl font-bold text-[#102a5c]">
                 {content.title}
@@ -173,7 +174,22 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && explorerView !== 'comparateur' && (
+          {activeTab === 'explorer' && explorerView === 'factchecking' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+               <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
+                 <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
+               </button>
+               <NewsFeed mode="factcheck" />
+            </div>
+          )}
+
+          {activeTab === 'actualites' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+              <NewsFeed mode="news" />
+            </div>
+          )}
+
+          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && explorerView !== 'comparateur' && explorerView !== 'factchecking' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
                <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
                  <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
