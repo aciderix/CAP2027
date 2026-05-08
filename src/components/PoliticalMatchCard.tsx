@@ -6,12 +6,6 @@ import { PoliticalMatchGame } from './PoliticalMatchGame';
 
 export function PoliticalMatchCard() {
   const [isOpen, setIsOpen] = useState(false);
-  const [hasCompletedTuto, setHasCompletedTuto] = useState(false);
-
-  const handleTestComplete = () => {
-    setHasCompletedTuto(true);
-    setIsOpen(false);
-  };
 
   return (
     <>
@@ -28,7 +22,7 @@ export function PoliticalMatchCard() {
             onClick={() => setIsOpen(true)}
             className="bg-[#0a1b3f] hover:bg-[#153b82] text-white px-5 sm:px-6 py-2 sm:py-2.5 rounded-[10px] sm:rounded-xl font-medium w-auto text-[13px] sm:text-[14px]"
           >
-            {hasCompletedTuto ? 'Continuer le test' : 'Lancer le test'}
+            Lancer le test
           </Button>
         </div>
 
@@ -71,21 +65,9 @@ export function PoliticalMatchCard() {
       <Modal
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
-        title={!hasCompletedTuto ? "" : "Match politique"}
+        title=""
       >
-        {!hasCompletedTuto ? (
-           <PoliticalMatchGame 
-              onComplete={handleTestComplete} 
-              onClose={() => setIsOpen(false)} 
-           />
-        ) : (
-           <div className="py-12 flex flex-col items-center justify-center text-center">
-              <h3 className="text-xl font-bold text-[#102a5c] mb-2">Bientôt !</h3>
-              <p className="text-slate-500">
-                Vous avez terminé le tutoriel. Les propositions arrivent très vite pour le vrai test !
-              </p>
-           </div>
-        )}
+        <PoliticalMatchGame onClose={() => setIsOpen(false)} />
       </Modal>
     </>
   );
