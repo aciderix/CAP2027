@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo } from 'react';
-import { motion } from 'motion/react';
+import { useState, useMemo, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { User, BookOpen, Scale, BadgeCheck, ArrowLeft } from 'lucide-react';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
@@ -14,10 +14,35 @@ import { ExplorerSection } from './components/ExplorerSection';
 import { FeaturedArticleCard } from './components/FeaturedArticleCard';
 import { CandidatesList } from './components/CandidatesList';
 import { MoreMenu } from './components/MoreMenu';
+import { SplashScreen } from './components/SplashScreen';
+import { Onboarding } from './components/Onboarding';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('accueil');
   const [explorerView, setExplorerView] = useState('main');
+  
+  const [showSplash, setShowSplash] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    // Show splash screen for 2.5 seconds
+    const splashTimer = setTimeout(() => {
+      setShowSplash(false);
+      // After splash, check if user has seen onboarding
+      const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
+      if (!hasSeenOnboarding) {
+        setShowOnboarding(true);
+      }
+    }, 2500);
+
+    return () => clearTimeout(splashTimer);
+  }, []);
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem('hasSeenOnboarding', 'true');
+    setShowOnboarding(false);
+  };
+
 
   const getTabContent = () => {
     switch(activeTab) {
@@ -59,8 +84,14 @@ export default function App() {
   const content = getTabContent();
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
-      <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+    <>
+      <AnimatePresence>
+        {showSplash && <SplashScreen key="splash" />}
+        {showOnboarding && <Onboarding key="onboarding" onComplete={handleOnboardingComplete} />}
+      </AnimatePresence>
+      <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
+        <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+
       
 
 
@@ -163,5 +194,6 @@ export default function App() {
       </main>
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
+    </>
   );
 }
