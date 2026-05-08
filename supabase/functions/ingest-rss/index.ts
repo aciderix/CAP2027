@@ -90,6 +90,18 @@ function pickImage(item: any): string | null {
       if (u && (t.startsWith?.("image") || /\.(jpe?g|png|webp|gif)/i.test(u))) return String(u);
     }
   }
+  // YouTube Atom feed nests media stuff under <media:group>
+  const mediaGroup = item["media:group"];
+  if (mediaGroup) {
+    const thumb = mediaGroup["media:thumbnail"];
+    if (thumb) {
+      const arr = ensureArray(thumb);
+      for (const m of arr) {
+        const u = m?.["@_url"];
+        if (u) return String(u);
+      }
+    }
+  }
   const mediaContent = item["media:content"] ?? item.content;
   if (mediaContent) {
     const arr = ensureArray(mediaContent);
@@ -138,11 +150,14 @@ function normalize(item: any): NormalizedItem | null {
   if (!url) return null;
   const guidRaw = pickText(item.guid) || pickText(item.id) || url;
   const guid = String(guidRaw).slice(0, 500);
+  // YouTube nests description under media:group
+  const mediaGroup = item["media:group"] ?? null;
   const summary = stripHtml(
     pickText(item.description) ||
       pickText(item.summary) ||
       pickText(item["content:encoded"]) ||
-      pickText(item.content),
+      pickText(item.content) ||
+      (mediaGroup ? pickText(mediaGroup["media:description"]) : ""),
   ).slice(0, 2000);
   return {
     guid,
@@ -255,6 +270,19 @@ interface SourceRow {
   name: string;
   rss_url: string;
   is_factcheck: boolean;
+  kind: string;
+  candidate_id: string | null;
+}
+
+const ARTICLE_KIND_FROM_SOURCE: Record<string, string> = {
+  press: "article",
+  youtube: "youtube_video",
+  twitch: "twitch_clip",
+  mastodon: "mastodon_post",
+  bluesky: "bluesky_post",
+};
+function articleKindFor(sourceKind: string): string {
+  return ARTICLE_KIND_FROM_SOURCE[sourceKind] ?? "article";
 }
 
 async function ingestSource(source: SourceRow, refs: Refs) {
@@ -286,6 +314,7 @@ async function ingestSource(source: SourceRow, refs: Refs) {
   const existingSet = new Set((existing ?? []).map((e) => e.guid));
 
   const fresh = items.filter((i) => !existingSet.has(i.guid));
+  const articleKind = articleKindFor(source.kind);
   let inserted = 0;
   for (const item of fresh) {
     const verdict = source.is_factcheck ? detectVerdict(item.title, item.summary) : null;
@@ -302,15 +331,22 @@ async function ingestSource(source: SourceRow, refs: Refs) {
         published_at: item.published_at,
         is_factcheck: source.is_factcheck,
         verdict,
+        kind: articleKind,
       })
       .select("id")
       .single();
     if (error || !data) continue;
     inserted++;
     const tags = tagArticle(item.title, item.summary, refs);
-    if (tags.candidates.length) {
+    // Auto-attribute to source's candidate (high confidence)
+    const candidateMap = new Map<string, number>();
+    for (const t of tags.candidates) candidateMap.set(t.id, t.score);
+    if (source.candidate_id) {
+      candidateMap.set(source.candidate_id, Math.max(candidateMap.get(source.candidate_id) ?? 0, 100));
+    }
+    if (candidateMap.size > 0) {
       await supabase.from("article_candidates")
-        .insert(tags.candidates.map((t) => ({ article_id: data.id, candidate_id: t.id, score: t.score })));
+        .insert([...candidateMap].map(([cid, score]) => ({ article_id: data.id, candidate_id: cid, score })));
     }
     if (tags.parties.length) {
       await supabase.from("article_parties")
@@ -337,6 +373,15 @@ async function retagAllArticles(refs: Refs) {
   await supabase.from("article_candidates").delete().not("article_id", "is", null);
   await supabase.from("article_parties").delete().not("article_id", "is", null);
 
+  // Pre-fetch sources with candidate_id so we honour the auto-attach rule on retag
+  const { data: sourceMap } = await supabase
+    .from("news_sources")
+    .select("id, candidate_id");
+  const sourceCandidate = new Map<string, string>();
+  for (const s of (sourceMap ?? []) as { id: string; candidate_id: string | null }[]) {
+    if (s.candidate_id) sourceCandidate.set(s.id, s.candidate_id);
+  }
+
   let offset = 0;
   const pageSize = 500;
   let totalRetagged = 0;
@@ -347,7 +392,7 @@ async function retagAllArticles(refs: Refs) {
   while (true) {
     const { data, error } = await supabase
       .from("news_articles")
-      .select("id, title, summary")
+      .select("id, title, summary, source_id")
       .order("id", { ascending: true })
       .range(offset, offset + pageSize - 1);
     if (error) throw error;
@@ -359,9 +404,13 @@ async function retagAllArticles(refs: Refs) {
 
     for (const row of data) {
       const tags = tagArticle(row.title ?? "", row.summary ?? "", refs);
-      for (const t of tags.themes)     themeRows.push({ article_id: row.id, theme_id: t.id, score: t.score });
-      for (const c of tags.candidates) candidateRows.push({ article_id: row.id, candidate_id: c.id, score: c.score });
-      for (const p of tags.parties)    partyRows.push({ article_id: row.id, party_id: p.id, score: p.score });
+      const candidateMap = new Map<string, number>();
+      for (const c of tags.candidates) candidateMap.set(c.id, c.score);
+      const attached = sourceCandidate.get(row.source_id);
+      if (attached) candidateMap.set(attached, Math.max(candidateMap.get(attached) ?? 0, 100));
+      for (const t of tags.themes) themeRows.push({ article_id: row.id, theme_id: t.id, score: t.score });
+      for (const [cid, sc] of candidateMap) candidateRows.push({ article_id: row.id, candidate_id: cid, score: sc });
+      for (const p of tags.parties) partyRows.push({ article_id: row.id, party_id: p.id, score: p.score });
       totalRetagged++;
     }
 
@@ -407,7 +456,7 @@ Deno.serve(async (req) => {
 
   const sourcesQuery = supabase
     .from("news_sources")
-    .select("id, slug, name, rss_url, is_factcheck")
+    .select("id, slug, name, rss_url, is_factcheck, kind, candidate_id")
     .eq("is_active", true);
   if (onlySlug) sourcesQuery.eq("slug", onlySlug);
   const { data: sources, error: srcErr } = await sourcesQuery;

@@ -243,6 +243,8 @@ export type Database = {
           is_active: boolean
           last_fetched_at: string | null
           last_fetch_error: string | null
+          kind: string
+          candidate_id: string | null
           created_at: string
           updated_at: string
         }
@@ -258,6 +260,8 @@ export type Database = {
           is_active?: boolean
           last_fetched_at?: string | null
           last_fetch_error?: string | null
+          kind?: string
+          candidate_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -278,6 +282,7 @@ export type Database = {
           fetched_at: string
           is_factcheck: boolean
           verdict: string | null
+          kind: string
         }
         Insert: {
           id?: string
@@ -292,6 +297,7 @@ export type Database = {
           fetched_at?: string
           is_factcheck?: boolean
           verdict?: string | null
+          kind?: string
         }
         Update: Partial<Database["public"]["Tables"]["news_articles"]["Insert"]>
         Relationships: []

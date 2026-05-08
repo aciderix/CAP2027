@@ -1,15 +1,26 @@
-import { User, Eye, Star, FileText, Scale, Newspaper, Search, ExternalLink } from 'lucide-react';
+import { User, Eye, Star, FileText, Scale, Newspaper, Search, ExternalLink, Play } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
 import { supabase } from '../lib/supabase';
 import type { Tables, Enums } from '../lib/database.types';
+import { useFollowedCandidates } from '../lib/follows';
 
 type CandidateRow = Tables<'candidates'>;
 type PartyRow = Tables<'parties'>;
 type BioSection = Tables<'candidate_bio_sections'>;
 type Affair = Tables<'candidate_affairs'>;
-type NewsItem = Tables<'candidate_news'>;
+
+type NewsArticle = {
+  id: string;
+  url: string;
+  title: string;
+  summary: string | null;
+  image_url: string | null;
+  published_at: string;
+  kind: string;
+  source: { name: string; color: string | null; orientation: string } | null;
+};
 
 type CandidateWithParty = CandidateRow & { parties: Pick<PartyRow, 'name' | 'abbreviation' | 'color'> | null };
 
@@ -26,7 +37,7 @@ type CandidateDetail = {
   bio: BioSection[];
   proposals: ProposalWithTheme[];
   affairs: Affair[];
-  news: NewsItem[];
+  news: NewsArticle[];
 };
 
 const AFFAIR_LABELS: Record<Enums<'affair_status'>, string> = {
@@ -60,7 +71,8 @@ export function CandidatesList() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateWithParty | null>(null);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const { isFollowed, toggle: toggleFollow } = useFollowedCandidates();
+  const isFollowing = selectedCandidate ? isFollowed(selectedCandidate.id) : false;
   const [activeTab, setActiveTab] = useState<'biographie' | 'programme' | 'historique' | 'actualites'>('biographie');
   const [detail, setDetail] = useState<CandidateDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -103,15 +115,27 @@ export function CandidatesList() {
           .eq('candidate_id', candidateId).order('order_index'),
         supabase.from('candidate_affairs')
           .select('*').eq('candidate_id', candidateId).order('order_index'),
-        supabase.from('candidate_news')
-          .select('*').eq('candidate_id', candidateId).order('published_at', { ascending: false }),
+        supabase.from('article_candidates')
+          .select(`
+            article:news_articles(
+              id, url, title, summary, image_url, published_at, kind,
+              source:news_sources(name, color, orientation)
+            )
+          `)
+          .eq('candidate_id', candidateId)
+          .order('article(published_at)', { ascending: false })
+          .limit(40),
       ]);
       if (cancelled) return;
+      const news: NewsArticle[] = ((newsRes.data ?? []) as any[])
+        .map((r) => r.article)
+        .filter((a): a is NewsArticle => !!a)
+        .sort((a, b) => +new Date(b.published_at) - +new Date(a.published_at));
       setDetail({
         bio: (bioRes.data ?? []) as BioSection[],
         proposals: (propRes.data ?? []) as unknown as ProposalWithTheme[],
         affairs: (affRes.data ?? []) as Affair[],
-        news: (newsRes.data ?? []) as NewsItem[],
+        news,
       });
       setDetailLoading(false);
     })();
@@ -259,10 +283,14 @@ export function CandidatesList() {
                 </div>
 
                 <button
-                  onClick={() => setIsFollowing(!isFollowing)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 border border-slate-200 bg-white rounded-full shadow-sm text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors shrink-0"
+                  onClick={() => toggleFollow(selectedCandidate.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold transition-all shrink-0 ${
+                    isFollowing
+                      ? 'bg-amber-50 border border-amber-200 text-amber-700'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm'
+                  }`}
                 >
-                  <Star className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-colors ${isFollowing ? 'fill-amber-400 text-amber-400' : 'text-slate-400'}`} />
+                  <Star className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isFollowing ? 'fill-amber-400 text-amber-400' : 'text-slate-400'}`} />
                   <span className="hidden min-[380px]:inline">{isFollowing ? 'Suivi' : 'Suivre'}</span>
                 </button>
              </div>
@@ -383,22 +411,10 @@ export function CandidatesList() {
 
                   {!detailLoading && detail && activeTab === 'actualites' && (
                     detail.news.length === 0 ? (
-                      <EmptyTab message="Pas d'actualité associée pour l'instant." />
+                      <EmptyTab message="Pas encore d'article associé. Le tagueur attribuera des actualités dès qu'il détectera les noms du candidat ou de son parti." />
                     ) : (
-                      <ul className="space-y-3">
-                        {detail.news.map((n) => (
-                          <li key={n.id} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                            <div className="text-xs text-slate-400 mb-1 flex items-center gap-2">
-                              {n.source_name && <span className="font-semibold text-slate-500">{n.source_name}</span>}
-                              <span>{new Date(n.published_at).toLocaleDateString('fr-FR')}</span>
-                            </div>
-                            <a href={n.url} target="_blank" rel="noreferrer"
-                               className="font-semibold text-sm text-slate-800 hover:text-[#1a56db]">
-                              {n.title}
-                            </a>
-                            {n.summary && <p className="text-sm text-slate-600 mt-1">{n.summary}</p>}
-                          </li>
-                        ))}
+                      <ul className="space-y-2.5">
+                        {detail.news.map((n) => <CandidateNewsCard key={n.id} article={n} />)}
                       </ul>
                     )
                   )}
@@ -424,6 +440,87 @@ function DetailSkeleton() {
 
 function EmptyTab({ message }: { message: string }) {
   return (
-    <div className="text-center text-slate-400 text-sm py-6">{message}</div>
+    <div className="text-center text-slate-400 text-sm py-6 px-4 leading-relaxed">{message}</div>
+  );
+}
+
+function relativeTime(iso: string) {
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const min = Math.round(diff / 60000);
+  if (min < 1) return "à l'instant";
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `il y a ${h} h`;
+  const days = Math.round(h / 24);
+  if (days === 1) return 'hier';
+  if (days < 7) return `il y a ${days} j`;
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+}
+
+function CandidateNewsCard({ article }: { article: NewsArticle }) {
+  const isVideo = article.kind === 'youtube_video';
+  const isPress = !isVideo;
+  return (
+    <li>
+      <a
+        href={article.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group block bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden"
+      >
+        <div className="flex gap-3 p-3">
+          <div className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-xl overflow-hidden bg-slate-100">
+            {article.image_url ? (
+              <img
+                src={article.image_url}
+                alt=""
+                loading="lazy"
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-white font-black text-2xl"
+                   style={{ backgroundColor: article.source?.color || '#94a3b8' }}>
+                {(article.source?.name ?? '?').replace(/[^A-Za-zÀ-ÿ]/g, '').slice(0, 2).toUpperCase() || '?'}
+              </div>
+            )}
+            {isVideo && (
+              <span className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                <Play className="w-7 h-7 text-white drop-shadow-lg fill-white" />
+              </span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0 flex flex-col gap-1">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              {article.source && (
+                <span
+                  className="font-bold uppercase tracking-wider"
+                  style={{ color: article.source.color || '#475569' }}
+                >
+                  {article.source.name}
+                </span>
+              )}
+              <span className="text-slate-300">·</span>
+              <span>{relativeTime(article.published_at)}</span>
+              {isVideo && (
+                <span className="ml-auto inline-flex items-center gap-1 bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider">
+                  Vidéo
+                </span>
+              )}
+              {isPress && (
+                <ExternalLink className="w-3 h-3 text-slate-300 ml-auto group-hover:text-[#1a56db] transition-colors" />
+              )}
+            </div>
+            <h4 className="font-bold text-[#102a5c] text-sm leading-snug line-clamp-2 group-hover:text-[#1a56db] transition-colors">
+              {article.title}
+            </h4>
+            {article.summary && (
+              <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">{article.summary}</p>
+            )}
+          </div>
+        </div>
+      </a>
+    </li>
   );
 }

@@ -16,6 +16,7 @@ import { CandidatesList } from './components/CandidatesList';
 import { ProgrammesList } from './components/ProgrammesList';
 import { Comparateur } from './components/Comparateur';
 import { NewsFeed } from './components/NewsFeed';
+import { MyFeed } from './components/MyFeed';
 import { MoreMenu } from './components/MoreMenu';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
@@ -107,7 +108,7 @@ export default function App() {
           className="flex flex-col gap-4 sm:gap-6 mb-8"
         >
           {/* Main Welcome/Title Card */}
-          {activeTab !== 'accueil' && activeTab !== 'explorer' && activeTab !== 'actualites' && (
+          {activeTab !== 'accueil' && activeTab !== 'explorer' && activeTab !== 'actualites' && activeTab !== 'fil' && (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sm:p-10">
               <h1 className="text-2xl sm:text-3xl font-bold text-[#102a5c]">
                 {content.title}
@@ -186,6 +187,12 @@ export default function App() {
           {activeTab === 'actualites' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
               <NewsFeed mode="news" />
+            </div>
+          )}
+
+          {activeTab === 'fil' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+              <MyFeed onGoToCandidates={() => { setActiveTab('explorer'); setExplorerView('candidats'); }} />
             </div>
           )}
 
