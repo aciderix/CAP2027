@@ -88,28 +88,28 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["candidate_news"]["Insert"]>
         Relationships: []
       }
-      candidate_positions: {
+      candidate_match_propositions: {
         Row: {
           candidate_id: string
           created_at: string
-          notes: string | null
-          proposition_id: string
-          source_url: string | null
-          stance: Database["public"]["Enums"]["match_stance"]
+          id: string
+          is_active: boolean
+          order_index: number
+          text: string
+          theme_id: string
           updated_at: string
-          weight: number
         }
         Insert: {
           candidate_id: string
           created_at?: string
-          notes?: string | null
-          proposition_id: string
-          source_url?: string | null
-          stance: Database["public"]["Enums"]["match_stance"]
+          id?: string
+          is_active?: boolean
+          order_index?: number
+          text: string
+          theme_id: string
           updated_at?: string
-          weight?: number
         }
-        Update: Partial<Database["public"]["Tables"]["candidate_positions"]["Insert"]>
+        Update: Partial<Database["public"]["Tables"]["candidate_match_propositions"]["Insert"]>
         Relationships: []
       }
       candidate_programs: {
@@ -206,28 +206,6 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["candidates"]["Insert"]>
         Relationships: []
       }
-      match_propositions: {
-        Row: {
-          created_at: string
-          id: string
-          is_active: boolean
-          order_index: number
-          text: string
-          theme_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          order_index?: number
-          text: string
-          theme_id: string
-          updated_at?: string
-        }
-        Update: Partial<Database["public"]["Tables"]["match_propositions"]["Insert"]>
-        Relationships: []
-      }
       parties: {
         Row: {
           abbreviation: string | null
@@ -287,7 +265,6 @@ export type Database = {
         | "condamnation"
         | "relaxe"
       candidate_status: "declared" | "pressenti" | "withdrawn"
-      match_stance: "pour" | "contre" | "neutre"
     }
     CompositeTypes: Record<string, never>
   }
