@@ -18,6 +18,7 @@ import { Comparateur } from './components/Comparateur';
 import { NewsFeed } from './components/NewsFeed';
 import { MyFeed } from './components/MyFeed';
 import { MoreMenu } from './components/MoreMenu';
+import { ParrainagesCard } from './components/ParrainagesCard';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
 import { useResumeNotificationsHook } from './lib/notifications';
@@ -228,6 +229,7 @@ export default function App() {
                 onNavigate={() => setActiveTab('actualites')}
                 onNavigateFactcheck={() => { setActiveTab('explorer'); setExplorerView('factchecking'); }}
               />
+              <ParrainagesCard />
             </div>
           )}
 

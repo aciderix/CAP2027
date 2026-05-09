@@ -289,7 +289,13 @@ function LegalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
 
         <h4 className="font-bold text-[#102a5c] mt-2">Contact</h4>
         <p className="inline-flex items-center gap-1">
-          <Mail className="w-3.5 h-3.5" /> contact <span className="text-slate-400">[at]</span> cap2027 <span className="text-slate-400">[dot]</span> fr
+          <Mail className="w-3.5 h-3.5" />
+          <a
+            href="mailto:cap2027.app@gmail.com"
+            className="text-[#1a56db] hover:underline"
+          >
+            cap2027.app@gmail.com
+          </a>
         </p>
       </div>
     </Modal>

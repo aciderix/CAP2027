@@ -16,7 +16,16 @@ import { supabase } from './supabase';
 
 const LAST_SEEN_KEY = 'cap2027.notifications.lastSeenAt';
 const PERM_KEY = 'cap2027.notifications.enabled';
-const NEXT_ID_KEY = 'cap2027.notifications.nextId';
+const LAST_FIRED_KEY = 'cap2027.notifications.lastResumeFiredAt';
+
+// Stable IDs for our system notifications. Using a fixed ID for the
+// "resume" alert means Android replaces the previous one instead of
+// stacking duplicates — even if the listener somehow runs twice.
+const RESUME_NOTIF_ID = 9_000_001;
+
+const SMALL_ICON = 'ic_stat_cap2027';
+const LARGE_ICON = 'ic_notif_cap2027';
+const ICON_COLOR = '#102a5c';
 
 export interface UnseenArticle {
   id: string;
@@ -36,7 +45,6 @@ export function getLastSeenAt(): string {
 export function markAllSeen() {
   if (typeof window === 'undefined') return;
   localStorage.setItem(LAST_SEEN_KEY, new Date().toISOString());
-  // Notify other components that the unseen state changed.
   window.dispatchEvent(new Event('cap2027:notifications-seen'));
 }
 
@@ -60,12 +68,14 @@ export async function requestOsNotificationPermission(): Promise<boolean> {
   }
 }
 
-function nextNotifId(): number {
-  if (typeof window === 'undefined') return Math.floor(Math.random() * 1e9);
-  const cur = Number(localStorage.getItem(NEXT_ID_KEY) || '1');
-  const next = cur >= 2_000_000_000 ? 1 : cur + 1;
-  localStorage.setItem(NEXT_ID_KEY, String(next));
-  return cur;
+function getLastFiredAt(): number {
+  if (typeof window === 'undefined') return 0;
+  return Number(localStorage.getItem(LAST_FIRED_KEY) || '0');
+}
+
+function setLastFiredAt(ts: number) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(LAST_FIRED_KEY, String(ts));
 }
 
 export async function fireResumeNotification(count: number, sample: UnseenArticle | null) {
@@ -78,12 +88,16 @@ export async function fireResumeNotification(count: number, sample: UnseenArticl
     await LocalNotifications.schedule({
       notifications: [
         {
-          id: nextNotifId(),
+          // Stable ID: scheduling a new one with the same ID replaces the
+          // existing notification rather than adding a duplicate.
+          id: RESUME_NOTIF_ID,
           title: count === 1 ? 'Une nouvelle actualité' : `${count} nouvelles actualités`,
           body: sample?.title?.slice(0, 140) ?? 'Ouvrir CAP 2027 pour les voir',
-          smallIcon: 'ic_stat_icon_config_sample',
+          smallIcon: SMALL_ICON,
+          largeIcon: LARGE_ICON,
+          iconColor: ICON_COLOR,
           schedule: { at: new Date(Date.now() + 200) },
-        },
+        } as any,
       ],
     });
   } catch {
@@ -96,7 +110,6 @@ export async function fireResumeNotification(count: number, sample: UnseenArticl
 export function useUnseenArticles() {
   const qc = useQueryClient();
 
-  // Re-render when markAllSeen is called elsewhere
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handler = () => qc.invalidateQueries({ queryKey: ['unseenArticles'] });
@@ -133,30 +146,32 @@ export function useUnseenArticles() {
   return { count, articles: query.data ?? [], isLoading: query.isLoading };
 }
 
-// Wire global app-resume handler: every time the app comes back to the
-// foreground, refresh our unseen count and fire a local OS notification
-// if there's anything new.
+// Wire global app-resume handler. Designed to be safe even if the hook
+// happens to mount twice (HMR, fast-refresh, accidental remounts):
+//   - the listener is properly cleaned up on unmount
+//   - the throttle is shared across instances via localStorage
+//   - the resulting OS notification uses a stable ID so duplicates merge.
 export function useResumeNotificationsHook() {
   const qc = useQueryClient();
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    let lastFiredAt = 0;
 
     const onResume = async () => {
-      // Force the cache to refetch articles + unseen list now.
+      // Throttle to one resume notif per 5 min, shared across all listeners.
+      if (Date.now() - getLastFiredAt() < 5 * 60 * 1000) return;
       await qc.invalidateQueries({ queryKey: ['unseenArticles'] });
       const data = qc.getQueryData<UnseenArticle[]>(['unseenArticles', getLastSeenAt()]);
       const count = data?.length ?? 0;
-      // Don't spam: throttle to one resume notif per 5 minutes.
-      if (Date.now() - lastFiredAt < 5 * 60 * 1000) return;
       if (count > 0) {
-        lastFiredAt = Date.now();
+        setLastFiredAt(Date.now());
         fireResumeNotification(count, data?.[0] ?? null);
       }
     };
 
-    document.addEventListener('visibilitychange', () => {
+    const handler = () => {
       if (document.visibilityState === 'visible') void onResume();
-    });
+    };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
   }, [qc]);
 }
