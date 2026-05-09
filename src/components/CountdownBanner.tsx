@@ -82,7 +82,7 @@ function computeBannerText(
     if (r1Official) return `J-${diffDays(r1Start, nowMs)} avant le 1er tour`;
     const months = diffMonths(r1Start, nowMs);
     if (months <= 0) return 'Présidentielle 2027 — date à confirmer';
-    return `~${months} mois avant le 1er tour (estimé)`;
+    return `~${months} mois avant le 1er tour`;
   }
   if (nowMs < r1End) {
     return `${formatHMS(r1End - nowMs)} avant les résultats du 1er tour`;
@@ -90,7 +90,7 @@ function computeBannerText(
   if (nowMs < r2Start) {
     if (r2Official) return `J-${diffDays(r2Start, nowMs)} avant le 2nd tour`;
     const days = diffDays(r2Start, nowMs);
-    return `~${days} j avant le 2nd tour (estimé)`;
+    return `~${days} j avant le 2nd tour`;
   }
   if (nowMs < r2End) {
     return `${formatHMS(r2End - nowMs)} avant les résultats finaux`;

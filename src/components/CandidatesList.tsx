@@ -6,6 +6,7 @@ import { Button } from './ui/Button';
 import { supabase } from '../lib/supabase';
 import type { Tables, Enums } from '../lib/database.types';
 import { useFollowedCandidates } from '../lib/follows';
+import { CandidateParrainagesInline } from './CandidateParrainagesInline';
 
 type CandidateRow = Tables<'candidates'>;
 type PartyRow = Tables<'parties'>;
@@ -315,21 +316,30 @@ export function CandidatesList() {
                   {detailLoading && <DetailSkeleton />}
 
                   {!detailLoading && detail && activeTab === 'biographie' && (
-                    detail.bio.length === 0 ? (
-                      <EmptyTab message="Biographie en cours de rédaction." />
-                    ) : (
-                      <div className="space-y-5">
-                        {selectedCandidate.short_bio && (
+                    <div className="space-y-5">
+                      {/* Parrainages: only renders once Conseil constitutionnel data is live */}
+                      <CandidateParrainagesInline candidateId={selectedCandidate.id} />
+
+                      {detail.bio.length === 0 ? (
+                        selectedCandidate.short_bio ? (
                           <p className="text-sm text-slate-600 italic">{selectedCandidate.short_bio}</p>
-                        )}
-                        {detail.bio.map((s) => (
-                          <section key={s.id}>
-                            <h4 className="font-bold text-[#102a5c] mb-1.5">{s.title}</h4>
-                            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{s.content}</p>
-                          </section>
-                        ))}
-                      </div>
-                    )
+                        ) : (
+                          <EmptyTab message="Biographie en cours de rédaction." />
+                        )
+                      ) : (
+                        <>
+                          {selectedCandidate.short_bio && (
+                            <p className="text-sm text-slate-600 italic">{selectedCandidate.short_bio}</p>
+                          )}
+                          {detail.bio.map((s) => (
+                            <section key={s.id}>
+                              <h4 className="font-bold text-[#102a5c] mb-1.5">{s.title}</h4>
+                              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{s.content}</p>
+                            </section>
+                          ))}
+                        </>
+                      )}
+                    </div>
                   )}
 
                   {!detailLoading && detail && activeTab === 'programme' && (

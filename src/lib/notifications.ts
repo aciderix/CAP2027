@@ -92,7 +92,7 @@ export async function fireResumeNotification(count: number, sample: UnseenArticl
           // existing notification rather than adding a duplicate.
           id: RESUME_NOTIF_ID,
           title: count === 1 ? 'Une nouvelle actualité' : `${count} nouvelles actualités`,
-          body: sample?.title?.slice(0, 140) ?? 'Ouvrir CAP 2027 pour les voir',
+          body: sample?.title?.slice(0, 140) ?? 'Ouvrez CAP 2027 pour les consulter',
           smallIcon: SMALL_ICON,
           largeIcon: LARGE_ICON,
           iconColor: ICON_COLOR,

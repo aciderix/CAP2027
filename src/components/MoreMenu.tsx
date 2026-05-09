@@ -38,14 +38,14 @@ export function MoreMenu({ onGoToCandidates }: MoreMenuProps) {
       id: 'subscriptions',
       icon: <Star className="w-5 h-5 text-amber-500" />,
       title: 'Gérer mes abonnements',
-      desc: "Suivre / désuivre des candidats pour personnaliser ton fil",
+      desc: 'Suivre / désuivre des candidats pour personnaliser votre fil',
       onClick: onGoToCandidates,
     },
     {
       id: 'compass',
       icon: <Target className="w-5 h-5 text-emerald-500" />,
       title: 'Mes résultats de Boussole',
-      desc: 'Reprendre le test ou voir ton dernier classement',
+      desc: 'Reprendre le test ou voir votre dernier classement',
       onClick: () => {
         // Two-step: ensure we're on home, then ask the home to open the modal.
         window.dispatchEvent(new CustomEvent('cap2027:goto-home'));
@@ -145,8 +145,9 @@ function AboutModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
           égalité.
         </p>
         <p>
-          <b>Tu décides ce que tu vois</b> : suis les candidats qui t'intéressent, lance le test
-          de Boussole pour mesurer tes affinités, compare les programmes côte à côte.
+          <b>Vous décidez ce que vous voyez</b> : suivez les candidats qui vous intéressent,
+          lancez le test de Boussole pour mesurer vos affinités, comparez les programmes
+          côte à côte.
         </p>
         <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-3">
           Le projet est non-commercial, financé par ses auteurs. Aucun lien avec un parti, un
@@ -207,7 +208,7 @@ function MethodologyModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
         <p>
           <b>Aucune éditorialisation</b> — Pas de classement caché, pas d'algorithme de mise en
           avant. L'ordre par défaut est strictement chronologique. Le carrousel "À la une"
-          remonte les candidats que <i>tu</i> suis en premier.
+          remonte les candidats que <i>vous</i> suivez en premier.
         </p>
 
         <div>
@@ -269,9 +270,9 @@ function LegalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
         <h4 className="font-bold text-[#102a5c] mt-2">Données personnelles</h4>
         <p>
           L'application <b>ne collecte aucune donnée personnelle</b>. Aucune inscription, aucun
-          identifiant unique, aucun cookie tiers. Tes choix (candidats suivis, résultats de
-          Boussole, préférences) sont stockés <b>uniquement sur ton appareil</b> et tu peux les
-          effacer à tout moment depuis Réglages.
+          identifiant unique, aucun cookie tiers. Vos choix (candidats suivis, résultats de
+          Boussole, préférences) sont stockés <b>uniquement sur votre appareil</b> et peuvent
+          être effacés à tout moment depuis Réglages.
         </p>
 
         <h4 className="font-bold text-[#102a5c] mt-2">Contenu tiers</h4>

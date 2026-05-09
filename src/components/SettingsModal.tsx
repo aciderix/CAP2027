@@ -66,7 +66,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     <Modal isOpen={isOpen} onClose={onClose} title="Réglages">
       <div className="flex flex-col gap-2 py-2">
         <p className="text-sm text-slate-500">
-          Tes préférences restent sur ton téléphone. Aucun compte, aucun envoi serveur.
+          Vos préférences restent sur votre téléphone. Aucun compte, aucun envoi serveur.
         </p>
 
         {/* Notifications */}
@@ -79,7 +79,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <div className="min-w-0">
                 <p className="font-bold text-[#102a5c] text-sm">Notifications</p>
                 <p className="text-xs text-slate-500 leading-snug">
-                  Une alerte locale quand tu rouvres l'app et qu'il y a du neuf.
+                  Une alerte locale à la réouverture de l'app si du nouveau contenu est disponible.
                 </p>
               </div>
             </div>
@@ -132,7 +132,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div>
               <p className="font-bold text-[#102a5c] text-sm">Effacer mes données locales</p>
               <p className="text-xs text-slate-500 leading-snug mt-0.5">
-                Supprime tes candidats suivis, tes résultats de boussole, l'onboarding et le
+                Supprime vos candidats suivis, vos résultats de boussole, l'onboarding et le
                 cache. Ne touche pas aux données sur le serveur.
               </p>
             </div>

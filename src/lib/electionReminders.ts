@@ -93,7 +93,7 @@ export async function scheduleElectionReminders(rounds: RoundReminders) {
       toSchedule.push({
         id: ids.eve,
         title: `Présidentielle 2027 — ${label} tour demain`,
-        body: 'Demain, jour du scrutin. Bureaux de vote ouverts de 8 h à 20 h (22 h dans certaines communes). Pense à ta pièce d\'identité.',
+        body: 'Demain, jour du scrutin. Bureaux de vote ouverts de 8 h à 20 h (22 h dans certaines communes). Pensez à votre pièce d\'identité.',
         smallIcon: SMALL_ICON,
         largeIcon: LARGE_ICON,
         iconColor: ICON_COLOR,
@@ -104,7 +104,7 @@ export async function scheduleElectionReminders(rounds: RoundReminders) {
       toSchedule.push({
         id: ids.day,
         title: `C'est aujourd'hui — ${label} tour de la présidentielle`,
-        body: 'Les bureaux de vote sont ouverts. Munis-toi d\'une pièce d\'identité.',
+        body: 'Les bureaux de vote sont ouverts. Munissez-vous d\'une pièce d\'identité.',
         smallIcon: SMALL_ICON,
         largeIcon: LARGE_ICON,
         iconColor: ICON_COLOR,
@@ -115,7 +115,7 @@ export async function scheduleElectionReminders(rounds: RoundReminders) {
       toSchedule.push({
         id: ids.res,
         title: `Résultats du ${label} tour disponibles`,
-        body: 'Les premières estimations sont publiées. Ouvre CAP 2027 pour les voir.',
+        body: 'Les premières estimations sont publiées. Ouvrez CAP 2027 pour les consulter.',
         smallIcon: SMALL_ICON,
         largeIcon: LARGE_ICON,
         iconColor: ICON_COLOR,

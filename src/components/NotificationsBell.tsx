@@ -68,8 +68,8 @@ export function NotificationsBell() {
           <div className="max-h-[60vh] overflow-y-auto">
             {articles.length === 0 ? (
               <div className="p-8 text-center text-sm text-slate-500">
-                Tu es à jour. <br />
-                <span className="text-xs text-slate-400">On te ping dès qu'un article tombe.</span>
+                Vous êtes à jour. <br />
+                <span className="text-xs text-slate-400">On vous notifie dès qu'un article tombe.</span>
               </div>
             ) : (
               <ul className="divide-y divide-slate-100">

@@ -189,26 +189,26 @@ export function VoterToolkit() {
           <VoteStep
             n={2}
             icon={<MapPin className="w-4 h-4" />}
-            title="Aller à mon bureau de vote"
-            body="L'adresse est imprimée sur la carte électorale et consultable en ligne. C'est toujours le bureau rattaché à ton adresse de domicile lors de l'inscription."
+            title="Se rendre à son bureau de vote"
+            body="L'adresse est imprimée sur la carte électorale et consultable en ligne. C'est toujours le bureau rattaché à votre adresse de domicile lors de l'inscription."
           />
           <VoteStep
             n={3}
             icon={<FileSignature className="w-4 h-4" />}
             title="Prendre TOUS les bulletins + une enveloppe"
-            body="Tu prends au moins deux bulletins différents pour préserver le secret du vote. Direction l'isoloir : c'est obligatoire d'y passer."
+            body="Prenez au moins deux bulletins différents pour préserver le secret du vote. Direction l'isoloir : c'est obligatoire d'y passer."
           />
           <VoteStep
             n={4}
             icon={<Vote className="w-4 h-4" />}
             title="Voter"
-            body="Dans l'isoloir, tu mets le bulletin de ton choix dans l'enveloppe — sans le modifier (rature, annotation = bulletin nul). Tu peux aussi mettre une enveloppe vide (= vote blanc) ou y glisser deux bulletins (= vote nul)."
+            body="Dans l'isoloir, vous mettez le bulletin de votre choix dans l'enveloppe — sans le modifier (rature, annotation = bulletin nul). Vous pouvez aussi mettre une enveloppe vide (= vote blanc) ou y glisser deux bulletins (= vote nul)."
           />
           <VoteStep
             n={5}
             icon={<ClipboardCheck className="w-4 h-4" />}
             title="« A voté »"
-            body="Le président te demande la pièce d'identité, contrôle ta présence sur la liste, tu introduis l'enveloppe dans l'urne et signes la liste d'émargement."
+            body="Le président demande la pièce d'identité, contrôle votre présence sur la liste, vous introduisez l'enveloppe dans l'urne et signez la liste d'émargement."
           />
           <VoteStep
             n={6}
@@ -219,8 +219,8 @@ export function VoterToolkit() {
 
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs space-y-1.5">
             <p className="font-bold text-[#102a5c] mb-1">À savoir</p>
-            <p>• Tu votes <b>deux fois</b> pour la présidentielle : 1er tour, puis 2nd tour deux semaines plus tard si aucun candidat n'a la majorité absolue.</p>
-            <p>• Si tu es absent : <b>procuration</b> (cf. tuile à côté).</p>
+            <p>• Vous votez <b>deux fois</b> pour la présidentielle : 1er tour, puis 2nd tour deux semaines plus tard si aucun candidat n'a la majorité absolue.</p>
+            <p>• En cas d'absence : <b>procuration</b> (cf. tuile à côté).</p>
             <p>• Vote blanc = enveloppe vide. Il est compté à part mais ne change pas le pourcentage des candidats.</p>
             <p>• Le silence électoral commence la veille du scrutin à minuit : pas de propagande, pas de sondages diffusés.</p>
           </div>
