@@ -155,10 +155,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <Send className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="font-bold text-[#102a5c] text-sm">Notifications à distance (avancé)</p>
+                  <p className="font-bold text-[#102a5c] text-sm">Notifications à distance</p>
                   <p className="text-xs text-slate-500 leading-snug">
                     Recevoir un push même quand l'application est complètement fermée.
-                    Nécessite la configuration Firebase côté projet.
                   </p>
                 </div>
               </div>

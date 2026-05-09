@@ -21,9 +21,13 @@ import { supabase } from './supabase';
 const VERSION = '1.0.0';
 const ENABLED_KEY = 'cap2027.push.fcm_optin';
 
+// Default ON now that google-services.json ships in the APK and the
+// FCM service account is stored in Supabase Vault. Users can still
+// opt out via Settings.
 export function getPushEnabled(): boolean {
-  if (typeof window === 'undefined') return false;
-  return localStorage.getItem(ENABLED_KEY) === 'true';
+  if (typeof window === 'undefined') return true;
+  const v = localStorage.getItem(ENABLED_KEY);
+  return v === null ? true : v === 'true';
 }
 
 export function setPushEnabled(v: boolean) {
