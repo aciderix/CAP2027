@@ -72,8 +72,6 @@ export function CandidatesList() {
   const { isFollowed, toggle: toggleFollow } = useFollowedCandidates();
   const isFollowing = selectedCandidate ? isFollowed(selectedCandidate.id) : false;
   const [activeTab, setActiveTab] = useState<'biographie' | 'programme' | 'historique' | 'actualites'>('biographie');
-  const [detail, setDetail] = useState<CandidateDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
 
   const candidatesQuery = useQuery({
     queryKey: ['candidatesList'],
@@ -92,15 +90,16 @@ export function CandidatesList() {
   const isLoading = candidatesQuery.isLoading;
   const loadError = candidatesQuery.error?.message ?? null;
 
-  useEffect(() => {
-    if (!selectedCandidate) {
-      setDetail(null);
-      return;
-    }
-    let cancelled = false;
-    setDetailLoading(true);
-    (async () => {
-      const candidateId = selectedCandidate.id;
+  // Per-candidate detail (bio + proposals + affairs + news), cached per id.
+  // Bio/proposals/affairs are slow-changing so they live for an hour;
+  // we treat news the same since it's already covered by the news_articles
+  // freshness elsewhere (5 min default).
+  const candidateDetailQuery = useQuery({
+    queryKey: ['candidateDetail', selectedCandidate?.id],
+    enabled: !!selectedCandidate,
+    staleTime: 30 * 60 * 1000,
+    queryFn: async (): Promise<CandidateDetail> => {
+      const candidateId = selectedCandidate!.id;
       const [bioRes, propRes, affRes, newsRes] = await Promise.all([
         supabase.from('candidate_bio_sections')
           .select('*').eq('candidate_id', candidateId).order('order_index'),
@@ -120,21 +119,21 @@ export function CandidatesList() {
           .order('article(published_at)', { ascending: false })
           .limit(40),
       ]);
-      if (cancelled) return;
       const news: NewsArticle[] = ((newsRes.data ?? []) as any[])
         .map((r) => r.article)
         .filter((a): a is NewsArticle => !!a)
         .sort((a, b) => +new Date(b.published_at) - +new Date(a.published_at));
-      setDetail({
+      return {
         bio: (bioRes.data ?? []) as BioSection[],
         proposals: (propRes.data ?? []) as unknown as ProposalWithTheme[],
         affairs: (affRes.data ?? []) as Affair[],
         news,
-      });
-      setDetailLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, [selectedCandidate]);
+      };
+    },
+  });
+
+  const detail = candidateDetailQuery.data ?? null;
+  const detailLoading = candidateDetailQuery.isLoading && !!selectedCandidate;
 
   const filteredCandidates = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -165,7 +164,6 @@ export function CandidatesList() {
 
   const closeModal = () => {
     setSelectedCandidate(null);
-    setIsFollowing(false);
     setActiveTab('biographie');
   };
 

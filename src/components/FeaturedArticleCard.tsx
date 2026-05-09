@@ -99,34 +99,42 @@ export function FeaturedArticleCard({ onNavigate, onNavigateFactcheck }: Feature
   const factchecks = heroQuery.data?.factchecks ?? [];
   const loading = heroQuery.isLoading;
 
-  // Reset slide index when the data set changes
+  // Programmatic scrolls fire onScroll too. We ignore those for a short
+  // window after we trigger them so the auto-advance isn't fought by
+  // handleScroll snapping back to the nearest slide mid-animation.
+  const programmaticScrollUntil = useRef(0);
+  // When the user touches/swipes the carousel, pause auto-rotate for 12 s.
+  const userInteractionUntil = useRef(0);
+
   useEffect(() => { setActiveIndex(0); }, [heroQuery.dataUpdatedAt]);
 
-  // Auto-rotate carousel every 6s
+  // Auto-rotate every 6 s, but skip a tick if the user just interacted.
   useEffect(() => {
     if (news.length < 2) return;
     const id = setInterval(() => {
+      if (Date.now() < userInteractionUntil.current) return;
       setActiveIndex((i) => (i + 1) % news.length);
     }, 6000);
     return () => clearInterval(id);
   }, [news.length]);
 
-  // Sync scroll position on auto-rotate
+  // Drive scroll from the active index. Width is the container width,
+  // since each slide is full-width — no need to read offsetLeft.
   useEffect(() => {
     const el = carouselRef.current;
     if (!el) return;
-    const child = el.children[activeIndex] as HTMLElement | undefined;
-    if (child) {
-      el.scrollTo({ left: child.offsetLeft - el.offsetLeft, behavior: 'smooth' });
-    }
+    const target = activeIndex * el.clientWidth;
+    if (Math.abs(el.scrollLeft - target) < 4) return;
+    programmaticScrollUntil.current = Date.now() + 700;
+    el.scrollTo({ left: target, behavior: 'smooth' });
   }, [activeIndex]);
 
-  // Update activeIndex when user manually scrolls
   function handleScroll() {
     const el = carouselRef.current;
     if (!el) return;
-    const childWidth = (el.children[0] as HTMLElement | undefined)?.offsetWidth ?? 1;
-    const idx = Math.round(el.scrollLeft / childWidth);
+    if (Date.now() < programmaticScrollUntil.current) return;
+    userInteractionUntil.current = Date.now() + 12_000;
+    const idx = Math.round(el.scrollLeft / el.clientWidth);
     if (idx !== activeIndex && idx >= 0 && idx < news.length) {
       setActiveIndex(idx);
     }

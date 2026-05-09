@@ -1,7 +1,8 @@
-import { Bell, Settings, Home, Compass, Rss, Newspaper } from 'lucide-react';
+import { Settings, Home, Compass, Rss, Newspaper } from 'lucide-react';
 import { CountdownBanner } from './CountdownBanner';
 import { useState } from 'react';
 import { SettingsModal } from './SettingsModal';
+import { NotificationsBell } from './NotificationsBell';
 
 interface HeaderProps {
   activeTab: string;
@@ -84,17 +85,12 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
           </nav>
 
           {/* Right side: Actions */}
-          <div className="flex items-center gap-3 sm:gap-4">
-            {/* Notifications */}
-            <button className="relative p-2 text-[#102a5c] hover:bg-slate-100 rounded-full transition-colors">
-              <Bell strokeWidth={2.5} className="w-[22px] h-[22px]" />
-              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-[#e11d48] rounded-full border-2 border-white"></span>
-            </button>
-            
-            {/* Profile / Settings */}
-            <button 
+          <div className="flex items-center gap-1 sm:gap-2">
+            <NotificationsBell />
+            <button
               onClick={() => setIsSettingsOpen(true)}
-              className="p-1.5 text-[#102a5c] hover:bg-slate-100 rounded-full transition-colors flex items-center justify-center cursor-pointer"
+              aria-label="Réglages"
+              className="p-2 text-[#102a5c] hover:bg-slate-100 rounded-full transition-colors flex items-center justify-center cursor-pointer"
             >
               <Settings strokeWidth={2.5} className="w-[20px] h-[20px]" />
             </button>

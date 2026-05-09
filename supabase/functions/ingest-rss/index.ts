@@ -173,23 +173,44 @@ function normalize(item: any): NormalizedItem | null {
 async function fetchSourceItems(rssUrl: string): Promise<NormalizedItem[]> {
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 20_000);
+  // Some hosts (e.g. xcancel) only respond to RSS-reader UAs; press hosts
+  // tend to prefer browser-looking UAs. Try the more permissive one first,
+  // fall back to the second on any non-2xx.
+  const userAgents = [
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    'FreshRSS/1.20.0 (Linux; https://freshrss.org)',
+  ];
+  let lastErr: Error | null = null;
+  let xml = '';
   try {
-    const res = await fetch(rssUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        "Accept": "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5",
-        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
-      },
-      signal: ctrl.signal,
-      redirect: "follow",
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const xml = await res.text();
+    for (let i = 0; i < userAgents.length; i++) {
+      try {
+        const res = await fetch(rssUrl, {
+          headers: {
+            'User-Agent': userAgents[i],
+            'Accept': 'application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5',
+            'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+          },
+          signal: ctrl.signal,
+          redirect: 'follow',
+        });
+        if (!res.ok) {
+          lastErr = new Error(`HTTP ${res.status}`);
+          continue;
+        }
+        xml = await res.text();
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e as Error;
+      }
+    }
+    if (lastErr || !xml) throw lastErr ?? new Error('no body');
     const parsed = xmlParser.parse(xml);
     let items: any[] = [];
     if (parsed?.rss?.channel) items = ensureArray(parsed.rss.channel.item);
     else if (parsed?.feed) items = ensureArray(parsed.feed.entry);
-    else if (parsed?.["rdf:RDF"]) items = ensureArray(parsed["rdf:RDF"].item);
+    else if (parsed?.['rdf:RDF']) items = ensureArray(parsed['rdf:RDF'].item);
     return items.map(normalize).filter((x): x is NormalizedItem => x !== null);
   } finally {
     clearTimeout(timeout);

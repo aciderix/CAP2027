@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Heart, X } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
@@ -6,6 +6,14 @@ import { PoliticalMatchGame } from './PoliticalMatchGame';
 
 export function PoliticalMatchCard() {
   const [isOpen, setIsOpen] = useState(false);
+
+  // The MoreMenu's "Mes résultats de Boussole" entry navigates here and
+  // then asks us to open the modal via this event.
+  useEffect(() => {
+    const open = () => setIsOpen(true);
+    window.addEventListener('cap2027:open-boussole', open);
+    return () => window.removeEventListener('cap2027:open-boussole', open);
+  }, []);
 
   return (
     <>

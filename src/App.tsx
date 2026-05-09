@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, BookOpen, Scale, BadgeCheck, ArrowLeft } from 'lucide-react';
 import { Header } from './components/Header';
@@ -20,26 +20,36 @@ import { MyFeed } from './components/MyFeed';
 import { MoreMenu } from './components/MoreMenu';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
+import { useResumeNotificationsHook } from './lib/notifications';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('accueil');
   const [explorerView, setExplorerView] = useState('main');
-  
+
   const [showSplash, setShowSplash] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
+  // Local OS notifications when the app comes back to foreground.
+  useResumeNotificationsHook();
+
   useEffect(() => {
-    // Show splash screen for 2.5 seconds
     const splashTimer = setTimeout(() => {
       setShowSplash(false);
-      // After splash, check if user has seen onboarding
       const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
       if (!hasSeenOnboarding) {
         setShowOnboarding(true);
       }
     }, 2500);
-
     return () => clearTimeout(splashTimer);
+  }, []);
+
+  // The MoreMenu can fire a synthetic event to land the user on home tab
+  // (used by the "Mes résultats de Boussole" entry, which then asks the
+  // PoliticalMatchCard on home to open its own modal).
+  useEffect(() => {
+    const goHome = () => setActiveTab('accueil');
+    window.addEventListener('cap2027:goto-home', goHome);
+    return () => window.removeEventListener('cap2027:goto-home', goHome);
   }, []);
 
   const handleOnboardingComplete = () => {
@@ -232,7 +242,9 @@ export default function App() {
 
           {activeTab === 'plus' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
-               <MoreMenu />
+               <MoreMenu
+                 onGoToCandidates={() => { setActiveTab('explorer'); setExplorerView('candidats'); }}
+               />
             </div>
           )}
 
