@@ -256,20 +256,19 @@ export function CandidatesList() {
 
                   <div className="flex flex-col">
                      <h3 className="text-lg sm:text-2xl font-bold text-[#102a5c] leading-tight mb-0.5">{fullName(selectedCandidate)}</h3>
-                     <span className="text-xs sm:text-sm font-medium text-slate-500 mb-1.5">{selectedCandidate.parties?.name || '—'}</span>
+                     <span className="text-xs sm:text-sm font-medium text-slate-500">{selectedCandidate.parties?.name || '—'}</span>
 
-                     <div className="flex flex-col w-28 sm:w-40 gap-1.5">
+                     <div className="hidden">
+                        {/* Legacy parrainages preview removed: now sourced from
+                            the parrainages table via CandidateParrainagesInline,
+                            which only renders once the Conseil constitutionnel
+                            data goes live. */}
                         <div className="flex items-center justify-between text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                           <span>Parrainages</span>
-                          <span>{selectedCandidate.sponsorships_count} / {selectedCandidate.sponsorships_target}</span>
+                          <span />
                         </div>
                         <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                           <div
-                             className="h-full bg-[#1a56db]"
-                             style={{
-                               width: `${Math.min(100, Math.round((selectedCandidate.sponsorships_count / Math.max(1, selectedCandidate.sponsorships_target)) * 100))}%`,
-                             }}
-                           />
+                           <div className="h-full bg-[#1a56db]" />
                         </div>
                      </div>
                   </div>

@@ -496,11 +496,49 @@ Deno.serve(async (req) => {
 
   const refs = await loadRefs();
   const results: any[] = [];
+  let totalInserted = 0;
+  let firstNewTitle: string | null = null;
   for (const s of sources as SourceRow[]) {
     const res = await ingestSource(s, refs);
     results.push(res);
+    if (typeof (res as any).inserted === "number") totalInserted += (res as any).inserted;
   }
-  return new Response(JSON.stringify({ results }, null, 2), {
+
+  // After a full ingest pass, broadcast a single push notif if anything
+  // came in. We pull the very latest article title for the body so the
+  // notification feels concrete. Skipped silently if push-broadcast or
+  // FCM credentials aren't deployed yet.
+  if (totalInserted > 0 && !onlySlug) {
+    try {
+      const { data: latest } = await supabase
+        .from("news_articles")
+        .select("title, url")
+        .order("published_at", { ascending: false })
+        .limit(1);
+      firstNewTitle = latest?.[0]?.title ?? null;
+      const url = latest?.[0]?.url ?? null;
+
+      await fetch(`${SUPABASE_URL}/functions/v1/push-broadcast`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          title:
+            totalInserted === 1
+              ? "Une nouvelle actualité"
+              : `${totalInserted} nouvelles actualités`,
+          body: firstNewTitle?.slice(0, 140) ?? "Ouvrez CAP 2027 pour les consulter",
+          url,
+        }),
+      });
+    } catch {
+      // best-effort
+    }
+  }
+
+  return new Response(JSON.stringify({ results, totalInserted }, null, 2), {
     headers: { "Content-Type": "application/json" },
   });
 });

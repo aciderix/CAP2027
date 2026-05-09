@@ -22,6 +22,7 @@ import { ParrainagesCard } from './components/ParrainagesCard';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
 import { useResumeNotificationsHook } from './lib/notifications';
+import { registerPushNotifications } from './lib/push';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('accueil');
@@ -32,6 +33,10 @@ export default function App() {
 
   // Local OS notifications when the app comes back to foreground.
   useResumeNotificationsHook();
+
+  // Register for FCM push (idempotent). Best-effort; silent if Firebase
+  // config isn't deployed yet on the build.
+  useEffect(() => { void registerPushNotifications(); }, []);
 
   useEffect(() => {
     const splashTimer = setTimeout(() => {
