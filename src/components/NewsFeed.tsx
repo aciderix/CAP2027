@@ -3,6 +3,8 @@ import {
   Newspaper, BadgeCheck, Search, X, ExternalLink,
   SlidersHorizontal, Sparkles,
 } from 'lucide-react';
+import Fuse from 'fuse.js';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 
 type Mode = 'news' | 'factcheck';
@@ -75,11 +77,6 @@ function fullName(c: CandidateLite) {
 }
 
 export function NewsFeed({ mode }: { mode: Mode }) {
-  const [articles, setArticles] = useState<ArticleRow[]>([]);
-  const [filters, setFilters] = useState<FilterOption | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [search, setSearch] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
@@ -97,11 +94,11 @@ export function NewsFeed({ mode }: { mode: Mode }) {
     setAdvancedOpen(false);
   }, [mode]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      const articlesQuery = supabase
+  // Articles: 5 min stale (default), refetched on focus
+  const articlesQuery = useQuery({
+    queryKey: ['articles', mode],
+    queryFn: async (): Promise<ArticleRow[]> => {
+      const { data, error } = await supabase
         .from('news_articles')
         .select(`
           id, url, title, summary, image_url, published_at, is_factcheck, verdict,
@@ -113,57 +110,67 @@ export function NewsFeed({ mode }: { mode: Mode }) {
         .eq('is_factcheck', mode === 'factcheck')
         .order('published_at', { ascending: false })
         .limit(200);
+      if (error) throw error;
+      return (data ?? []) as unknown as ArticleRow[];
+    },
+  });
 
-      const filtersPromise = filters
-        ? Promise.resolve(null)
-        : Promise.all([
-            supabase.from('themes').select('id, slug, name, color').order('order_index'),
-            supabase.from('candidates').select('id, slug, first_name, last_name').eq('is_published', true),
-            supabase.from('parties').select('id, name, abbreviation, color').order('order_index'),
-            supabase.from('news_sources').select('orientation').eq('is_active', true),
-          ]);
+  // Filter options: refresh much less often (30 min)
+  const filtersQuery = useQuery({
+    queryKey: ['newsFeedFilters'],
+    staleTime: 30 * 60 * 1000,
+    queryFn: async (): Promise<FilterOption> => {
+      const [tRes, cRes, pRes, sRes] = await Promise.all([
+        supabase.from('themes').select('id, slug, name, color').order('order_index'),
+        supabase.from('candidates').select('id, slug, first_name, last_name').eq('is_published', true),
+        supabase.from('parties').select('id, name, abbreviation, color').order('order_index'),
+        supabase.from('news_sources').select('orientation').eq('is_active', true),
+      ]);
+      const orientationSet = new Set<string>((sRes.data ?? []).map((r: any) => r.orientation));
+      const order = ['gauche','centre','centre-droit','droite','transverse','factcheck'];
+      const orientations = [...orientationSet].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      return {
+        themes: (tRes.data ?? []) as ThemeLite[],
+        candidates: (cRes.data ?? []) as CandidateLite[],
+        parties: (pRes.data ?? []) as PartyLite[],
+        orientations,
+      };
+    },
+  });
 
-      const [{ data: arts, error: aErr }, fdata] = await Promise.all([articlesQuery, filtersPromise]);
-      if (cancelled) return;
+  const articles = articlesQuery.data ?? [];
+  const filters = filtersQuery.data ?? null;
+  const loading = articlesQuery.isLoading;
+  const error = articlesQuery.error?.message ?? null;
 
-      if (aErr) {
-        setError(aErr.message);
-        setLoading(false);
-        return;
-      }
-      setArticles((arts ?? []) as unknown as ArticleRow[]);
-      setLoading(false);
-
-      if (fdata) {
-        const [tRes, cRes, pRes, sRes] = fdata;
-        const orientationSet = new Set<string>((sRes.data ?? []).map((r: any) => r.orientation));
-        const order = ['gauche','centre','centre-droit','droite','transverse','factcheck'];
-        const orientations = [...orientationSet].sort((a, b) => order.indexOf(a) - order.indexOf(b));
-        setFilters({
-          themes: (tRes.data ?? []) as ThemeLite[],
-          candidates: (cRes.data ?? []) as CandidateLite[],
-          parties: (pRes.data ?? []) as PartyLite[],
-          orientations,
-        });
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [mode]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+  // Filter by chips first (cheap), then run fuzzy search on the result.
+  const chipFiltered = useMemo(() => {
     return articles.filter((a) => {
       if (selectedTheme && !a.article_themes.some((x) => x.theme?.id === selectedTheme)) return false;
       if (selectedOrientation && a.source?.orientation !== selectedOrientation) return false;
       if (selectedCandidate && !a.article_candidates.some((x) => x.candidate?.id === selectedCandidate)) return false;
       if (selectedParty && !a.article_parties.some((x) => x.party?.id === selectedParty)) return false;
-      if (q) {
-        const hay = `${a.title} ${a.summary ?? ''}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
       return true;
     });
-  }, [articles, search, selectedTheme, selectedOrientation, selectedCandidate, selectedParty]);
+  }, [articles, selectedTheme, selectedOrientation, selectedCandidate, selectedParty]);
+
+  // Fuzzy search: tolerates typos and missing accents (e.g. "melanchon" → Mélenchon).
+  const fuse = useMemo(() => new Fuse(chipFiltered, {
+    keys: [
+      { name: 'title', weight: 0.7 },
+      { name: 'summary', weight: 0.3 },
+    ],
+    threshold: 0.35,
+    ignoreLocation: true,
+    minMatchCharLength: 3,
+    ignoreDiacritics: true,
+  }), [chipFiltered]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim();
+    if (q.length < 2) return chipFiltered;
+    return fuse.search(q).map((r) => r.item);
+  }, [chipFiltered, fuse, search]);
 
   const advancedFilterCount = (selectedCandidate ? 1 : 0) + (selectedParty ? 1 : 0);
   const isFactcheck = mode === 'factcheck';

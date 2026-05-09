@@ -1,5 +1,6 @@
 import { User, Eye, Star, FileText, Scale, Newspaper, Search, ExternalLink, Play } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
 import { supabase } from '../lib/supabase';
@@ -65,9 +66,6 @@ function fallbackPhoto(c: CandidateRow) {
 }
 
 export function CandidatesList() {
-  const [candidates, setCandidates] = useState<CandidateWithParty[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateWithParty | null>(null);
@@ -77,26 +75,22 @@ export function CandidatesList() {
   const [detail, setDetail] = useState<CandidateDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+  const candidatesQuery = useQuery({
+    queryKey: ['candidatesList'],
+    staleTime: 30 * 60 * 1000,
+    queryFn: async (): Promise<CandidateWithParty[]> => {
       const { data, error } = await supabase
         .from('candidates')
         .select('*, parties(name, abbreviation, color)')
         .eq('is_published', true)
         .order('order_index');
-
-      if (cancelled) return;
-      if (error) {
-        setLoadError(error.message);
-        setIsLoading(false);
-        return;
-      }
-      setCandidates((data ?? []) as CandidateWithParty[]);
-      setIsLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, []);
+      if (error) throw error;
+      return (data ?? []) as CandidateWithParty[];
+    },
+  });
+  const candidates = candidatesQuery.data ?? [];
+  const isLoading = candidatesQuery.isLoading;
+  const loadError = candidatesQuery.error?.message ?? null;
 
   useEffect(() => {
     if (!selectedCandidate) {

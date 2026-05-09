@@ -214,7 +214,10 @@ export default function App() {
               <VoterToolkit />
               <ExplorerSection onNavigate={(view) => { setActiveTab('explorer'); setExplorerView(view); }} />
               <PoliticalMatchCard />
-              <FeaturedArticleCard onNavigate={() => setActiveTab('actualites')} />
+              <FeaturedArticleCard
+                onNavigate={() => setActiveTab('actualites')}
+                onNavigateFactcheck={() => { setActiveTab('explorer'); setExplorerView('factchecking'); }}
+              />
             </div>
           )}
 

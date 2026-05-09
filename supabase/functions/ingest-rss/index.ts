@@ -198,8 +198,17 @@ async function fetchSourceItems(rssUrl: string): Promise<NormalizedItem[]> {
 
 // Word-boundary regex that respects Unicode letter/digit, so "EPR" won't
 // match inside "reproché" and "ISF" won't match inside "satisfaisant".
+// Strip diacritics so "Mélenchon" matches against "melenchon" written
+// without the accent (still strict otherwise — typos do not match).
+function stripAccents(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// Word-boundary regex respecting Unicode letter/digit, so "EPR" won't
+// match inside "reproché" and "ISF" won't match inside "satisfaisant".
 function makePattern(keyword: string): RegExp {
-  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const ascii = stripAccents(keyword);
+  const escaped = ascii.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu");
 }
 
@@ -214,32 +223,31 @@ interface Refs {
 }
 
 function tagArticle(title: string, summary: string, refs: Refs) {
+  // Both the haystack and the keyword regexes are accent-stripped, so
+  // "Melenchon" in an article still matches the alias "Mélenchon".
+  const titleAscii = stripAccents(title);
+  const summaryAscii = stripAccents(summary);
+
   const candidateScores = new Map<string, number>();
   for (const a of refs.candidateAliases) {
     let score = 0;
-    if (a.regex.test(title)) score += 2;
-    if (a.regex.test(summary)) score += 1;
-    if (score > 0) {
-      candidateScores.set(a.candidate_id, (candidateScores.get(a.candidate_id) ?? 0) + score);
-    }
+    if (a.regex.test(titleAscii)) score += 2;
+    if (a.regex.test(summaryAscii)) score += 1;
+    if (score > 0) candidateScores.set(a.candidate_id, (candidateScores.get(a.candidate_id) ?? 0) + score);
   }
   const partyScores = new Map<string, number>();
   for (const a of refs.partyAliases) {
     let score = 0;
-    if (a.regex.test(title)) score += 2;
-    if (a.regex.test(summary)) score += 1;
-    if (score > 0) {
-      partyScores.set(a.party_id, (partyScores.get(a.party_id) ?? 0) + score);
-    }
+    if (a.regex.test(titleAscii)) score += 2;
+    if (a.regex.test(summaryAscii)) score += 1;
+    if (score > 0) partyScores.set(a.party_id, (partyScores.get(a.party_id) ?? 0) + score);
   }
   const themeScores = new Map<string, number>();
   for (const k of refs.themeKeywords) {
     let score = 0;
-    if (k.regex.test(title)) score += 2;
-    if (k.regex.test(summary)) score += 1;
-    if (score > 0) {
-      themeScores.set(k.theme_id, (themeScores.get(k.theme_id) ?? 0) + score);
-    }
+    if (k.regex.test(titleAscii)) score += 2;
+    if (k.regex.test(summaryAscii)) score += 1;
+    if (score > 0) themeScores.set(k.theme_id, (themeScores.get(k.theme_id) ?? 0) + score);
   }
   return {
     candidates: [...candidateScores.entries()].map(([id, s]) => ({ id, score: s })),

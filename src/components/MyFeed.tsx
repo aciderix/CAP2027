@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Heart, Star, ChevronRight, Play, ExternalLink } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useFollowedCandidates } from '../lib/follows';
 
@@ -57,57 +58,57 @@ function relativeTime(iso: string) {
 
 export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
   const { followed, toggle } = useFollowedCandidates();
-  const followedIds = useMemo(() => [...followed], [followed]);
+  const followedIds = useMemo(() => [...followed].sort(), [followed]);
+  const followedKey = followedIds.join(',');
 
-  const [followedCandidates, setFollowedCandidates] = useState<CandidateLite[]>([]);
-  const [articles, setArticles] = useState<ArticleRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<string | null>(null); // candidate id or null
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<'all' | 'press' | 'video'>('all');
 
-  // Fetch data when followed list changes
-  useEffect(() => {
-    if (followedIds.length === 0) {
-      setFollowedCandidates([]);
-      setArticles([]);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      const [candRes, artRes] = await Promise.all([
-        supabase
-          .from('candidates')
-          .select('id, slug, first_name, last_name, photo_url, gender')
-          .in('id', followedIds),
-        supabase
-          .from('article_candidates')
-          .select(`
-            article:news_articles(
-              id, url, title, summary, image_url, published_at, kind, is_factcheck,
-              source:news_sources(name, orientation, color),
-              article_candidates(candidate:candidates(id, slug, first_name, last_name, photo_url, gender))
-            )
-          `)
-          .in('candidate_id', followedIds)
-          .order('article(published_at)', { ascending: false })
-          .limit(120),
-      ]);
-      if (cancelled) return;
-      setFollowedCandidates((candRes.data ?? []) as CandidateLite[]);
+  const candidatesQuery = useQuery({
+    queryKey: ['candidatesByIds', followedKey],
+    enabled: followedIds.length > 0,
+    staleTime: 30 * 60 * 1000,
+    queryFn: async (): Promise<CandidateLite[]> => {
+      const { data, error } = await supabase
+        .from('candidates')
+        .select('id, slug, first_name, last_name, photo_url, gender')
+        .in('id', followedIds);
+      if (error) throw error;
+      return (data ?? []) as CandidateLite[];
+    },
+  });
+
+  const articlesQuery = useQuery({
+    queryKey: ['myFeedArticles', followedKey],
+    enabled: followedIds.length > 0,
+    queryFn: async (): Promise<ArticleRow[]> => {
+      const { data, error } = await supabase
+        .from('article_candidates')
+        .select(`
+          article:news_articles(
+            id, url, title, summary, image_url, published_at, kind, is_factcheck,
+            source:news_sources(name, orientation, color),
+            article_candidates(candidate:candidates(id, slug, first_name, last_name, photo_url, gender))
+          )
+        `)
+        .in('candidate_id', followedIds)
+        .order('article(published_at)', { ascending: false })
+        .limit(120);
+      if (error) throw error;
       const dedup = new Map<string, ArticleRow>();
-      for (const r of (artRes.data ?? []) as any[]) {
+      for (const r of (data ?? []) as any[]) {
         const a = r.article;
         if (a && !dedup.has(a.id)) dedup.set(a.id, a);
       }
-      const sorted = [...dedup.values()].sort(
+      return [...dedup.values()].sort(
         (a, b) => +new Date(b.published_at) - +new Date(a.published_at)
       );
-      setArticles(sorted);
-      setLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, [followedIds.join(',')]);
+    },
+  });
+
+  const followedCandidates = candidatesQuery.data ?? [];
+  const articles = articlesQuery.data ?? [];
+  const loading = (candidatesQuery.isLoading || articlesQuery.isLoading) && followedIds.length > 0;
 
   // Filtered list
   const filtered = useMemo(() => {
