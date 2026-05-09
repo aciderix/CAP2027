@@ -2,68 +2,83 @@
 // PushNotifications plugin with Supabase: we capture the FCM token
 // once, upsert it into public.push_tokens, and refresh last_seen_at
 // every time the app starts.
-//
-// FCM service-account credentials live ONLY on the server (in the
-// push-broadcast edge function). Clients never see them.
-//
-// IMPORTANT: PushNotifications.register() throws a NATIVE
-// IllegalStateException on Android when google-services.json is not
-// shipped with the APK ("Default FirebaseApp is not initialized").
-// That exception escapes JS try/catch on some Capacitor versions and
-// surfaces as a "the app has stopped" system dialog. We therefore
-// gate the register() call behind an explicit user opt-in flag.
-// Default: OFF. The toggle in Settings asks the user to confirm
-// Firebase is configured before flipping it on.
 
 import { Capacitor } from '@capacitor/core';
 import { supabase } from './supabase';
 
 const VERSION = '1.0.0';
 
-// Push (FCM) is now bundled into the master notification preference.
-// No separate toggle. Whenever the user enables Notifications in
-// Settings, we also register for FCM. Whenever they disable, we
-// stop fanning out new tokens (existing token stays so they can
-// re-opt-in cleanly).
 import { getNotificationsEnabled } from './notifications';
 export const getPushEnabled = getNotificationsEnabled;
-export function setPushEnabled(_v: boolean) { /* no-op: managed by notifications */ }
+export function setPushEnabled(_v: boolean) { /* no-op */ }
+
+// Diagnostic state surfaced to Settings. Updated from listeners so we
+// can tell the user *why* a token didn't show up in the DB.
+const DIAG_KEY = 'cap2027.push.diag';
+
+export interface PushDiag {
+  permission?: 'granted' | 'denied' | 'prompt' | 'unknown';
+  registerCalledAt?: string;
+  tokenAt?: string;
+  tokenPreview?: string;
+  upsertOk?: boolean;
+  upsertError?: string;
+  registrationError?: string;
+  lastError?: string;
+}
+
+export function readPushDiag(): PushDiag {
+  if (typeof window === 'undefined') return {};
+  try { return JSON.parse(localStorage.getItem(DIAG_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function writeDiag(patch: Partial<PushDiag>) {
+  if (typeof window === 'undefined') return;
+  const cur = readPushDiag();
+  const next = { ...cur, ...patch };
+  try { localStorage.setItem(DIAG_KEY, JSON.stringify(next)); } catch { /* noop */ }
+}
 
 let registered = false;
 
-/**
- * Lazily import the plugin so Capacitor's native bridge isn't even
- * touched until the user has opted in. Prevents crashes on builds
- * that ship without google-services.json.
- */
 async function getPlugin() {
   const mod = await import('@capacitor/push-notifications');
   return mod.PushNotifications;
 }
 
-/**
- * Idempotent: safe to call multiple times. Subsequent calls just
- * refresh last_seen_at on the existing token. No-op if the user
- * hasn't explicitly enabled FCM push from the Settings panel.
- */
 export async function registerPushNotifications(): Promise<{ ok: boolean; error?: string }> {
-  if (!Capacitor.isNativePlatform()) return { ok: false, error: 'native-only' };
-  if (!getPushEnabled()) return { ok: false, error: 'opt-in required' };
+  if (!Capacitor.isNativePlatform()) {
+    writeDiag({ lastError: 'native-only' });
+    return { ok: false, error: 'native-only' };
+  }
+  if (!getPushEnabled()) {
+    writeDiag({ lastError: 'opt-in required' });
+    return { ok: false, error: 'opt-in required' };
+  }
 
   try {
     const PushNotifications = await getPlugin();
 
-    const perm = await PushNotifications.checkPermissions();
+    let perm = await PushNotifications.checkPermissions();
+    writeDiag({ permission: perm.receive as any });
     if (perm.receive !== 'granted') {
       const ask = await PushNotifications.requestPermissions();
-      if (ask.receive !== 'granted') return { ok: false, error: 'permission denied' };
+      writeDiag({ permission: ask.receive as any });
+      if (ask.receive !== 'granted') {
+        writeDiag({ lastError: 'permission denied' });
+        return { ok: false, error: 'permission denied' };
+      }
+      perm = ask;
     }
 
     if (!registered) {
       registered = true;
       PushNotifications.addListener('registration', async (token) => {
+        const preview = token.value.slice(0, 16) + '…';
+        writeDiag({ tokenAt: new Date().toISOString(), tokenPreview: preview });
         try {
-          await supabase.from('push_tokens').upsert(
+          const { error } = await supabase.from('push_tokens').upsert(
             {
               token: token.value,
               platform: Capacitor.getPlatform(),
@@ -72,18 +87,26 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
             },
             { onConflict: 'token' },
           );
-        } catch { /* best-effort */ }
+          if (error) {
+            writeDiag({ upsertOk: false, upsertError: error.message });
+          } else {
+            writeDiag({ upsertOk: true, upsertError: undefined });
+          }
+        } catch (e: any) {
+          writeDiag({ upsertOk: false, upsertError: String(e?.message ?? e) });
+        }
       });
-      PushNotifications.addListener('registrationError', () => {
-        // Surfaced in OS logs; nothing actionable client-side.
+      PushNotifications.addListener('registrationError', (err: any) => {
+        writeDiag({ registrationError: String(err?.error ?? err?.message ?? err) });
       });
     }
 
+    writeDiag({ registerCalledAt: new Date().toISOString(), lastError: undefined });
     await PushNotifications.register();
     return { ok: true };
   } catch (err: any) {
-    // Most common: Firebase not initialized -> we surface a clean
-    // message back to the caller and let them disable the opt-in.
-    return { ok: false, error: String(err?.message ?? err) };
+    const msg = String(err?.message ?? err);
+    writeDiag({ lastError: msg });
+    return { ok: false, error: msg };
   }
 }

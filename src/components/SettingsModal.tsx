@@ -1,4 +1,4 @@
-import { Bell, Trash2, Shield, AlertTriangle } from 'lucide-react';
+import { Bell, Trash2, Shield, AlertTriangle, Activity, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -7,8 +7,10 @@ import { Button } from './ui/Button';
 import {
   getNotificationsEnabled,
   setNotificationsEnabled as persistNotifs,
+  fireResumeNotification,
+  type UnseenArticle,
 } from '../lib/notifications';
-import { registerPushNotifications } from '../lib/push';
+import { registerPushNotifications, readPushDiag, type PushDiag } from '../lib/push';
 import { cancelElectionReminders } from '../lib/electionReminders';
 
 interface SettingsModalProps {
@@ -22,21 +24,53 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [diag, setDiag] = useState<PushDiag>({});
+  const [diagOpen, setDiagOpen] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+
+  const refreshDiag = () => {
+    setDiag(readPushDiag());
+    if (Capacitor.isNativePlatform()) {
+      LocalNotifications.checkPermissions()
+        .then((p) => setPermState(p.display as any))
+        .catch(() => setPermState('unknown'));
+    }
+  };
 
   // Sync state from storage every time the modal opens
   useEffect(() => {
     if (!isOpen) return;
     setNotifEnabled(getNotificationsEnabled());
     setError(null);
+    setTestMsg(null);
     setConfirmClear(false);
-    if (Capacitor.isNativePlatform()) {
-      LocalNotifications.checkPermissions()
-        .then((p) => setPermState(p.display as any))
-        .catch(() => setPermState('unknown'));
-    } else {
-      setPermState('unknown');
-    }
+    refreshDiag();
   }, [isOpen]);
+
+  const fireTestLocal = async () => {
+    setTestMsg(null);
+    if (!Capacitor.isNativePlatform()) {
+      setTestMsg('Test impossible sur le navigateur — ouvrez l\'app Android.');
+      return;
+    }
+    const fake: UnseenArticle = {
+      id: 'test', title: 'Notification de test CAP 2027', url: '',
+      published_at: new Date().toISOString(),
+      source_name: 'Test', source_color: '#102a5c', is_factcheck: false,
+    };
+    await fireResumeNotification(1, fake);
+    setTestMsg('Si vous ne voyez pas la notif, vérifiez le diagnostic ci-dessous.');
+  };
+
+  const reRegister = async () => {
+    setBusy(true); setTestMsg(null);
+    try {
+      const res = await registerPushNotifications();
+      setTestMsg(res.ok ? 'register() lancé. Le token arrive dans 1–10 s, voir diagnostic.' : `Échec : ${res.error}`);
+      setTimeout(refreshDiag, 1200);
+      setTimeout(refreshDiag, 4000);
+    } finally { setBusy(false); }
+  };
 
   const toggleNotifs = async () => {
     setError(null);
@@ -140,7 +174,61 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               Sur le navigateur, les nouvelles actus s'affichent dans la cloche en haut.
             </p>
           )}
+
+          {/* Test buttons */}
+          {Capacitor.isNativePlatform() && notifEnabled && (
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+              <Button
+                variant="outline"
+                onClick={fireTestLocal}
+                className="flex-1 h-9 text-xs gap-1.5 inline-flex items-center justify-center"
+              >
+                <Send className="w-3.5 h-3.5" /> Tester une notif locale
+              </Button>
+              <Button
+                variant="outline"
+                onClick={reRegister}
+                disabled={busy}
+                className="flex-1 h-9 text-xs gap-1.5 inline-flex items-center justify-center"
+              >
+                <Activity className="w-3.5 h-3.5" /> Forcer l'enregistrement push
+              </Button>
+            </div>
+          )}
+          {testMsg && (
+            <p className="text-[11px] text-slate-600 bg-white rounded-lg p-2 border border-slate-200">{testMsg}</p>
+          )}
         </div>
+
+        {/* Diagnostic panel */}
+        {Capacitor.isNativePlatform() && (
+          <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 mt-2">
+            <button
+              onClick={() => { setDiagOpen((o) => !o); refreshDiag(); }}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <span className="text-sm font-bold text-[#102a5c] inline-flex items-center gap-1.5">
+                <Activity className="w-4 h-4" /> Diagnostic notifications
+              </span>
+              <span className="text-xs text-slate-400">{diagOpen ? 'masquer' : 'afficher'}</span>
+            </button>
+            {diagOpen && (
+              <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                <DiagRow label="Plateforme" value={Capacitor.getPlatform()} />
+                <DiagRow label="Notifs activées (app)" value={notifEnabled ? 'oui' : 'non'} />
+                <DiagRow label="Permission OS (locale)" value={permState} />
+                <DiagRow label="Permission OS (push)" value={diag.permission ?? '—'} />
+                <DiagRow label="register() appelé à" value={diag.registerCalledAt ? new Date(diag.registerCalledAt).toLocaleTimeString('fr') : '—'} />
+                <DiagRow label="Token reçu à" value={diag.tokenAt ? new Date(diag.tokenAt).toLocaleTimeString('fr') : '— (pas encore)'} />
+                <DiagRow label="Token (preview)" value={diag.tokenPreview ?? '—'} mono />
+                <DiagRow label="Upsert Supabase" value={diag.upsertOk === undefined ? '—' : diag.upsertOk ? 'OK' : 'échec'} />
+                {diag.upsertError && <DiagRow label="Erreur upsert" value={diag.upsertError} mono full />}
+                {diag.registrationError && <DiagRow label="Erreur registration" value={diag.registrationError} mono full />}
+                {diag.lastError && <DiagRow label="Dernière erreur" value={diag.lastError} mono full />}
+              </dl>
+            )}
+          </div>
+        )}
 
         {/* Quick info */}
         <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex items-start gap-3 mt-2">
@@ -188,5 +276,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </p>
       </div>
     </Modal>
+  );
+}
+
+function DiagRow({ label, value, mono, full }: { label: string; value: string; mono?: boolean; full?: boolean }) {
+  return (
+    <>
+      <dt className={`text-slate-500 font-medium ${full ? 'col-span-2 mt-1' : ''}`}>{label}</dt>
+      <dd className={`${full ? 'col-span-2' : ''} ${mono ? 'font-mono' : ''} text-slate-800 break-all`}>{value}</dd>
+    </>
   );
 }
