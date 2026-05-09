@@ -1,4 +1,4 @@
-import { Bell, Trash2, Star, Info, Shield } from 'lucide-react';
+import { Bell, Trash2, Shield, Send, AlertTriangle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -8,6 +8,11 @@ import {
   getNotificationsEnabled,
   setNotificationsEnabled as persistNotifs,
 } from '../lib/notifications';
+import {
+  getPushEnabled,
+  setPushEnabled,
+  registerPushNotifications,
+} from '../lib/push';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -19,10 +24,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [permissionState, setPermissionState] = useState<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown');
   const [confirmClear, setConfirmClear] = useState(false);
 
-  // Sync state from storage every time the modal opens
+  const [pushEnabled, setPushEnabledState] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isOpen) return;
     setNotificationsEnabled(getNotificationsEnabled());
+    setPushEnabledState(getPushEnabled());
+    setPushError(null);
     setConfirmClear(false);
     if (Capacitor.isNativePlatform()) {
       LocalNotifications.checkPermissions()
@@ -32,6 +42,33 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setPermissionState('unknown');
     }
   }, [isOpen]);
+
+  const togglePush = async () => {
+    setPushError(null);
+    if (pushEnabled) {
+      setPushEnabled(false);
+      setPushEnabledState(false);
+      return;
+    }
+    // Opt-in path: persist first so registerPushNotifications sees it.
+    setPushEnabled(true);
+    setPushEnabledState(true);
+    setPushBusy(true);
+    try {
+      const res = await registerPushNotifications();
+      if (!res.ok && res.error && res.error !== 'opt-in required') {
+        setPushError(res.error);
+        setPushEnabled(false);
+        setPushEnabledState(false);
+      }
+    } catch (e: any) {
+      setPushError(String(e?.message ?? e));
+      setPushEnabled(false);
+      setPushEnabledState(false);
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   const toggleNotifications = async () => {
     const next = !notificationsEnabled;
@@ -108,6 +145,47 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </p>
           )}
         </div>
+
+        {/* Push à distance (FCM) — désactivé par défaut */}
+        {Capacitor.isNativePlatform() && (
+          <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex flex-col gap-3 mt-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-violet-600 shrink-0">
+                  <Send className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-[#102a5c] text-sm">Notifications à distance (avancé)</p>
+                  <p className="text-xs text-slate-500 leading-snug">
+                    Recevoir un push même quand l'application est complètement fermée.
+                    Nécessite la configuration Firebase côté projet.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={togglePush}
+                disabled={pushBusy}
+                aria-label="Activer les notifications à distance"
+                className={`shrink-0 w-12 h-6 rounded-full transition-colors relative ${
+                  pushEnabled ? 'bg-violet-600' : 'bg-slate-300'
+                } ${pushBusy ? 'opacity-50' : ''}`}
+              >
+                <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all shadow-sm ${
+                  pushEnabled ? 'left-[26px]' : 'left-0.5'
+                }`} />
+              </button>
+            </div>
+            {pushError && (
+              <p className="text-xs text-rose-600 bg-rose-50 rounded-lg p-2 inline-flex items-start gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  Activation impossible : Firebase n'est pas (encore) configuré sur cette
+                  build. Détail : <code className="text-[10px]">{pushError.slice(0, 200)}</code>
+                </span>
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Quick info */}
         <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex items-start gap-3 mt-2">

@@ -34,8 +34,10 @@ export default function App() {
   // Local OS notifications when the app comes back to foreground.
   useResumeNotificationsHook();
 
-  // Register for FCM push (idempotent). Best-effort; silent if Firebase
-  // config isn't deployed yet on the build.
+  // FCM push registration is now opt-in via Settings (avoids the
+  // native Firebase-not-initialized crash on builds without
+  // google-services.json). The hook below is intentionally a no-op
+  // when the opt-in flag is false.
   useEffect(() => { void registerPushNotifications(); }, []);
 
   useEffect(() => {
