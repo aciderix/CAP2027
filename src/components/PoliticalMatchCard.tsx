@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Heart, X } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
@@ -6,12 +6,14 @@ import { PoliticalMatchGame } from './PoliticalMatchGame';
 
 export function PoliticalMatchCard() {
   const [isOpen, setIsOpen] = useState(false);
-  const [hasCompletedTuto, setHasCompletedTuto] = useState(false);
 
-  const handleTestComplete = () => {
-    setHasCompletedTuto(true);
-    setIsOpen(false);
-  };
+  // The MoreMenu's "Mes résultats de Boussole" entry navigates here and
+  // then asks us to open the modal via this event.
+  useEffect(() => {
+    const open = () => setIsOpen(true);
+    window.addEventListener('cap2027:open-boussole', open);
+    return () => window.removeEventListener('cap2027:open-boussole', open);
+  }, []);
 
   return (
     <>
@@ -28,7 +30,7 @@ export function PoliticalMatchCard() {
             onClick={() => setIsOpen(true)}
             className="bg-[#0a1b3f] hover:bg-[#153b82] text-white px-5 sm:px-6 py-2 sm:py-2.5 rounded-[10px] sm:rounded-xl font-medium w-auto text-[13px] sm:text-[14px]"
           >
-            {hasCompletedTuto ? 'Continuer le test' : 'Lancer le test'}
+            Lancer le test
           </Button>
         </div>
 
@@ -36,7 +38,7 @@ export function PoliticalMatchCard() {
         <div className="relative w-[160px] sm:w-[260px] h-[110px] sm:h-[180px] shrink-0 pointer-events-none mt-0">
           {/* Blue Card */}
           <div className="absolute left-0 sm:left-[10%] top-1/2 -translate-y-1/2 w-[80px] sm:w-[130px] aspect-[2.5/3.5] rounded-lg sm:rounded-xl rotate-[-12deg] shadow-lg border-[3px] sm:border-[5px] border-white overflow-hidden bg-white flex items-center justify-center">
-            <img 
+            <img decoding="async" 
               src="/card_blue.png" 
               alt="Profil Bleu" 
               className="w-full h-full object-cover"
@@ -49,7 +51,7 @@ export function PoliticalMatchCard() {
 
           {/* Red Card */}
           <div className="absolute right-0 sm:right-[10%] top-1/2 -translate-y-1/2 w-[80px] sm:w-[130px] aspect-[2.5/3.5] rounded-lg sm:rounded-xl rotate-[8deg] shadow-lg border-[3px] sm:border-[5px] border-white overflow-hidden bg-white z-10 flex items-center justify-center">
-            <img 
+            <img decoding="async" 
               src="/card_red.png" 
               alt="Profil Rouge" 
               className="w-full h-full object-cover"
@@ -71,21 +73,9 @@ export function PoliticalMatchCard() {
       <Modal
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
-        title={!hasCompletedTuto ? "" : "Match politique"}
+        title=""
       >
-        {!hasCompletedTuto ? (
-           <PoliticalMatchGame 
-              onComplete={handleTestComplete} 
-              onClose={() => setIsOpen(false)} 
-           />
-        ) : (
-           <div className="py-12 flex flex-col items-center justify-center text-center">
-              <h3 className="text-xl font-bold text-[#102a5c] mb-2">Bientôt !</h3>
-              <p className="text-slate-500">
-                Vous avez terminé le tutoriel. Les propositions arrivent très vite pour le vrai test !
-              </p>
-           </div>
-        )}
+        <PoliticalMatchGame onClose={() => setIsOpen(false)} />
       </Modal>
     </>
   );

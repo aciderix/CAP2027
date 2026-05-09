@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "762607884594",
+    "project_id": "cap2027-app",
+    "storage_bucket": "cap2027-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:762607884594:android:93d24f896f2c7a8a09df2b",
+        "android_client_info": {
+          "package_name": "fr.cap2027.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBn5NicMmLlPkMbzLMV7HXbUw_cswpZOms"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

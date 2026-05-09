@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { ClipboardCheck, HeartHandshake, CalendarDays, ExternalLink, ChevronRight } from 'lucide-react';
+import {
+  ClipboardCheck, HeartHandshake, CalendarDays, ExternalLink, ChevronRight,
+  Vote, IdCard, MapPin, FileSignature, Eye,
+} from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
 
 export function VoterToolkit() {
-  const [activeModal, setActiveModal] = useState<'inscription' | 'procuration' | 'calendrier' | null>(null);
+  const [activeModal, setActiveModal] = useState<'inscription' | 'procuration' | 'calendrier' | 'vote' | null>(null);
 
   const closeModal = () => setActiveModal(null);
 
@@ -34,12 +37,19 @@ export function VoterToolkit() {
           bgClass="bg-[#eff4ff] border-[#dbeafe]"
           onClick={() => setActiveModal('procuration')}
         />
-        <ToolkitItem 
+        <ToolkitItem
           icon={<CalendarDays className="w-5 h-5 text-[#e11d48]" strokeWidth={2.5} />}
           title="Calendrier"
           description="Toutes les dates clés de la présidentielle."
           bgClass="bg-[#eff4ff] border-[#dbeafe]"
           onClick={() => setActiveModal('calendrier')}
+        />
+        <ToolkitItem
+          icon={<Vote className="w-5 h-5 text-emerald-600" strokeWidth={2.5} />}
+          title="Comment je vote ?"
+          description="Pas-à-pas le jour J : pièces, bureau, déroulé, dépouillement."
+          bgClass="bg-[#eff4ff] border-[#dbeafe]"
+          onClick={() => setActiveModal('vote')}
         />
           <div className="w-12 sm:w-16 shrink-0" aria-hidden="true" />
         </div>
@@ -159,6 +169,99 @@ export function VoterToolkit() {
         </div>
       </Modal>
 
+      <Modal
+        isOpen={activeModal === 'vote'}
+        onClose={closeModal}
+        title="Comment je vote ?"
+      >
+        <div className="space-y-4 text-slate-600 leading-relaxed">
+          <p className="text-sm">
+            Le vote se déroule entre <b>8 h et 19 h</b> (jusqu'à 20 h en métropole, parfois
+            22 h dans certaines grandes villes). Voici les étapes pas à pas.
+          </p>
+
+          <VoteStep
+            n={1}
+            icon={<IdCard className="w-4 h-4" />}
+            title="Pièce d'identité (obligatoire)"
+            body="Carte nationale d'identité, passeport, permis de conduire ou titre de séjour. La carte électorale n'est PAS obligatoire mais utile pour gagner du temps."
+          />
+          <VoteStep
+            n={2}
+            icon={<MapPin className="w-4 h-4" />}
+            title="Se rendre à son bureau de vote"
+            body="L'adresse est imprimée sur la carte électorale et consultable en ligne. C'est toujours le bureau rattaché à votre adresse de domicile lors de l'inscription."
+          />
+          <VoteStep
+            n={3}
+            icon={<FileSignature className="w-4 h-4" />}
+            title="Prendre TOUS les bulletins + une enveloppe"
+            body="Prenez au moins deux bulletins différents pour préserver le secret du vote. Direction l'isoloir : c'est obligatoire d'y passer."
+          />
+          <VoteStep
+            n={4}
+            icon={<Vote className="w-4 h-4" />}
+            title="Voter"
+            body="Dans l'isoloir, vous mettez le bulletin de votre choix dans l'enveloppe — sans le modifier (rature, annotation = bulletin nul). Vous pouvez aussi mettre une enveloppe vide (= vote blanc) ou y glisser deux bulletins (= vote nul)."
+          />
+          <VoteStep
+            n={5}
+            icon={<ClipboardCheck className="w-4 h-4" />}
+            title="« A voté »"
+            body="Le président demande la pièce d'identité, contrôle votre présence sur la liste, vous introduisez l'enveloppe dans l'urne et signez la liste d'émargement."
+          />
+          <VoteStep
+            n={6}
+            icon={<Eye className="w-4 h-4" />}
+            title="Le dépouillement est public"
+            body="Après la fermeture, le bureau de vote est ouvert au public pour le dépouillement. N'importe qui peut y assister, observer le comptage et même y participer comme scrutateur."
+          />
+
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs space-y-1.5">
+            <p className="font-bold text-[#102a5c] mb-1">À savoir</p>
+            <p>• Vous votez <b>deux fois</b> pour la présidentielle : 1er tour, puis 2nd tour deux semaines plus tard si aucun candidat n'a la majorité absolue.</p>
+            <p>• En cas d'absence : <b>procuration</b> (cf. tuile à côté).</p>
+            <p>• Vote blanc = enveloppe vide. Il est compté à part mais ne change pas le pourcentage des candidats.</p>
+            <p>• Le silence électoral commence la veille du scrutin à minuit : pas de propagande, pas de sondages diffusés.</p>
+          </div>
+
+          <div className="pt-3 flex flex-col sm:flex-row justify-end gap-3">
+            <a
+              href="https://www.elections.interieur.gouv.fr/comprendre-elections/comment-je-vote"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full sm:w-auto"
+            >
+              <Button className="w-full justify-center flex items-center gap-2">
+                Source officielle <ExternalLink className="w-4 h-4 ml-1 opacity-70" />
+              </Button>
+            </a>
+            <Button variant="secondary" onClick={closeModal} className="w-full sm:w-auto">
+              Fermer
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+    </div>
+  );
+}
+
+function VoteStep({
+  n, icon, title, body,
+}: { n: number; icon: React.ReactNode; title: string; body: string }) {
+  return (
+    <div className="flex gap-3">
+      <div className="w-8 h-8 shrink-0 rounded-full bg-[#102a5c] text-white text-xs font-black flex items-center justify-center">
+        {n}
+      </div>
+      <div className="flex-1">
+        <h4 className="font-bold text-[#102a5c] text-sm flex items-center gap-1.5">
+          <span className="text-[#1a56db]">{icon}</span>
+          {title}
+        </h4>
+        <p className="text-xs sm:text-sm text-slate-600 mt-0.5">{body}</p>
+      </div>
     </div>
   );
 }

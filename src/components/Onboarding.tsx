@@ -1,25 +1,20 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Inbox, Shield, Scale, Rocket } from 'lucide-react';
 
 const slides = [
   {
-    icon: <Inbox className="w-14 h-14 text-[#1a56db]" strokeWidth={2.5} />,
     title: "Bienvenue sur CAP 2027",
     subtitle: "La boîte à outils civique 100% indépendante pour la présidentielle."
   },
   {
-    icon: <Shield className="w-14 h-14 text-[#1a56db]" strokeWidth={2.5} />,
     title: "Aucun compte, aucune donnée",
     subtitle: "Pas d'inscription, pas de tracking. Vos choix restent sur votre téléphone."
   },
   {
-    icon: <Scale className="w-14 h-14 text-[#1a56db]" strokeWidth={2.5} />,
     title: "Neutre et factuel",
     subtitle: "Tous les candidats sont présentés de manière égale. Sources vérifiables."
   },
   {
-    icon: <Rocket className="w-14 h-14 text-[#1a56db]" strokeWidth={2.5} />,
     title: "Prêt à explorer ?",
     subtitle: "Découvrez les candidats, comparez les programmes, trouvez votre boussole."
   }
@@ -67,8 +62,12 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               transition={{ duration: 0.3 }}
               className="flex flex-col items-center text-center w-full max-w-[400px]"
             >
-              <div className="w-[140px] h-[140px] sm:w-[160px] sm:h-[160px] bg-[#ebf2ff] rounded-full flex items-center justify-center mb-8 sm:mb-12">
-                 {slides[currentSlide].icon}
+              <div className="w-[140px] h-[140px] sm:w-[160px] sm:h-[160px] rounded-[32px] sm:rounded-[36px] overflow-hidden mb-8 sm:mb-12 shadow-md">
+                <img decoding="async"
+                  src="/logo-cap2027.png"
+                  alt="CAP 2027"
+                  className="w-full h-full object-cover"
+                />
               </div>
               <h1 className="text-[28px] sm:text-[32px] leading-[1.1] font-black text-[#102a5c] mb-5 sm:mb-6 tracking-tight">
                 {slides[currentSlide].title}

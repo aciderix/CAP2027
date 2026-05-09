@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, BookOpen, Scale, BadgeCheck, ArrowLeft } from 'lucide-react';
 import { Header } from './components/Header';
@@ -13,34 +13,62 @@ import { PoliticalMatchCard } from './components/PoliticalMatchCard';
 import { ExplorerSection } from './components/ExplorerSection';
 import { FeaturedArticleCard } from './components/FeaturedArticleCard';
 import { CandidatesList } from './components/CandidatesList';
+import { ProgrammesList } from './components/ProgrammesList';
+import { Comparateur } from './components/Comparateur';
+import { NewsFeed } from './components/NewsFeed';
+import { MyFeed } from './components/MyFeed';
 import { MoreMenu } from './components/MoreMenu';
+import { ParrainagesCard } from './components/ParrainagesCard';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
+import {
+  useResumeNotificationsHook,
+  maybeAskFirstLaunchPermission,
+} from './lib/notifications';
+import { registerPushNotifications } from './lib/push';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('accueil');
   const [explorerView, setExplorerView] = useState('main');
-  
+
   const [showSplash, setShowSplash] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
+  // Local OS notif when the app comes back to foreground.
+  useResumeNotificationsHook();
+
+  // Splash + onboarding routing.
   useEffect(() => {
-    // Show splash screen for 2.5 seconds
     const splashTimer = setTimeout(() => {
       setShowSplash(false);
-      // After splash, check if user has seen onboarding
       const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
       if (!hasSeenOnboarding) {
         setShowOnboarding(true);
+      } else {
+        // Returning user: ask for notif permission on first launch
+        // post-onboarding, then register for FCM. Both calls are
+        // idempotent and silent on web / when already granted.
+        void maybeAskFirstLaunchPermission().then(() => registerPushNotifications());
       }
     }, 2500);
-
     return () => clearTimeout(splashTimer);
+  }, []);
+
+  // The MoreMenu can fire a synthetic event to land the user on home tab
+  // (used by the "Mes résultats de Boussole" entry, which then asks the
+  // PoliticalMatchCard on home to open its own modal).
+  useEffect(() => {
+    const goHome = () => setActiveTab('accueil');
+    window.addEventListener('cap2027:goto-home', goHome);
+    return () => window.removeEventListener('cap2027:goto-home', goHome);
   }, []);
 
   const handleOnboardingComplete = () => {
     localStorage.setItem('hasSeenOnboarding', 'true');
     setShowOnboarding(false);
+    // Right after the user closes onboarding, ask for the OS notif
+    // permission once. Then register with FCM (no-op if denied).
+    void maybeAskFirstLaunchPermission().then(() => registerPushNotifications());
   };
 
 
@@ -104,7 +132,7 @@ export default function App() {
           className="flex flex-col gap-4 sm:gap-6 mb-8"
         >
           {/* Main Welcome/Title Card */}
-          {activeTab !== 'accueil' && activeTab !== 'explorer' && (
+          {activeTab !== 'accueil' && activeTab !== 'explorer' && activeTab !== 'actualites' && activeTab !== 'fil' && (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sm:p-10">
               <h1 className="text-2xl sm:text-3xl font-bold text-[#102a5c]">
                 {content.title}
@@ -153,7 +181,46 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && (
+          {activeTab === 'explorer' && explorerView === 'programmes' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+               <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
+                 <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
+               </button>
+               <ProgrammesList />
+            </div>
+          )}
+
+          {activeTab === 'explorer' && explorerView === 'comparateur' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+               <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
+                 <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
+               </button>
+               <Comparateur />
+            </div>
+          )}
+
+          {activeTab === 'explorer' && explorerView === 'factchecking' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+               <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
+                 <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
+               </button>
+               <NewsFeed mode="factcheck" />
+            </div>
+          )}
+
+          {activeTab === 'actualites' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+              <NewsFeed mode="news" />
+            </div>
+          )}
+
+          {activeTab === 'fil' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+              <MyFeed onGoToCandidates={() => { setActiveTab('explorer'); setExplorerView('candidats'); }} />
+            </div>
+          )}
+
+          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && explorerView !== 'comparateur' && explorerView !== 'factchecking' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
                <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
                  <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
@@ -171,7 +238,11 @@ export default function App() {
               <VoterToolkit />
               <ExplorerSection onNavigate={(view) => { setActiveTab('explorer'); setExplorerView(view); }} />
               <PoliticalMatchCard />
-              <FeaturedArticleCard onNavigate={() => setActiveTab('actualites')} />
+              <FeaturedArticleCard
+                onNavigate={() => setActiveTab('actualites')}
+                onNavigateFactcheck={() => { setActiveTab('explorer'); setExplorerView('factchecking'); }}
+              />
+              <ParrainagesCard />
             </div>
           )}
 
@@ -186,7 +257,9 @@ export default function App() {
 
           {activeTab === 'plus' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
-               <MoreMenu />
+               <MoreMenu
+                 onGoToCandidates={() => { setActiveTab('explorer'); setExplorerView('candidats'); }}
+               />
             </div>
           )}
 

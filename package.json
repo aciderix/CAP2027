@@ -8,27 +8,41 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "cap:sync": "cap sync android",
+    "android:build:debug": "npm run build && cap sync android && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.2",
+    "@capacitor/core": "^8.3.2",
+    "@capacitor/local-notifications": "^8.1.0",
+    "@capacitor/push-notifications": "^8.0.4",
     "@google/genai": "^1.29.0",
+    "@supabase/supabase-js": "^2.105.4",
     "@tailwindcss/vite": "^4.1.14",
+    "@tanstack/query-sync-storage-persister": "^5.100.9",
+    "@tanstack/react-query": "^5.100.9",
+    "@tanstack/react-query-persist-client": "^5.100.9",
     "@vitejs/plugin-react": "^5.0.4",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "fuse.js": "^7.3.0",
     "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "vite": "^6.2.3",
-    "express": "^4.21.2",
-    "dotenv": "^17.2.3",
-    "motion": "^12.23.24"
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.3.2",
+    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3",
-    "@types/express": "^4.17.21"
+    "vite": "^6.2.3"
   }
 }

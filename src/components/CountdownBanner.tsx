@@ -1,53 +1,59 @@
 import { useEffect, useState } from 'react';
 import { Clock } from 'lucide-react';
+import { useAppConfig, type ElectionRound } from '../lib/appConfig';
+import { scheduleElectionReminders } from '../lib/electionReminders';
 
-// Dates estimatives des élections 2027 
-// 1er tour : 11 avril 2027. 2nd tour : 25 avril 2027.
-// Heures de Paris (CEST = UTC+2 en avril)
-// 08h00 CEST = 06h00 UTC, 20h00 CEST = 18h00 UTC
-const ROUND_1_START = new Date('2027-04-11T06:00:00Z').getTime();
-const ROUND_1_END = new Date('2027-04-11T18:00:00Z').getTime();
-const ROUND_2_START = new Date('2027-04-25T06:00:00Z').getTime();
-const ROUND_2_END = new Date('2027-04-25T18:00:00Z').getTime();
+function diffDays(targetMs: number, nowMs: number) {
+  return Math.ceil((targetMs - nowMs) / 86_400_000);
+}
+
+function diffMonths(targetMs: number, nowMs: number) {
+  // Calendar-month delta, more meaningful than dividing by 30 d.
+  const target = new Date(targetMs);
+  const now = new Date(nowMs);
+  let m =
+    (target.getFullYear() - now.getFullYear()) * 12 +
+    (target.getMonth() - now.getMonth());
+  if (target.getDate() < now.getDate()) m -= 1;
+  return Math.max(0, m);
+}
+
+function formatHMS(remainingMs: number) {
+  const h = Math.max(0, Math.floor(remainingMs / 3_600_000));
+  const m = Math.max(0, Math.floor((remainingMs % 3_600_000) / 60_000));
+  const s = Math.max(0, Math.floor((remainingMs % 60_000) / 1000));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
 
 export function CountdownBanner() {
   const [now, setNow] = useState(Date.now());
+  const { data: cfg } = useAppConfig();
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    return () => clearInterval(interval);
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
   }, []);
 
-  const getDaysLeft = (target: number) => {
-    const diff = target - now;
-    return Math.ceil(diff / (1000 * 60 * 60 * 24));
-  };
+  // Schedule J-1, J-day and result-time local notifications. Idempotent:
+  // stable IDs, so re-scheduling on every render does NOT spam the user.
+  const r1Sched = cfg?.['election.round1']?.scheduled_at;
+  const r2Sched = cfg?.['election.round2']?.scheduled_at;
+  const r1Off = cfg?.['election.round1']?.is_official;
+  const r2Off = cfg?.['election.round2']?.is_official;
+  useEffect(() => {
+    if (!cfg) return;
+    const round1 = cfg['election.round1'];
+    const round2 = cfg['election.round2'];
+    if (round1 || round2) {
+      void scheduleElectionReminders({ round1, round2 });
+    }
+  }, [cfg, r1Sched, r2Sched, r1Off, r2Off]);
 
-  const formatHMS = (target: number) => {
-    const ms = target - now;
-    const hours = Math.floor(ms / (1000 * 60 * 60));
-    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((ms % (1000 * 60)) / 1000);
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  let text = '';
-  if (now < ROUND_1_START) {
-    text = `J-${getDaysLeft(ROUND_1_START)} avant le 1er tour`;
-  } else if (now < ROUND_1_END) {
-    text = `${formatHMS(ROUND_1_END)} avant résultats`;
-  } else if (now < ROUND_2_START) {
-    text = `J-${getDaysLeft(ROUND_2_START)} avant le 2nd tour`;
-  } else if (now < ROUND_2_END) {
-    text = `${formatHMS(ROUND_2_END)} avant résultats finaux`;
-  } else {
-    text = "Élections terminées";
-  }
+  const text = computeBannerText(now, cfg?.['election.round1'], cfg?.['election.round2']);
 
   return (
-    <div 
+    <div
       className="bg-[#102a5c] text-white flex items-center justify-center gap-1.5 sm:gap-2 pt-1 pb-1.5 px-3 sm:pt-1.5 sm:pb-2 sm:px-4 rounded-br-2xl shadow-sm text-[10px] sm:text-xs font-medium w-max opacity-95 transition-opacity hover:opacity-100"
       aria-live="polite"
     >
@@ -55,4 +61,39 @@ export function CountdownBanner() {
       <span className="tracking-wide tracking-[0.01em]">{text}</span>
     </div>
   );
+}
+
+function computeBannerText(
+  nowMs: number,
+  r1?: ElectionRound,
+  r2?: ElectionRound,
+): string {
+  if (!r1 && !r2) return 'Présidentielle 2027';
+
+  const r1Start = r1 ? new Date(r1.scheduled_at).getTime() : Infinity;
+  const r1End   = r1 ? new Date(r1.results_at).getTime()   : Infinity;
+  const r2Start = r2 ? new Date(r2.scheduled_at).getTime() : Infinity;
+  const r2End   = r2 ? new Date(r2.results_at).getTime()   : Infinity;
+
+  const r1Official = r1?.is_official === true;
+  const r2Official = r2?.is_official === true;
+
+  if (nowMs < r1Start) {
+    if (r1Official) return `J-${diffDays(r1Start, nowMs)} avant le 1er tour`;
+    const months = diffMonths(r1Start, nowMs);
+    if (months <= 0) return 'Présidentielle 2027 — date à confirmer';
+    return `~${months} mois avant le 1er tour`;
+  }
+  if (nowMs < r1End) {
+    return `${formatHMS(r1End - nowMs)} avant les résultats du 1er tour`;
+  }
+  if (nowMs < r2Start) {
+    if (r2Official) return `J-${diffDays(r2Start, nowMs)} avant le 2nd tour`;
+    const days = diffDays(r2Start, nowMs);
+    return `~${days} j avant le 2nd tour`;
+  }
+  if (nowMs < r2End) {
+    return `${formatHMS(r2End - nowMs)} avant les résultats finaux`;
+  }
+  return 'Élection terminée';
 }
