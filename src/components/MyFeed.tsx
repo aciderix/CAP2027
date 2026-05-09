@@ -290,7 +290,7 @@ function FilterAvatarPill({
         }`}
       >
         <span className="w-7 h-7 rounded-full overflow-hidden bg-slate-100 shrink-0">
-          <img src={candidate.photo_url || fallbackPhoto(candidate)} alt="" className="w-full h-full object-cover" />
+          <img decoding="async" src={candidate.photo_url || fallbackPhoto(candidate)} alt="" className="w-full h-full object-cover" />
         </span>
         {candidate.last_name}
       </button>
@@ -321,7 +321,7 @@ function FeedCard({ article }: { article: ArticleRow }) {
       <div className="flex gap-3 p-3">
         <div className="relative w-24 h-24 shrink-0 rounded-2xl overflow-hidden bg-slate-100">
           {article.image_url ? (
-            <img src={article.image_url} alt="" loading="lazy"
+            <img decoding="async" src={article.image_url} alt="" loading="lazy"
                  className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-white font-black text-2xl"

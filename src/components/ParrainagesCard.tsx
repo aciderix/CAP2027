@@ -110,7 +110,7 @@ export function ParrainagesCard() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 shrink-0 border border-slate-200">
                       {row.photo_url ? (
-                        <img src={row.photo_url} alt="" className="w-full h-full object-cover" />
+                        <img decoding="async" src={row.photo_url} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-slate-400">
                           {name.slice(0, 2).toUpperCase()}

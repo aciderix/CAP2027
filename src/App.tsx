@@ -21,7 +21,10 @@ import { MoreMenu } from './components/MoreMenu';
 import { ParrainagesCard } from './components/ParrainagesCard';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
-import { useResumeNotificationsHook } from './lib/notifications';
+import {
+  useResumeNotificationsHook,
+  maybeAskFirstLaunchPermission,
+} from './lib/notifications';
 import { registerPushNotifications } from './lib/push';
 
 export default function App() {
@@ -31,21 +34,21 @@ export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Local OS notifications when the app comes back to foreground.
+  // Local OS notif when the app comes back to foreground.
   useResumeNotificationsHook();
 
-  // FCM push registration is now opt-in via Settings (avoids the
-  // native Firebase-not-initialized crash on builds without
-  // google-services.json). The hook below is intentionally a no-op
-  // when the opt-in flag is false.
-  useEffect(() => { void registerPushNotifications(); }, []);
-
+  // Splash + onboarding routing.
   useEffect(() => {
     const splashTimer = setTimeout(() => {
       setShowSplash(false);
       const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
       if (!hasSeenOnboarding) {
         setShowOnboarding(true);
+      } else {
+        // Returning user: ask for notif permission on first launch
+        // post-onboarding, then register for FCM. Both calls are
+        // idempotent and silent on web / when already granted.
+        void maybeAskFirstLaunchPermission().then(() => registerPushNotifications());
       }
     }, 2500);
     return () => clearTimeout(splashTimer);
@@ -63,6 +66,9 @@ export default function App() {
   const handleOnboardingComplete = () => {
     localStorage.setItem('hasSeenOnboarding', 'true');
     setShowOnboarding(false);
+    // Right after the user closes onboarding, ask for the OS notif
+    // permission once. Then register with FCM (no-op if denied).
+    void maybeAskFirstLaunchPermission().then(() => registerPushNotifications());
   };
 
 

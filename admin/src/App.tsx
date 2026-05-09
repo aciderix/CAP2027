@@ -3,6 +3,8 @@ import { useAuth } from './lib/auth';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Candidates } from './pages/Candidates';
+import { Parties } from './pages/Parties';
+import { Themes } from './pages/Themes';
 import { Sources } from './pages/Sources';
 import { AppConfig } from './pages/AppConfig';
 import { Sidebar, type Page } from './components/Sidebar';
@@ -53,6 +55,8 @@ values ('${auth.user?.id}', '${auth.user?.email}');`}
       <main className="overflow-y-auto p-6 lg:p-8 bg-slate-50">
         {page === 'dashboard' && <Dashboard />}
         {page === 'candidates' && <Candidates />}
+        {page === 'parties' && <Parties />}
+        {page === 'themes' && <Themes />}
         {page === 'sources' && <Sources />}
         {page === 'config' && <AppConfig />}
       </main>

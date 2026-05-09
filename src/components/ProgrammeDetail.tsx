@@ -141,7 +141,7 @@ export function ProgrammeDetail({ candidateId, onBack }: Props) {
           {/* Header */}
           <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-100 flex items-center gap-4">
             <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden bg-slate-50 shrink-0">
-              <img
+              <img decoding="async"
                 src={candidate.photo_url || fallbackPhoto(candidate)}
                 alt={fullName(candidate)}
                 className="w-full h-full object-cover"

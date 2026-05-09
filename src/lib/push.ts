@@ -19,21 +19,15 @@ import { Capacitor } from '@capacitor/core';
 import { supabase } from './supabase';
 
 const VERSION = '1.0.0';
-const ENABLED_KEY = 'cap2027.push.fcm_optin';
 
-// Default ON now that google-services.json ships in the APK and the
-// FCM service account is stored in Supabase Vault. Users can still
-// opt out via Settings.
-export function getPushEnabled(): boolean {
-  if (typeof window === 'undefined') return true;
-  const v = localStorage.getItem(ENABLED_KEY);
-  return v === null ? true : v === 'true';
-}
-
-export function setPushEnabled(v: boolean) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(ENABLED_KEY, v ? 'true' : 'false');
-}
+// Push (FCM) is now bundled into the master notification preference.
+// No separate toggle. Whenever the user enables Notifications in
+// Settings, we also register for FCM. Whenever they disable, we
+// stop fanning out new tokens (existing token stays so they can
+// re-opt-in cleanly).
+import { getNotificationsEnabled } from './notifications';
+export const getPushEnabled = getNotificationsEnabled;
+export function setPushEnabled(_v: boolean) { /* no-op: managed by notifications */ }
 
 let registered = false;
 

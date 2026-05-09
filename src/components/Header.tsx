@@ -19,7 +19,7 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
           {/* Left side: Logo & Slogan */}
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             <div className="flex items-center justify-center h-10 sm:h-11 w-auto">
-              <img 
+              <img decoding="async" 
                 src="/logo1.png" 
                 alt="CAP 2027" 
                 className="h-full w-auto object-contain"

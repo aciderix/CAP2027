@@ -254,7 +254,7 @@ function HeroSlide({ article, followedIds }: { article: ArticleHero; followedIds
     >
       <div className="relative w-full aspect-[16/10] sm:aspect-[2/1] bg-slate-100 overflow-hidden">
         {article.image_url ? (
-          <img
+          <img decoding="async"
             src={article.image_url}
             alt=""
             loading="lazy"
@@ -321,7 +321,7 @@ function FactcheckRow({ article }: { article: ArticleHero }) {
       >
         <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-slate-100">
           {article.image_url ? (
-            <img src={article.image_url} alt="" loading="lazy" className="w-full h-full object-cover" />
+            <img decoding="async" src={article.image_url} alt="" loading="lazy" className="w-full h-full object-cover" />
           ) : (
             <div
               className="w-full h-full flex items-center justify-center text-white font-black"

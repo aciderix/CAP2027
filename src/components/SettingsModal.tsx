@@ -1,4 +1,4 @@
-import { Bell, Trash2, Shield, Send, AlertTriangle } from 'lucide-react';
+import { Bell, Trash2, Shield, AlertTriangle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -8,11 +8,8 @@ import {
   getNotificationsEnabled,
   setNotificationsEnabled as persistNotifs,
 } from '../lib/notifications';
-import {
-  getPushEnabled,
-  setPushEnabled,
-  registerPushNotifications,
-} from '../lib/push';
+import { registerPushNotifications } from '../lib/push';
+import { cancelElectionReminders } from '../lib/electionReminders';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -20,67 +17,59 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [permissionState, setPermissionState] = useState<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown');
+  const [notifEnabled, setNotifEnabled] = useState(false);
+  const [permState, setPermState] = useState<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
 
-  const [pushEnabled, setPushEnabledState] = useState(false);
-  const [pushBusy, setPushBusy] = useState(false);
-  const [pushError, setPushError] = useState<string | null>(null);
-
+  // Sync state from storage every time the modal opens
   useEffect(() => {
     if (!isOpen) return;
-    setNotificationsEnabled(getNotificationsEnabled());
-    setPushEnabledState(getPushEnabled());
-    setPushError(null);
+    setNotifEnabled(getNotificationsEnabled());
+    setError(null);
     setConfirmClear(false);
     if (Capacitor.isNativePlatform()) {
       LocalNotifications.checkPermissions()
-        .then((p) => setPermissionState(p.display as any))
-        .catch(() => setPermissionState('unknown'));
+        .then((p) => setPermState(p.display as any))
+        .catch(() => setPermState('unknown'));
     } else {
-      setPermissionState('unknown');
+      setPermState('unknown');
     }
   }, [isOpen]);
 
-  const togglePush = async () => {
-    setPushError(null);
-    if (pushEnabled) {
-      setPushEnabled(false);
-      setPushEnabledState(false);
+  const toggleNotifs = async () => {
+    setError(null);
+    const next = !notifEnabled;
+    if (!next) {
+      // Disabling: cancel scheduled reminders, persist, done.
+      persistNotifs(false);
+      setNotifEnabled(false);
+      await cancelElectionReminders();
       return;
     }
-    // Opt-in path: persist first so registerPushNotifications sees it.
-    setPushEnabled(true);
-    setPushEnabledState(true);
-    setPushBusy(true);
+    // Enabling: persist first so any subsequent registration sees it ON.
+    persistNotifs(true);
+    setNotifEnabled(true);
+    setBusy(true);
     try {
+      if (Capacitor.isNativePlatform()) {
+        const ask = await LocalNotifications.requestPermissions();
+        setPermState(ask.display as any);
+        if (ask.display !== 'granted') {
+          setError("Permission refusée. Activez « CAP 2027 » dans Réglages → Apps → Notifications du téléphone.");
+        }
+      }
+      // Register for FCM in parallel — silent if Firebase not configured
+      // or permission denied. Surfaces a clean error otherwise.
       const res = await registerPushNotifications();
-      if (!res.ok && res.error && res.error !== 'opt-in required') {
-        setPushError(res.error);
-        setPushEnabled(false);
-        setPushEnabledState(false);
+      if (!res.ok && res.error && res.error !== 'opt-in required' && res.error !== 'permission denied') {
+        setError((prev) => prev ?? `FCM : ${res.error}`);
       }
     } catch (e: any) {
-      setPushError(String(e?.message ?? e));
-      setPushEnabled(false);
-      setPushEnabledState(false);
+      setError(String(e?.message ?? e));
     } finally {
-      setPushBusy(false);
-    }
-  };
-
-  const toggleNotifications = async () => {
-    const next = !notificationsEnabled;
-    setNotificationsEnabled(next);
-    persistNotifs(next);
-    if (next && Capacitor.isNativePlatform()) {
-      try {
-        const status = await LocalNotifications.requestPermissions();
-        setPermissionState(status.display as any);
-      } catch {
-        setPermissionState('denied');
-      }
+      setBusy(false);
     }
   };
 
@@ -91,7 +80,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
     if (typeof window !== 'undefined') {
       localStorage.clear();
-      // Clear React Query persisted cache too
       try {
         Object.keys(window.sessionStorage).forEach((k) => sessionStorage.removeItem(k));
       } catch { /* noop */ }
@@ -106,7 +94,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           Vos préférences restent sur votre téléphone. Aucun compte, aucun envoi serveur.
         </p>
 
-        {/* Notifications */}
+        {/* Single notif toggle */}
         <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex flex-col gap-3 mt-2">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
@@ -116,75 +104,43 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <div className="min-w-0">
                 <p className="font-bold text-[#102a5c] text-sm">Notifications</p>
                 <p className="text-xs text-slate-500 leading-snug">
-                  Une alerte locale à la réouverture de l'app si du nouveau contenu est disponible.
+                  Nouvelles actus, rappels jour de scrutin, alertes en arrière-plan.
                 </p>
               </div>
             </div>
             <button
-              onClick={toggleNotifications}
+              onClick={toggleNotifs}
+              disabled={busy}
               aria-label="Activer les notifications"
               className={`shrink-0 w-12 h-6 rounded-full transition-colors relative ${
-                notificationsEnabled ? 'bg-[#102a5c]' : 'bg-slate-300'
-              }`}
+                notifEnabled ? 'bg-[#102a5c]' : 'bg-slate-300'
+              } ${busy ? 'opacity-50' : ''}`}
             >
               <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all shadow-sm ${
-                notificationsEnabled ? 'left-[26px]' : 'left-0.5'
+                notifEnabled ? 'left-[26px]' : 'left-0.5'
               }`} />
             </button>
           </div>
-          {notificationsEnabled && Capacitor.isNativePlatform() && permissionState === 'denied' && (
-            <p className="text-xs text-rose-600 bg-rose-50 rounded-lg p-2">
-              L'autorisation système a été refusée. Active "Notifications CAP 2027" dans les
-              réglages Android pour qu'elles s'affichent.
+          {notifEnabled && Capacitor.isNativePlatform() && permState === 'denied' && (
+            <p className="text-xs text-rose-600 bg-rose-50 rounded-lg p-2 inline-flex items-start gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>
+                L'autorisation système est refusée. Pour activer&nbsp;: <b>Réglages Android → Applications → CAP 2027 → Notifications → autoriser</b>.
+              </span>
             </p>
           )}
-          {notificationsEnabled && !Capacitor.isNativePlatform() && (
+          {error && (
+            <p className="text-xs text-rose-600 bg-rose-50 rounded-lg p-2 inline-flex items-start gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </p>
+          )}
+          {notifEnabled && !Capacitor.isNativePlatform() && (
             <p className="text-xs text-slate-500 bg-white rounded-lg p-2">
-              Sur le navigateur, les nouvelles actus s'affichent dans la cloche en haut. Les
-              notifications système sont actives uniquement dans l'app Android.
+              Sur le navigateur, les nouvelles actus s'affichent dans la cloche en haut.
             </p>
           )}
         </div>
-
-        {/* Push à distance (FCM) — désactivé par défaut */}
-        {Capacitor.isNativePlatform() && (
-          <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex flex-col gap-3 mt-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-violet-600 shrink-0">
-                  <Send className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-bold text-[#102a5c] text-sm">Notifications à distance</p>
-                  <p className="text-xs text-slate-500 leading-snug">
-                    Recevoir un push même quand l'application est complètement fermée.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={togglePush}
-                disabled={pushBusy}
-                aria-label="Activer les notifications à distance"
-                className={`shrink-0 w-12 h-6 rounded-full transition-colors relative ${
-                  pushEnabled ? 'bg-violet-600' : 'bg-slate-300'
-                } ${pushBusy ? 'opacity-50' : ''}`}
-              >
-                <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all shadow-sm ${
-                  pushEnabled ? 'left-[26px]' : 'left-0.5'
-                }`} />
-              </button>
-            </div>
-            {pushError && (
-              <p className="text-xs text-rose-600 bg-rose-50 rounded-lg p-2 inline-flex items-start gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <span>
-                  Activation impossible : Firebase n'est pas (encore) configuré sur cette
-                  build. Détail : <code className="text-[10px]">{pushError.slice(0, 200)}</code>
-                </span>
-              </p>
-            )}
-          </div>
-        )}
 
         {/* Quick info */}
         <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex items-start gap-3 mt-2">
@@ -227,7 +183,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </Button>
         </div>
 
-        {/* Build version */}
         <p className="text-[10px] text-slate-400 text-center mt-2">
           CAP 2027 — App indépendante · 100 % locale
         </p>

@@ -63,7 +63,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               className="flex flex-col items-center text-center w-full max-w-[400px]"
             >
               <div className="w-[140px] h-[140px] sm:w-[160px] sm:h-[160px] rounded-[32px] sm:rounded-[36px] overflow-hidden mb-8 sm:mb-12 shadow-md">
-                <img
+                <img decoding="async"
                   src="/logo-cap2027.png"
                   alt="CAP 2027"
                   className="w-full h-full object-cover"

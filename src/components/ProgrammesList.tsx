@@ -128,7 +128,7 @@ export function ProgrammesList() {
               }`}
             >
               <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-50 shrink-0">
-                <img
+                <img decoding="async"
                   src={c.photo_url || fallbackPhoto(c)}
                   alt={fullName(c)}
                   className="w-full h-full object-cover"

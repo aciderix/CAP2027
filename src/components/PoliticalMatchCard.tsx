@@ -38,7 +38,7 @@ export function PoliticalMatchCard() {
         <div className="relative w-[160px] sm:w-[260px] h-[110px] sm:h-[180px] shrink-0 pointer-events-none mt-0">
           {/* Blue Card */}
           <div className="absolute left-0 sm:left-[10%] top-1/2 -translate-y-1/2 w-[80px] sm:w-[130px] aspect-[2.5/3.5] rounded-lg sm:rounded-xl rotate-[-12deg] shadow-lg border-[3px] sm:border-[5px] border-white overflow-hidden bg-white flex items-center justify-center">
-            <img 
+            <img decoding="async" 
               src="/card_blue.png" 
               alt="Profil Bleu" 
               className="w-full h-full object-cover"
@@ -51,7 +51,7 @@ export function PoliticalMatchCard() {
 
           {/* Red Card */}
           <div className="absolute right-0 sm:right-[10%] top-1/2 -translate-y-1/2 w-[80px] sm:w-[130px] aspect-[2.5/3.5] rounded-lg sm:rounded-xl rotate-[8deg] shadow-lg border-[3px] sm:border-[5px] border-white overflow-hidden bg-white z-10 flex items-center justify-center">
-            <img 
+            <img decoding="async" 
               src="/card_red.png" 
               alt="Profil Rouge" 
               className="w-full h-full object-cover"

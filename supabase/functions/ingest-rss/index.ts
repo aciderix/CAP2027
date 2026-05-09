@@ -54,10 +54,30 @@ function pickText(v: any): string {
 function stripHtml(s: string): string {
   return s
     .replace(/<[^>]*>/g, " ")
+    // Numeric HTML entities (e.g. &#039; → ', &#8217; → ’).
+    // Run BEFORE the named replacements so &#39; is also caught here.
+    .replace(/&#(\d+);/g, (_, code) => {
+      const n = Number(code);
+      try { return String.fromCodePoint(n); } catch { return ""; }
+    })
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => {
+      const n = parseInt(code, 16);
+      try { return String.fromCodePoint(n); } catch { return ""; }
+    })
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&laquo;/gi, "«")
+    .replace(/&raquo;/gi, "»")
+    .replace(/&hellip;/gi, "…")
+    .replace(/&mdash;/gi, "—")
+    .replace(/&ndash;/gi, "–")
+    .replace(/&lsquo;/gi, "‘")
+    .replace(/&rsquo;/gi, "’")
+    .replace(/&ldquo;/gi, "“")
+    .replace(/&rdquo;/gi, "”")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/\s+/g, " ")

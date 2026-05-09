@@ -271,7 +271,7 @@ export function Comparateur() {
                   }`}
                 >
                   <span className="relative w-7 h-7 rounded-full overflow-hidden bg-slate-100 shrink-0">
-                    <img src={c.photo_url || fallbackPhoto(c)} alt="" className="w-full h-full object-cover" />
+                    <img decoding="async" src={c.photo_url || fallbackPhoto(c)} alt="" className="w-full h-full object-cover" />
                     {active && (
                       <span className="absolute inset-0 bg-[#102a5c]/30 flex items-center justify-center">
                         <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
@@ -365,7 +365,7 @@ function CandidateCard({
       <div className="h-1.5 w-full" style={{ backgroundColor: themeColor }} />
       <div className="p-4 flex items-center gap-3 border-b border-slate-100">
         <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-50 shrink-0">
-          <img src={candidate.photo_url || fallbackPhoto(candidate)} alt={fullName(candidate)} className="w-full h-full object-cover" />
+          <img decoding="async" src={candidate.photo_url || fallbackPhoto(candidate)} alt={fullName(candidate)} className="w-full h-full object-cover" />
         </div>
         <div className="min-w-0">
           <div className="font-bold text-[#102a5c] truncate">{fullName(candidate)}</div>
@@ -408,7 +408,7 @@ function CandidateColumn({
         <div className="h-1.5 w-full" style={{ backgroundColor: themeColor }} />
         <div className="p-3 flex flex-col items-center text-center gap-2">
           <div className="w-14 h-14 rounded-full overflow-hidden bg-slate-50">
-            <img src={candidate.photo_url || fallbackPhoto(candidate)} alt={fullName(candidate)} className="w-full h-full object-cover" />
+            <img decoding="async" src={candidate.photo_url || fallbackPhoto(candidate)} alt={fullName(candidate)} className="w-full h-full object-cover" />
           </div>
           <div className="min-w-0 w-full">
             <div className="font-bold text-[#102a5c] text-sm leading-tight">{fullName(candidate)}</div>

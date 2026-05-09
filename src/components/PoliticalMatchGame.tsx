@@ -429,7 +429,7 @@ function Tutorial({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }
           whileDrag={{ scale: 0.95 }}
           className="w-[220px] sm:w-[240px] aspect-[2.5/3.5] bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border-[4px] border-white z-10 relative overflow-hidden cursor-grab touch-none flex flex-col items-center justify-center"
         >
-          <img src={currentTuto.img} alt="Tuto Card" className="absolute inset-0 w-full h-full object-cover z-0" />
+          <img decoding="async" src={currentTuto.img} alt="Tuto Card" className="absolute inset-0 w-full h-full object-cover z-0" />
           <div className="absolute inset-0 bg-slate-900/20 z-10" />
           <div className="relative z-20 flex flex-col items-center gap-4 text-center p-4">
             {currentTuto.icon}
@@ -621,7 +621,7 @@ function Results({
           </div>
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-full overflow-hidden bg-white/10 shrink-0 border-2 border-white/30">
-              <img src={top.candidate.photo_url || fallback(top.candidate)} alt="" className="w-full h-full object-cover" />
+              <img decoding="async" src={top.candidate.photo_url || fallback(top.candidate)} alt="" className="w-full h-full object-cover" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-bold text-lg leading-tight truncate">{fullName(top.candidate)}</div>
@@ -653,7 +653,7 @@ function Results({
               <div className="flex items-center gap-3">
                 <div className="text-slate-400 font-bold w-5 text-center text-sm">{i + 1}</div>
                 <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-50 shrink-0">
-                  <img src={s.candidate.photo_url || fallback(s.candidate)} alt="" className="w-full h-full object-cover" />
+                  <img decoding="async" src={s.candidate.photo_url || fallback(s.candidate)} alt="" className="w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">

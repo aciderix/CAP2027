@@ -10,7 +10,7 @@ export function SplashScreen() {
       transition={{ duration: 0.5 }}
     >
         <div className="flex-1 flex flex-col items-center justify-center -mt-10 max-w-[400px] w-full">
-           <img src="/logo1.png" alt="CAP 2027" className="w-[85%] sm:w-[340px] mb-6 object-contain" />
+           <img decoding="async" src="/logo1.png" alt="CAP 2027" className="w-[85%] sm:w-[340px] mb-6 object-contain" />
            <h2 className="text-[#102a5c] text-[18px] sm:text-[22px] font-bold tracking-tight text-center">Votre boîte à outils civique</h2>
            
            <div className="mt-16 sm:mt-20">

@@ -111,7 +111,7 @@ export function MoreMenu({ onGoToCandidates }: MoreMenuProps) {
       </div>
 
       <div className="text-center mt-6 flex flex-col items-center gap-1">
-        <img src="/logo-cap2027-sm.png" alt="" className="w-10 h-10 rounded-xl opacity-90 mb-1" />
+        <img decoding="async" src="/logo-cap2027-sm.png" alt="" className="w-10 h-10 rounded-xl opacity-90 mb-1" />
         <p className="text-xs text-slate-400 font-medium tracking-wide">CAP 2027 • App indépendante</p>
         <p className="text-[10px] text-slate-300">Aucun compte · 100% local · Sans publicité</p>
       </div>
@@ -130,7 +130,7 @@ function AboutModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
     <Modal isOpen={isOpen} onClose={onClose} title="À propos">
       <div className="flex flex-col gap-4 py-2 text-sm text-slate-700 leading-relaxed">
         <div className="flex flex-col items-center gap-2 pb-3 border-b border-slate-100">
-          <img src="/logo-cap2027.png" alt="" className="w-16 h-16 rounded-2xl shadow-sm" />
+          <img decoding="async" src="/logo-cap2027.png" alt="" className="w-16 h-16 rounded-2xl shadow-sm" />
           <h3 className="font-black text-[#102a5c] text-lg">CAP 2027</h3>
           <p className="text-xs text-slate-500 italic">S'informer · Comparer · Choisir</p>
         </div>

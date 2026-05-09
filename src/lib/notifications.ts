@@ -1,12 +1,12 @@
 // Lightweight notification layer that doesn't require any backend.
 //
-// - Tracks the timestamp of the last article a user has seen, in localStorage.
-// - Exposes a useUnseenArticles hook returning a fresh count + recent list.
-// - Triggers a local OS notification (Capacitor) when the app comes to the
-//   foreground and there is at least one new article since the last visit.
+// Single source of truth for the user's notif preference. ALL notif
+// channels (in-app bell, local OS notif on resume, J-day reminders,
+// remote FCM push) are gated by the same flag so the UX is one toggle
+// in Settings instead of three.
 //
-// True push notifications when the app is closed need FCM + a backend; we
-// intentionally stay local-only here so the project remains free to host.
+// Default: ON (the user is asked for the OS permission on first launch
+// after onboarding completes — see useFirstLaunchPermission).
 
 import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -15,14 +15,11 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { supabase } from './supabase';
 
 const LAST_SEEN_KEY = 'cap2027.notifications.lastSeenAt';
-const PERM_KEY = 'cap2027.notifications.enabled';
+const PREF_KEY = 'cap2027.notifications.enabled';
+const FIRST_ASK_KEY = 'cap2027.notifications.firstAskDone';
 const LAST_FIRED_KEY = 'cap2027.notifications.lastResumeFiredAt';
 
-// Stable IDs for our system notifications. Using a fixed ID for the
-// "resume" alert means Android replaces the previous one instead of
-// stacking duplicates — even if the listener somehow runs twice.
 const RESUME_NOTIF_ID = 9_000_001;
-
 const SMALL_ICON = 'ic_stat_cap2027';
 const LARGE_ICON = 'ic_notif_cap2027';
 const ICON_COLOR = '#102a5c';
@@ -48,24 +45,16 @@ export function markAllSeen() {
   window.dispatchEvent(new Event('cap2027:notifications-seen'));
 }
 
+/** Master notif preference. Default ON. */
 export function getNotificationsEnabled(): boolean {
-  if (typeof window === 'undefined') return false;
-  return localStorage.getItem(PERM_KEY) === 'true';
+  if (typeof window === 'undefined') return true;
+  const v = localStorage.getItem(PREF_KEY);
+  return v === null ? true : v === 'true';
 }
 
 export function setNotificationsEnabled(v: boolean) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(PERM_KEY, v ? 'true' : 'false');
-}
-
-export async function requestOsNotificationPermission(): Promise<boolean> {
-  if (!Capacitor.isNativePlatform()) return false;
-  try {
-    const status = await LocalNotifications.requestPermissions();
-    return status.display === 'granted';
-  } catch {
-    return false;
-  }
+  localStorage.setItem(PREF_KEY, v ? 'true' : 'false');
 }
 
 function getLastFiredAt(): number {
@@ -78,6 +67,36 @@ function setLastFiredAt(ts: number) {
   localStorage.setItem(LAST_FIRED_KEY, String(ts));
 }
 
+/**
+ * Ask for notification permission once, on the first app launch
+ * after onboarding completes. Re-asking on subsequent launches is
+ * intrusive; if the user denied, they need to toggle in Settings,
+ * which triggers a fresh prompt.
+ */
+export async function maybeAskFirstLaunchPermission(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (!Capacitor.isNativePlatform()) return;
+  if (localStorage.getItem(FIRST_ASK_KEY) === 'true') return;
+  localStorage.setItem(FIRST_ASK_KEY, 'true');
+  try {
+    await LocalNotifications.requestPermissions();
+  } catch {
+    // best-effort
+  }
+}
+
+/** Returns true if both the user pref AND the OS permission are granted. */
+export async function notificationsActive(): Promise<boolean> {
+  if (!getNotificationsEnabled()) return false;
+  if (!Capacitor.isNativePlatform()) return true; // web fallback uses bell
+  try {
+    const perm = await LocalNotifications.checkPermissions();
+    return perm.display === 'granted';
+  } catch {
+    return false;
+  }
+}
+
 export async function fireResumeNotification(count: number, sample: UnseenArticle | null) {
   if (!getNotificationsEnabled()) return;
   if (!Capacitor.isNativePlatform()) return;
@@ -88,8 +107,6 @@ export async function fireResumeNotification(count: number, sample: UnseenArticl
     await LocalNotifications.schedule({
       notifications: [
         {
-          // Stable ID: scheduling a new one with the same ID replaces the
-          // existing notification rather than adding a duplicate.
           id: RESUME_NOTIF_ID,
           title: count === 1 ? 'Une nouvelle actualité' : `${count} nouvelles actualités`,
           body: sample?.title?.slice(0, 140) ?? 'Ouvrez CAP 2027 pour les consulter',
@@ -101,12 +118,10 @@ export async function fireResumeNotification(count: number, sample: UnseenArticl
       ],
     });
   } catch {
-    // best-effort, swallow
+    // best-effort
   }
 }
 
-// Hook used by the bell icon: query for unseen articles since the local
-// "last seen" cursor. Refetched as part of the regular article cache.
 export function useUnseenArticles() {
   const qc = useQueryClient();
 
@@ -146,18 +161,12 @@ export function useUnseenArticles() {
   return { count, articles: query.data ?? [], isLoading: query.isLoading };
 }
 
-// Wire global app-resume handler. Designed to be safe even if the hook
-// happens to mount twice (HMR, fast-refresh, accidental remounts):
-//   - the listener is properly cleaned up on unmount
-//   - the throttle is shared across instances via localStorage
-//   - the resulting OS notification uses a stable ID so duplicates merge.
 export function useResumeNotificationsHook() {
   const qc = useQueryClient();
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const onResume = async () => {
-      // Throttle to one resume notif per 5 min, shared across all listeners.
       if (Date.now() - getLastFiredAt() < 5 * 60 * 1000) return;
       await qc.invalidateQueries({ queryKey: ['unseenArticles'] });
       const data = qc.getQueryData<UnseenArticle[]>(['unseenArticles', getLastSeenAt()]);

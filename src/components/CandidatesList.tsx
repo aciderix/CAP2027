@@ -204,7 +204,7 @@ export function CandidatesList() {
           return (
             <div key={candidate.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col items-center text-center gap-3 transition-all hover:shadow-md hover:-translate-y-1">
               <div className="w-16 h-16 rounded-full flex items-center justify-center shrink-0 mb-1 relative overflow-hidden bg-slate-50">
-                  <img
+                  <img decoding="async"
                     src={candidate.photo_url || fallbackPhoto(candidate)}
                     alt={fullName(candidate)}
                     className="w-full h-full object-cover"
@@ -247,7 +247,7 @@ export function CandidatesList() {
              <div className="flex items-start justify-between border-b border-slate-100 pb-4">
                 <div className="flex items-center gap-3 sm:gap-4">
                   <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-slate-50 flex items-center justify-center shrink-0 relative overflow-hidden shadow-sm">
-                      <img
+                      <img decoding="async"
                         src={selectedCandidate.photo_url || fallbackPhoto(selectedCandidate)}
                         alt={fullName(selectedCandidate)}
                         className="w-full h-full object-cover"
@@ -473,7 +473,7 @@ function CandidateNewsCard({ article }: { article: NewsArticle }) {
         <div className="flex gap-3 p-3">
           <div className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-xl overflow-hidden bg-slate-100">
             {article.image_url ? (
-              <img
+              <img decoding="async"
                 src={article.image_url}
                 alt=""
                 loading="lazy"

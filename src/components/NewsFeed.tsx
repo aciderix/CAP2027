@@ -536,7 +536,7 @@ function FeaturedCard({ article }: { article: ArticleRow }) {
     >
       <div className="relative w-full aspect-[16/9] bg-slate-100 overflow-hidden">
         {article.image_url ? (
-          <img
+          <img decoding="async"
             src={article.image_url}
             alt=""
             loading="lazy"
@@ -592,7 +592,7 @@ function CompactCard({ article }: { article: ArticleRow }) {
       <div className="flex gap-3 p-3 sm:p-4">
         <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-2xl overflow-hidden bg-slate-100">
           {article.image_url ? (
-            <img
+            <img decoding="async"
               src={article.image_url}
               alt=""
               loading="lazy"
