@@ -41,6 +41,62 @@ interface RoundReminders {
   round2?: ElectionRound;
 }
 
+// All civic / election notifs target French presidential election times,
+// which always reference Europe/Paris regardless of where the user is.
+// (A French expat voting at the embassy in Tokyo doesn't want to be
+// woken at 8 h Tokyo for a French scrutin.) We compute the absolute UTC
+// instant that corresponds to a given wall-clock hour in Paris on a
+// given calendar date.
+const PARIS_TZ = 'Europe/Paris';
+
+function parisOffsetMs(forUtc: number): number {
+  // Use Intl.DateTimeFormat to read the Paris-local hour for `forUtc`,
+  // then derive the offset (handles CET/CEST transitions automatically).
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: PARIS_TZ,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(new Date(forUtc));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? '0');
+  // "Wall clock" in Paris reinterpreted as if it were UTC.
+  const asIfUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  return asIfUtc - forUtc;
+}
+
+/**
+ * Returns a Date for a wall-clock instant (year, month, day, hour) in
+ * Europe/Paris. Always correct under DST.
+ */
+function parisDate(year: number, month: number, day: number, hour: number, minute = 0): Date {
+  // First guess: treat as if Paris were UTC, compute offset, correct.
+  const guess = Date.UTC(year, month - 1, day, hour, minute);
+  const off1 = parisOffsetMs(guess);
+  // Second pass for DST edge cases.
+  const off2 = parisOffsetMs(guess - off1);
+  return new Date(guess - off2);
+}
+
+function dateInParis(absMs: number): { year: number; month: number; day: number } {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: PARIS_TZ,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  const parts = fmt.formatToParts(new Date(absMs));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? '0');
+  return { year: get('year'), month: get('month'), day: get('day') };
+}
+
+function addDaysParis(absMs: number, days: number): { year: number; month: number; day: number } {
+  // Calendar arithmetic in Paris timezone — just shift by N days from
+  // the Paris-local date of `absMs`.
+  const { year, month, day } = dateInParis(absMs);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  d.setUTCDate(d.getUTCDate() + days);
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+}
+
 /**
  * Stable IDs per round/event so re-scheduling never duplicates notifs.
  * Range chosen well above NotificationsBell's incrementing ID counter.
@@ -71,10 +127,16 @@ const ALL_IDS = Object.values(IDS);
 
 const DAY_MS = 86_400_000;
 
-function atLocalHour(base: Date, hour: number): Date {
-  const d = new Date(base);
-  d.setHours(hour, 0, 0, 0);
-  return d;
+/** A given hour (Paris wall-clock) on the Paris-calendar day of `base`. */
+function atParisHour(base: Date, hour: number): Date {
+  const { year, month, day } = dateInParis(base.getTime());
+  return parisDate(year, month, day, hour);
+}
+
+/** A given hour (Paris wall-clock) N days offset from `base` (Paris calendar). */
+function atParisHourOffset(base: Date, days: number, hour: number): Date {
+  const { year, month, day } = addDaysParis(base.getTime(), days);
+  return parisDate(year, month, day, hour);
 }
 
 export async function scheduleElectionReminders(rounds: RoundReminders) {
@@ -114,13 +176,11 @@ export async function scheduleElectionReminders(rounds: RoundReminders) {
     const results = new Date(round.results_at).getTime();
     if (Number.isNaN(start) || Number.isNaN(results)) return;
 
-    // Eve at 18 h local of the day before the election.
-    const eveDate = new Date(start);
-    eveDate.setDate(eveDate.getDate() - 1);
-    const eveAt = atLocalHour(eveDate, 18).getTime();
+    // Eve at 18 h Paris of the day before the election.
+    const eveAt = atParisHourOffset(new Date(start), -1, 18).getTime();
 
-    // J-day at 8 h local (poll opening).
-    const dayAt = atLocalHour(new Date(start), 8).getTime();
+    // J-day at 8 h Paris (poll opening).
+    const dayAt = atParisHour(new Date(start), 8).getTime();
 
     if (eveAt > now) {
       toSchedule.push({
@@ -166,10 +226,10 @@ export async function scheduleElectionReminders(rounds: RoundReminders) {
   if (r1 && r1.is_official) {
     const r1Start = new Date(r1.scheduled_at).getTime();
     if (!Number.isNaN(r1Start)) {
-      // Inscription: 6 weeks before R1, fires at 10 h local.
+      // Inscription: 6 weeks before R1, fires at 10 h Paris.
       // The legal deadline applies to both rounds (one inscription
       // covers everything), so a single reminder is enough.
-      const inscriptionAt = atLocalHour(new Date(r1Start - 42 * DAY_MS), 10).getTime();
+      const inscriptionAt = atParisHourOffset(new Date(r1Start), -42, 10).getTime();
       if (inscriptionAt > now) {
         toSchedule.push({
           id: IDS.inscription,
@@ -182,9 +242,9 @@ export async function scheduleElectionReminders(rounds: RoundReminders) {
         });
       }
 
-      // Procuration R1 — 3 sem et 1 sem avant, à 10 h.
-      const procR1_3w = atLocalHour(new Date(r1Start - 21 * DAY_MS), 10).getTime();
-      const procR1_1w = atLocalHour(new Date(r1Start - 7 * DAY_MS), 10).getTime();
+      // Procuration R1 — 3 sem et 1 sem avant, à 10 h Paris.
+      const procR1_3w = atParisHourOffset(new Date(r1Start), -21, 10).getTime();
+      const procR1_1w = atParisHourOffset(new Date(r1Start), -7, 10).getTime();
       if (procR1_3w > now) {
         toSchedule.push({
           id: IDS.procurationR1Eve3w,
@@ -214,8 +274,8 @@ export async function scheduleElectionReminders(rounds: RoundReminders) {
   if (r2 && r2.is_official) {
     const r2Start = new Date(r2.scheduled_at).getTime();
     if (!Number.isNaN(r2Start)) {
-      const procR2_3w = atLocalHour(new Date(r2Start - 21 * DAY_MS), 10).getTime();
-      const procR2_1w = atLocalHour(new Date(r2Start - 7 * DAY_MS), 10).getTime();
+      const procR2_3w = atParisHourOffset(new Date(r2Start), -21, 10).getTime();
+      const procR2_1w = atParisHourOffset(new Date(r2Start), -7, 10).getTime();
       if (procR2_3w > now) {
         toSchedule.push({
           id: IDS.procurationR2Eve3w,
@@ -246,8 +306,8 @@ export async function scheduleElectionReminders(rounds: RoundReminders) {
   if (r1 && r1.is_official) {
     const r1Start = new Date(r1.scheduled_at).getTime();
     if (!Number.isNaN(r1Start)) {
-      // 11 h local — outside work peak, before lunch.
-      const boussoleAt = atLocalHour(new Date(r1Start - 30 * DAY_MS), 11).getTime();
+      // 11 h Paris — outside work peak, before lunch.
+      const boussoleAt = atParisHourOffset(new Date(r1Start), -30, 11).getTime();
       if (boussoleAt > now) {
         toSchedule.push({
           id: IDS.boussoleR1J30,

@@ -1,4 +1,4 @@
-import { User, BookOpen, Scale, BadgeCheck } from 'lucide-react';
+import { User, BookOpen, Scale, BadgeCheck, Stamp } from 'lucide-react';
 
 interface ExplorerItemProps {
   icon: React.ReactNode;
@@ -38,8 +38,8 @@ export function ExplorerSection({ onNavigate }: { onNavigate: (view: string) => 
         </h2>
       </div>
       
-      <div className="grid grid-cols-4 gap-2 sm:gap-4 md:gap-5">
-        <ExplorerItem 
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-4 md:gap-5">
+        <ExplorerItem
           icon={<User className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10" strokeWidth={2.5} />}
           title="Candidats"
           onClick={() => onNavigate('candidats')}
@@ -47,7 +47,7 @@ export function ExplorerSection({ onNavigate }: { onNavigate: (view: string) => 
           bgClass="bg-blue-50"
           borderClass="border-blue-100"
         />
-        <ExplorerItem 
+        <ExplorerItem
           icon={<BookOpen className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10" strokeWidth={2.5} />}
           title="Programmes"
           onClick={() => onNavigate('programmes')}
@@ -55,21 +55,29 @@ export function ExplorerSection({ onNavigate }: { onNavigate: (view: string) => 
           bgClass="bg-purple-50"
           borderClass="border-purple-100"
         />
-        <ExplorerItem 
+        <ExplorerItem
           icon={<Scale className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10" strokeWidth={2.5} />}
-          title={<>Comparateur<br/>thématique</>}
+          title={<>Compa-<br/>rateur</>}
           onClick={() => onNavigate('comparateur')}
           iconClass="text-emerald-600"
           bgClass="bg-emerald-50"
           borderClass="border-emerald-100"
         />
-        <ExplorerItem 
+        <ExplorerItem
           icon={<BadgeCheck className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10" strokeWidth={2.5} />}
           title={<>Fact-<br className="sm:hidden" />checking</>}
           onClick={() => onNavigate('factchecking')}
           iconClass="text-indigo-600"
           bgClass="bg-indigo-50"
           borderClass="border-indigo-100"
+        />
+        <ExplorerItem
+          icon={<Stamp className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10" strokeWidth={2.5} />}
+          title={<>Parrai-<br/>nages</>}
+          onClick={() => onNavigate('parrainages')}
+          iconClass="text-amber-600"
+          bgClass="bg-amber-50"
+          borderClass="border-amber-100"
         />
       </div>
     </div>

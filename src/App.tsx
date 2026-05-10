@@ -19,6 +19,7 @@ import { NewsFeed } from './components/NewsFeed';
 import { MyFeed } from './components/MyFeed';
 import { MoreMenu } from './components/MoreMenu';
 import { ParrainagesCard } from './components/ParrainagesCard';
+import { ParrainagesList } from './components/ParrainagesList';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
 import {
@@ -207,6 +208,15 @@ export default function App() {
             </div>
           )}
 
+          {activeTab === 'explorer' && explorerView === 'parrainages' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+               <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
+                 <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
+               </button>
+               <ParrainagesList />
+            </div>
+          )}
+
           {activeTab === 'actualites' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
               <NewsFeed mode="news" />
@@ -219,7 +229,7 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && explorerView !== 'comparateur' && explorerView !== 'factchecking' && (
+          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && explorerView !== 'comparateur' && explorerView !== 'factchecking' && explorerView !== 'parrainages' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
                <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
                  <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
@@ -241,7 +251,9 @@ export default function App() {
                 onNavigate={() => setActiveTab('actualites')}
                 onNavigateFactcheck={() => { setActiveTab('explorer'); setExplorerView('factchecking'); }}
               />
-              <ParrainagesCard />
+              <ParrainagesCard
+                onSeeAll={() => { setActiveTab('explorer'); setExplorerView('parrainages'); }}
+              />
             </div>
           )}
 
