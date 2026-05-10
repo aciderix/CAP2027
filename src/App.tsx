@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, BookOpen, Scale, BadgeCheck, ArrowLeft } from 'lucide-react';
+import { User, BookOpen, Scale, BadgeCheck, ArrowLeft, Stamp } from 'lucide-react';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { VoterToolkit } from './components/VoterToolkit';
@@ -19,6 +19,7 @@ import { NewsFeed } from './components/NewsFeed';
 import { MyFeed } from './components/MyFeed';
 import { MoreMenu } from './components/MoreMenu';
 import { ParrainagesCard } from './components/ParrainagesCard';
+import { ParrainagesList } from './components/ParrainagesList';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
 import {
@@ -46,8 +47,8 @@ export default function App() {
         setShowOnboarding(true);
       } else {
         // Returning user: ask for notif permission on first launch
-        // post-onboarding, then register for FCM. Both calls are
-        // idempotent and silent on web / when already granted.
+        // post-onboarding, then register the FCM token. Both calls
+        // are idempotent and silent on web / when already granted.
         void maybeAskFirstLaunchPermission().then(() => registerPushNotifications());
       }
     }, 2500);
@@ -67,7 +68,7 @@ export default function App() {
     localStorage.setItem('hasSeenOnboarding', 'true');
     setShowOnboarding(false);
     // Right after the user closes onboarding, ask for the OS notif
-    // permission once. Then register with FCM (no-op if denied).
+    // permission once, then register with FCM (silent if denied).
     void maybeAskFirstLaunchPermission().then(() => registerPushNotifications());
   };
 
@@ -177,6 +178,14 @@ export default function App() {
                     </div>
                     <BadgeCheck className="absolute right-[-10px] sm:right-2 top-1/2 -translate-y-1/2 w-[100px] h-[100px] sm:w-[130px] sm:h-[130px] text-indigo-50 pointer-events-none transition-transform group-hover:scale-105" strokeWidth={2.5} />
                  </div>
+
+                 <div onClick={() => setExplorerView('parrainages')} className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 flex flex-col justify-center min-h-[120px] hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden group">
+                    <div className="relative z-10 pr-6 sm:pr-10">
+                      <h3 className="text-[18px] sm:text-xl font-bold text-[#102a5c] mb-1 sm:mb-2 group-hover:text-[#1a56db] transition-colors">Parrainages</h3>
+                      <p className="text-[13px] sm:text-[14px] text-slate-600 leading-relaxed max-w-[90%] sm:max-w-none">Consultez le décompte officiel des 500 signatures d'élus collectées par chaque candidat, mis à jour quotidiennement.</p>
+                    </div>
+                    <Stamp className="absolute right-[-10px] sm:right-2 top-1/2 -translate-y-1/2 w-[100px] h-[100px] sm:w-[130px] sm:h-[130px] text-amber-50 pointer-events-none transition-transform group-hover:scale-105" strokeWidth={2.5} />
+                 </div>
               </div>
             </div>
           )}
@@ -208,6 +217,15 @@ export default function App() {
             </div>
           )}
 
+          {activeTab === 'explorer' && explorerView === 'parrainages' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+               <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
+                 <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
+               </button>
+               <ParrainagesList />
+            </div>
+          )}
+
           {activeTab === 'actualites' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
               <NewsFeed mode="news" />
@@ -220,7 +238,7 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && explorerView !== 'comparateur' && explorerView !== 'factchecking' && (
+          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && explorerView !== 'comparateur' && explorerView !== 'factchecking' && explorerView !== 'parrainages' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
                <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
                  <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
@@ -242,7 +260,9 @@ export default function App() {
                 onNavigate={() => setActiveTab('actualites')}
                 onNavigateFactcheck={() => { setActiveTab('explorer'); setExplorerView('factchecking'); }}
               />
-              <ParrainagesCard />
+              <ParrainagesCard
+                onSeeAll={() => { setActiveTab('explorer'); setExplorerView('parrainages'); }}
+              />
             </div>
           )}
 

@@ -1,0 +1,50 @@
+name: Ingest external RSS sources
+
+# Used for sources whose RSS endpoint blocks the Supabase egress IP
+# (Le Figaro, X mirrors via nitter, etc.). Fetches them from the
+# GitHub Actions IP pool and POSTs the XML to the ingest-from-xml
+# edge function which reuses the existing parsing/tagging pipeline.
+#
+# Sources are picked up automatically if their fetch_via_github
+# column is true in the news_sources table — toggle it in the admin
+# console, no workflow changes needed.
+
+on:
+  schedule:
+    # Every 30 minutes, offset by 4 min so we don't pile up at xx:00
+    # and we land before the notify-after-ingest cron at xx:16.
+    - cron: "4,34 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: external-rss
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    name: Fetch + ingest external sources
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run ingest
+        env:
+          # Supabase URL + anon key are public — embedding them in the
+          # workflow is fine (same as the Android build workflow).
+          SUPABASE_URL: https://oyvqvfawcxlnvpgloicx.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_nycw__S1NdZYIVyu4LH4SQ_830IdXPA
+          # The shared secret IS sensitive — it gates inserts into
+          # news_articles. Configure as a repository secret.
+          INGEST_FROM_XML_TOKEN: ${{ secrets.INGEST_FROM_XML_TOKEN }}
+        run: python scripts/ingest_external_rss.py

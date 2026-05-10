@@ -1,12 +1,16 @@
-// Lightweight notification layer that doesn't require any backend.
+// Lightweight notification layer with two trigger paths:
 //
-// Single source of truth for the user's notif preference. ALL notif
-// channels (in-app bell, local OS notif on resume, J-day reminders,
-// remote FCM push) are gated by the same flag so the UX is one toggle
-// in Settings instead of three.
+//   1. Foreground / resume — fires a local OS notif when the app comes
+//      back to the user (cold launch, multitask resume, browser focus).
+//   2. Background — see `background.js` (the `@capacitor/background-runner`
+//      worker), which polls Supabase ~hourly even with the app killed.
 //
-// Default: ON (the user is asked for the OS permission on first launch
-// after onboarding completes — see useFirstLaunchPermission).
+// Both share the same throttle key (LAST_FIRED_KEY), mirrored to
+// Capacitor Preferences so the worker (separate JS context, no
+// localStorage) can read foreground state and vice-versa.
+//
+// Default user preference: notifications ON. The OS prompt is asked
+// once after onboarding completes (see maybeAskFirstLaunchPermission).
 
 import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -34,6 +38,38 @@ export interface UnseenArticle {
   is_factcheck: boolean;
 }
 
+// ---------------- Preferences mirror -----------------------------------
+//
+// Background runner can only read Capacitor Preferences (no DOM /
+// localStorage). We keep localStorage as the sync source of truth for
+// the React UI but mirror writes to Preferences so the worker stays in
+// sync. On foreground startup we also read Preferences and reconcile
+// (take MAX of any timestamps) so a notif fired by the runner doesn't
+// trigger a duplicate when the user opens the app a few seconds later.
+
+async function prefSet(key: string, value: string): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    const { Preferences } = await import('@capacitor/preferences');
+    await Preferences.set({ key, value });
+  } catch {
+    // best-effort
+  }
+}
+
+async function prefGet(key: string): Promise<string | null> {
+  if (!Capacitor.isNativePlatform()) return null;
+  try {
+    const { Preferences } = await import('@capacitor/preferences');
+    const { value } = await Preferences.get({ key });
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------- Last-seen marker -------------------------------------
+
 export function getLastSeenAt(): string {
   if (typeof window === 'undefined') return new Date(0).toISOString();
   return localStorage.getItem(LAST_SEEN_KEY) || new Date(0).toISOString();
@@ -41,9 +77,13 @@ export function getLastSeenAt(): string {
 
 export function markAllSeen() {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(LAST_SEEN_KEY, new Date().toISOString());
+  const now = new Date().toISOString();
+  localStorage.setItem(LAST_SEEN_KEY, now);
+  void prefSet(LAST_SEEN_KEY, now);
   window.dispatchEvent(new Event('cap2027:notifications-seen'));
 }
+
+// ---------------- User preference --------------------------------------
 
 /** Master notif preference. Default ON. */
 export function getNotificationsEnabled(): boolean {
@@ -54,8 +94,12 @@ export function getNotificationsEnabled(): boolean {
 
 export function setNotificationsEnabled(v: boolean) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(PREF_KEY, v ? 'true' : 'false');
+  const s = v ? 'true' : 'false';
+  localStorage.setItem(PREF_KEY, s);
+  void prefSet(PREF_KEY, s);
 }
+
+// ---------------- Resume throttle --------------------------------------
 
 function getLastFiredAt(): number {
   if (typeof window === 'undefined') return 0;
@@ -64,8 +108,34 @@ function getLastFiredAt(): number {
 
 function setLastFiredAt(ts: number) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(LAST_FIRED_KEY, String(ts));
+  const s = String(ts);
+  localStorage.setItem(LAST_FIRED_KEY, s);
+  void prefSet(LAST_FIRED_KEY, s);
 }
+
+/** On startup, pull any newer values written by the background runner. */
+async function reconcileFromPreferences(): Promise<void> {
+  if (!Capacitor.isNativePlatform() || typeof window === 'undefined') return;
+  const [firedRaw, seenRaw] = await Promise.all([
+    prefGet(LAST_FIRED_KEY),
+    prefGet(LAST_SEEN_KEY),
+  ]);
+  if (firedRaw) {
+    const remote = Number(firedRaw);
+    if (Number.isFinite(remote) && remote > getLastFiredAt()) {
+      localStorage.setItem(LAST_FIRED_KEY, String(remote));
+    }
+  }
+  if (seenRaw) {
+    const remote = Date.parse(seenRaw);
+    const local = Date.parse(getLastSeenAt());
+    if (Number.isFinite(remote) && remote > local) {
+      localStorage.setItem(LAST_SEEN_KEY, seenRaw);
+    }
+  }
+}
+
+// ---------------- First-launch permission prompt -----------------------
 
 /**
  * Ask for notification permission once, on the first app launch
@@ -97,6 +167,8 @@ export async function notificationsActive(): Promise<boolean> {
   }
 }
 
+// ---------------- Notification firing ----------------------------------
+
 export async function fireResumeNotification(count: number, sample: UnseenArticle | null) {
   if (!getNotificationsEnabled()) return;
   if (!Capacitor.isNativePlatform()) return;
@@ -121,6 +193,8 @@ export async function fireResumeNotification(count: number, sample: UnseenArticl
     // best-effort
   }
 }
+
+// ---------------- React hooks ------------------------------------------
 
 export function useUnseenArticles() {
   const qc = useQueryClient();
@@ -161,26 +235,77 @@ export function useUnseenArticles() {
   return { count, articles: query.data ?? [], isLoading: query.isLoading };
 }
 
+/**
+ * Fires the foreground "you missed N articles" notif on:
+ *   - cold launch (mount)
+ *   - app resume (Capacitor App.appStateChange — more reliable than
+ *     visibilitychange on Android WebView)
+ *   - browser tab visibilitychange (web/PWA fallback)
+ *
+ * Throttled by LAST_FIRED_KEY (5 min), shared with the background
+ * runner via Preferences so we never fire two notifs back-to-back.
+ */
 export function useResumeNotificationsHook() {
   const qc = useQueryClient();
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const onResume = async () => {
+    let cancelled = false;
+
+    const checkAndNotify = async () => {
+      if (cancelled) return;
+      // Throttle: 5 min between any resume/background notifs
       if (Date.now() - getLastFiredAt() < 5 * 60 * 1000) return;
-      await qc.invalidateQueries({ queryKey: ['unseenArticles'] });
-      const data = qc.getQueryData<UnseenArticle[]>(['unseenArticles', getLastSeenAt()]);
-      const count = data?.length ?? 0;
-      if (count > 0) {
-        setLastFiredAt(Date.now());
-        fireResumeNotification(count, data?.[0] ?? null);
+      try {
+        // Force a fresh fetch — don't trust stale cache for the
+        // gating decision since this drives an OS notification.
+        await qc.refetchQueries({ queryKey: ['unseenArticles'] });
+        const data = qc.getQueryData<UnseenArticle[]>(['unseenArticles', getLastSeenAt()]);
+        const count = data?.length ?? 0;
+        if (count > 0) {
+          setLastFiredAt(Date.now());
+          await fireResumeNotification(count, data?.[0] ?? null);
+        }
+      } catch {
+        // best-effort
       }
     };
 
-    const handler = () => {
-      if (document.visibilityState === 'visible') void onResume();
+    // 1. Cold launch: reconcile state from Preferences (the runner may
+    // have fired while we were closed) and run a check.
+    void (async () => {
+      await reconcileFromPreferences();
+      void checkAndNotify();
+    })();
+
+    // 2. Capacitor App lifecycle: more reliable than visibilitychange
+    // on Android WebView for resume-from-background.
+    let removeAppListener: (() => void) | null = null;
+    if (Capacitor.isNativePlatform()) {
+      void import('@capacitor/app').then(async ({ App }) => {
+        if (cancelled) return;
+        const handle = await App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) {
+            void (async () => {
+              await reconcileFromPreferences();
+              void checkAndNotify();
+            })();
+          }
+        });
+        removeAppListener = () => { void handle.remove(); };
+      });
+    }
+
+    // 3. Browser fallback (PWA / dev).
+    const visibilityHandler = () => {
+      if (document.visibilityState === 'visible') void checkAndNotify();
     };
-    document.addEventListener('visibilitychange', handler);
-    return () => document.removeEventListener('visibilitychange', handler);
+    document.addEventListener('visibilitychange', visibilityHandler);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', visibilityHandler);
+      if (removeAppListener) removeAppListener();
+    };
   }, [qc]);
 }

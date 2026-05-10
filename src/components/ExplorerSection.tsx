@@ -37,9 +37,9 @@ export function ExplorerSection({ onNavigate }: { onNavigate: (view: string) => 
           Explorer
         </h2>
       </div>
-      
+
       <div className="grid grid-cols-4 gap-2 sm:gap-4 md:gap-5">
-        <ExplorerItem 
+        <ExplorerItem
           icon={<User className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10" strokeWidth={2.5} />}
           title="Candidats"
           onClick={() => onNavigate('candidats')}
@@ -47,7 +47,7 @@ export function ExplorerSection({ onNavigate }: { onNavigate: (view: string) => 
           bgClass="bg-blue-50"
           borderClass="border-blue-100"
         />
-        <ExplorerItem 
+        <ExplorerItem
           icon={<BookOpen className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10" strokeWidth={2.5} />}
           title="Programmes"
           onClick={() => onNavigate('programmes')}
@@ -55,7 +55,7 @@ export function ExplorerSection({ onNavigate }: { onNavigate: (view: string) => 
           bgClass="bg-purple-50"
           borderClass="border-purple-100"
         />
-        <ExplorerItem 
+        <ExplorerItem
           icon={<Scale className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10" strokeWidth={2.5} />}
           title={<>Comparateur<br/>thématique</>}
           onClick={() => onNavigate('comparateur')}
@@ -63,7 +63,7 @@ export function ExplorerSection({ onNavigate }: { onNavigate: (view: string) => 
           bgClass="bg-emerald-50"
           borderClass="border-emerald-100"
         />
-        <ExplorerItem 
+        <ExplorerItem
           icon={<BadgeCheck className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10" strokeWidth={2.5} />}
           title={<>Fact-<br className="sm:hidden" />checking</>}
           onClick={() => onNavigate('factchecking')}

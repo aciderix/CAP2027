@@ -15,6 +15,7 @@ interface Source {
   is_active: boolean;
   kind: string;
   candidate_id: string | null;
+  fetch_via_github: boolean;
   last_fetched_at: string | null;
   last_fetch_error: string | null;
 }
@@ -93,6 +94,11 @@ export function Sources() {
                     Désactivée
                   </span>
                 )}
+                {s.fetch_via_github && (
+                  <span className="text-[9px] uppercase tracking-widest font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                    Via GitHub
+                  </span>
+                )}
               </div>
               <a
                 href={s.rss_url} target="_blank" rel="noopener noreferrer"
@@ -167,6 +173,7 @@ function SourceEditor({
     is_active: true,
     kind: 'press',
     candidate_id: null,
+    fetch_via_github: false,
     last_fetched_at: null,
     last_fetch_error: null,
   });
@@ -189,6 +196,7 @@ function SourceEditor({
         is_active: form.is_active,
         kind: form.kind,
         candidate_id: form.candidate_id || null,
+        fetch_via_github: form.fetch_via_github,
       };
       if (isNew) {
         const { error } = await supabase.from('news_sources').insert(payload);
@@ -251,6 +259,12 @@ function SourceEditor({
             <label className="inline-flex items-center gap-2 mt-2">
               <input type="checkbox" checked={form.is_active} onChange={(e) => set('is_active', e.target.checked)} />
               <span className="text-sm">Ingérée par le cron</span>
+            </label>
+          </Field>
+          <Field label="Fetch via GitHub Actions ?" wide hint="active si l'URL bloque l'IP Supabase (Le Figaro, X via nitter, etc.)">
+            <label className="inline-flex items-center gap-2 mt-2">
+              <input type="checkbox" checked={form.fetch_via_github} onChange={(e) => set('fetch_via_github', e.target.checked)} />
+              <span className="text-sm">Fetch côté GitHub puis POST à <code className="text-[10px]">ingest-from-xml</code></span>
             </label>
           </Field>
         </div>

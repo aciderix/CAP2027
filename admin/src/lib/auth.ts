@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import type { Session, User } from '@supabase/supabase-js';
 
@@ -9,10 +9,29 @@ export interface AuthState {
   isAdmin: boolean;
 }
 
+const ADMIN_QUERY_TIMEOUT_MS = 5_000;
+const BOOTSTRAP_TIMEOUT_MS = 10_000;
+const SIGNOUT_TIMEOUT_MS = 3_000;
+
+const EMPTY: AuthState = { loading: false, session: null, user: null, isAdmin: false };
+
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      () => { clearTimeout(timer); resolve(fallback); },
+    );
+  });
+}
+
 /**
  * Subscribes to Supabase auth state and confirms whether the signed-in
- * user is in public.admins. The dashboard refuses to render the
- * editors unless isAdmin is true.
+ * user is in public.admins.
+ *
+ * Defensive design: every async step is timeboxed so the spinner can
+ * never get stuck on a hung network call. The loading flag falls back
+ * to false within BOOTSTRAP_TIMEOUT_MS regardless of what happens.
  */
 export function useAuth(): AuthState & { signOut: () => Promise<void> } {
   const [state, setState] = useState<AuthState>({
@@ -25,48 +44,72 @@ export function useAuth(): AuthState & { signOut: () => Promise<void> } {
   useEffect(() => {
     let mounted = true;
 
-    const init = async () => {
-      const { data } = await supabase.auth.getSession();
-      const session = data.session;
+    // Hard floor: if anything below hangs, force loading off so the
+    // user gets the Login screen instead of an infinite spinner.
+    const safetyTimer = setTimeout(() => {
+      if (!mounted) return;
+      setState((s) => (s.loading ? { ...EMPTY, loading: false } : s));
+    }, BOOTSTRAP_TIMEOUT_MS);
+
+    const checkAdmin = async (userId: string): Promise<boolean> => {
+      // Coerce the PostgREST thenable to a real Promise<T>; supabase-js
+      // returns PromiseLike, which TS doesn't accept where Promise is
+      // expected.
+      const query = Promise.resolve(
+        supabase.from('admins').select('user_id').eq('user_id', userId).maybeSingle(),
+      ).then<{ data: { user_id: string } | null }>((r) => ({ data: r.data ?? null }));
+      const result = await withTimeout(query, ADMIN_QUERY_TIMEOUT_MS, { data: null });
+      return !!result.data;
+    };
+
+    const apply = async (session: Session | null) => {
+      if (!mounted) return;
       const user = session?.user ?? null;
-      let isAdmin = false;
-      if (user) {
-        const { data: row } = await supabase
-          .from('admins')
-          .select('user_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        isAdmin = !!row;
-      }
+      const isAdmin = user ? await checkAdmin(user.id) : false;
       if (!mounted) return;
       setState({ loading: false, session, user, isAdmin });
     };
 
-    void init();
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_evt, session) => {
-      if (!mounted) return;
-      const user = session?.user ?? null;
-      let isAdmin = false;
-      if (user) {
-        const { data: row } = await supabase
-          .from('admins')
-          .select('user_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        isAdmin = !!row;
+    void (async () => {
+      try {
+        const { data } = await withTimeout(
+          supabase.auth.getSession(),
+          ADMIN_QUERY_TIMEOUT_MS,
+          { data: { session: null }, error: null } as any,
+        );
+        await apply(data?.session ?? null);
+      } catch {
+        if (mounted) setState({ ...EMPTY, loading: false });
       }
-      setState({ loading: false, session, user, isAdmin });
+    })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+      void apply(session);
     });
 
     return () => {
       mounted = false;
+      clearTimeout(safetyTimer);
       sub.subscription.unsubscribe();
     };
   }, []);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-  };
+  const signOut = useCallback(async () => {
+    // Local-only signOut: no POST /auth/v1/logout, so we never hang
+    // on a slow/blocked auth endpoint. The JWT expires server-side
+    // on its own; for an admin console this is acceptable.
+    try {
+      await withTimeout(
+        supabase.auth.signOut({ scope: 'local' }),
+        SIGNOUT_TIMEOUT_MS,
+        { error: null } as any,
+      );
+    } catch {
+      // ignore
+    }
+    // Force-clear locally regardless of whether the listener fires.
+    setState({ ...EMPTY, loading: false });
+  }, []);
 
   return { ...state, signOut };
 }

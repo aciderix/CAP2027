@@ -507,7 +507,16 @@ Deno.serve(async (req) => {
     .from("news_sources")
     .select("id, slug, name, rss_url, is_factcheck, kind, candidate_id")
     .eq("is_active", true);
-  if (onlySlug) sourcesQuery.eq("slug", onlySlug);
+  if (onlySlug) {
+    // Manual override (?source=<slug>) bypasses the fetch_via_github
+    // filter so an admin can still force-ingest a GitHub-flagged
+    // source from the dashboard for testing.
+    sourcesQuery.eq("slug", onlySlug);
+  } else {
+    // Hourly cron path: skip GitHub-handled sources to avoid wasted
+    // 30 s timeouts on endpoints that block the Supabase IP.
+    sourcesQuery.eq("fetch_via_github", false);
+  }
   const { data: sources, error: srcErr } = await sourcesQuery;
   if (srcErr) return new Response(JSON.stringify({ error: srcErr.message }), { status: 500 });
   if (!sources || sources.length === 0) {
@@ -517,46 +526,16 @@ Deno.serve(async (req) => {
   const refs = await loadRefs();
   const results: any[] = [];
   let totalInserted = 0;
-  let firstNewTitle: string | null = null;
   for (const s of sources as SourceRow[]) {
     const res = await ingestSource(s, refs);
     results.push(res);
     if (typeof (res as any).inserted === "number") totalInserted += (res as any).inserted;
   }
 
-  // After a full ingest pass, broadcast a single push notif if anything
-  // came in. We pull the very latest article title for the body so the
-  // notification feels concrete. Skipped silently if push-broadcast or
-  // FCM credentials aren't deployed yet.
-  if (totalInserted > 0 && !onlySlug) {
-    try {
-      const { data: latest } = await supabase
-        .from("news_articles")
-        .select("title, url")
-        .order("published_at", { ascending: false })
-        .limit(1);
-      firstNewTitle = latest?.[0]?.title ?? null;
-      const url = latest?.[0]?.url ?? null;
-
-      await fetch(`${SUPABASE_URL}/functions/v1/push-broadcast`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-        },
-        body: JSON.stringify({
-          title:
-            totalInserted === 1
-              ? "Une nouvelle actualité"
-              : `${totalInserted} nouvelles actualités`,
-          body: firstNewTitle?.slice(0, 140) ?? "Ouvrez CAP 2027 pour les consulter",
-          url,
-        }),
-      });
-    } catch {
-      // best-effort
-    }
-  }
+  // FCM push notifications are dispatched by a separate edge function
+  // (notify-after-ingest), scheduled via cron 1 minute after this one.
+  // That keeps ingest-rss focused on ingest+tagging and lets the push
+  // logic evolve without redeploying this heavy function.
 
   return new Response(JSON.stringify({ results, totalInserted }, null, 2), {
     headers: { "Content-Type": "application/json" },

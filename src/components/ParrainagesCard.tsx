@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Stamp, ExternalLink, Info } from 'lucide-react';
+import { Stamp, ExternalLink, Info, ArrowRight } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAppConfig } from '../lib/appConfig';
@@ -16,7 +16,11 @@ interface ParrainageRow {
 
 const REQUIRED = 500;
 
-export function ParrainagesCard() {
+interface ParrainagesCardProps {
+  onSeeAll?: () => void;
+}
+
+export function ParrainagesCard({ onSeeAll }: ParrainagesCardProps) {
   const { data: cfg } = useAppConfig();
   const source = cfg?.['parrainages.source'];
   const isAvailable = source?.is_available === true;
@@ -47,7 +51,7 @@ export function ParrainagesCard() {
           Parrainages
         </h2>
         <a
-          href="https://www.conseil-constitutionnel.fr/elections/election-presidentielle"
+          href="https://www.conseil-constitutionnel.fr"
           target="_blank"
           rel="noopener noreferrer"
           className="text-[11px] font-bold text-slate-400 hover:text-[#1a56db] hover:underline whitespace-nowrap inline-flex items-center gap-1"
@@ -98,6 +102,16 @@ export function ParrainagesCard() {
 
       {isAvailable && top.length > 0 && (
         <>
+          {onSeeAll && rows.length > top.length && (
+            <div className="px-4 py-2 border-b border-slate-100 text-right">
+              <button
+                onClick={onSeeAll}
+                className="text-sm font-semibold text-[#1a56db] hover:underline inline-flex items-center gap-1"
+              >
+                Voir tout les parrainages <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <ul className="divide-y divide-slate-100">
             {top.map((row) => {
               const name = row.candidate_id
