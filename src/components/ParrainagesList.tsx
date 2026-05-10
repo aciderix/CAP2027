@@ -17,6 +17,11 @@ interface ParrainageRow {
 const REQUIRED = 500;
 const HIDE_THRESHOLD = 100;
 
+/** Lowercase + strip diacritics so "Pecresse" matches "Pécresse". */
+function normaliseSearch(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
 export function ParrainagesList() {
   const { data: cfg } = useAppConfig();
   const isAvailable = cfg?.['parrainages.source']?.is_available === true;
@@ -44,14 +49,14 @@ export function ParrainagesList() {
   const filtered = useMemo(() => {
     let out = rows;
     if (hideSmall) out = out.filter((r) => r.total >= HIDE_THRESHOLD);
-    const q = search.trim().toLowerCase();
+    const q = normaliseSearch(search);
     if (q) {
       out = out.filter((r) => {
         const display = r.candidate_id
           ? `${r.first_name ?? ''} ${r.last_name ?? ''}`
           : r.source_name;
-        return display.toLowerCase().includes(q)
-          || r.source_name.toLowerCase().includes(q);
+        return normaliseSearch(display).includes(q)
+          || normaliseSearch(r.source_name).includes(q);
       });
     }
     return out;

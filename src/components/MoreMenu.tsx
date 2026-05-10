@@ -190,20 +190,19 @@ function MethodologyModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
     <Modal isOpen={isOpen} onClose={onClose} title="Méthodologie et sources">
       <div className="flex flex-col gap-4 py-2 text-sm text-slate-700 leading-relaxed">
         <p>
-          <b>Agrégation</b> — Toutes les heures (xx:15), un job côté serveur récupère les flux
-          RSS / Atom des sources actives, déduplique sur l'identifiant unique de chaque article
-          et stocke titre, résumé, URL et image.
+          <b>Agrégation</b> — Chaque heure, l'app récupère les articles publiés
+          par les sources ci-dessous et les rassemble dans un fil unique.
         </p>
         <p>
-          <b>Étiquetage</b> — Chaque article est analysé contre une liste d'alias (candidats,
-          partis, thématiques) avec gestion des accents (« Mélenchon » et « Melenchon »
-          matchent) et frontières de mots (« EPR » ne matche pas dans « reproché »). Les
-          articles d'un compte officiel sont automatiquement attribués au candidat correspondant.
+          <b>Étiquetage</b> — Chaque article est rattaché automatiquement aux
+          candidats, partis et thématiques qu'il mentionne, pour qu'il apparaisse
+          au bon endroit dans la fiche d'un candidat ou dans le filtre d'un
+          thème. L'écriture sans accent fonctionne aussi.
         </p>
         <p>
-          <b>Fact-checking</b> — Quand la source est marquée comme fact-checker, on détecte un
-          verdict (vrai / faux / trompeur / partiel) à partir de mots-clés dans le titre et le
-          résumé.
+          <b>Fact-checking</b> — Les vérifications publiées par les rédactions
+          spécialisées sont identifiées avec leur verdict (vrai, faux, trompeur,
+          partiel) quand il est explicite dans le titre.
         </p>
         <p>
           <b>Aucune éditorialisation</b> — Pas de classement caché, pas d'algorithme de mise en
