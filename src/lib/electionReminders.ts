@@ -103,7 +103,8 @@ function addDaysParis(absMs: number, days: number): { year: number; month: numbe
  *
  *   1_000_xxx — election day milestones (R1 + R2)
  *   1_100_xxx — civic reminders (inscription + procuration)
- *   1_200_xxx — Boussole nudge
+ *   1_200_xxx — Boussole nudge (one-shot J-30)
+ *   1_300_xxx — recurring weekly nudges (campaign period: 2027 onwards)
  */
 const IDS = {
   // 1. Election day
@@ -119,9 +120,39 @@ const IDS = {
   procurationR1Eve1w: 1_100_003, // J-1 sem before R1
   procurationR2Eve3w: 1_100_004, // J-3 sem before R2
   procurationR2Eve1w: 1_100_005, // J-1 sem before R2
-  // 3. Boussole
+  // 3. Boussole (one-shot)
   boussoleR1J30: 1_200_001,      // J-30 before R1
+  // 4. Weekly nudges — pre-scheduled to start in early 2027 and repeat
+  //    weekly through the election. OS picks them up via AlarmManager
+  //    even with the app killed.
+  weeklyVoterToolkit: 1_300_001, // Mondays 10 h Paris
+  weeklyBoussole:     1_300_002, // Wednesdays 11 h Paris
+  weeklyProgrammes:   1_300_003, // Fridays 10 h Paris
 };
+
+const WEEKLY_START_YEAR = 2027;
+const WEEKLY_START_MONTH = 1; // January
+const WEEKLY_START_DAY = 1;   // first occurrence onwards from Jan 1
+
+/** Returns the next Paris-local instance of a given weekday (1=Mon … 7=Sun)
+ *  at the given hour, starting from the configured WEEKLY_START date. */
+function firstWeeklyOccurrence(targetIsoWeekday: number, hour: number): Date {
+  const startTime = parisDate(WEEKLY_START_YEAR, WEEKLY_START_MONTH, WEEKLY_START_DAY, hour).getTime();
+  // Find the first matching weekday on or after the start date.
+  let cursor = startTime;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(cursor);
+    // Date.getUTCDay returns 0=Sun..6=Sat; convert to ISO 1=Mon..7=Sun.
+    const isoWeekday = ((d.getUTCDay() + 6) % 7) + 1;
+    if (isoWeekday === targetIsoWeekday) {
+      // Re-anchor to the right wall-clock hour for that Paris day.
+      const { year, month, day } = dateInParis(cursor);
+      return parisDate(year, month, day, hour);
+    }
+    cursor += DAY_MS;
+  }
+  return new Date(startTime);
+}
 
 const ALL_IDS = Object.values(IDS);
 
@@ -320,6 +351,52 @@ export async function scheduleElectionReminders(rounds: RoundReminders) {
         });
       }
     }
+  }
+
+  // ---------- 4. Weekly recurring civic nudges (campaign period) ----------
+  //
+  // Three soft reminders rotate across the week, scheduled with the
+  // OS plugin's `repeats: true / every: 'week'` so AlarmManager keeps
+  // firing them without us re-scheduling. We anchor the first
+  // occurrence to the first matching weekday on or after Jan 1, 2027
+  // — earlier than that and they'd start firing right away in dev.
+
+  const weeklyMonday = firstWeeklyOccurrence(1, 10).getTime();
+  const weeklyWednesday = firstWeeklyOccurrence(3, 11).getTime();
+  const weeklyFriday = firstWeeklyOccurrence(5, 10).getTime();
+
+  if (weeklyMonday > now) {
+    toSchedule.push({
+      id: IDS.weeklyVoterToolkit,
+      title: 'Préparez votre vote',
+      body: "Inscription sur les listes, procuration, comment voter — tout pour passer du fauteuil au bureau de vote en quelques minutes.",
+      smallIcon: SMALL_ICON,
+      largeIcon: LARGE_ICON,
+      iconColor: ICON_COLOR,
+      schedule: { at: new Date(weeklyMonday), repeats: true, every: 'week' },
+    });
+  }
+  if (weeklyWednesday > now) {
+    toSchedule.push({
+      id: IDS.weeklyBoussole,
+      title: 'Faites le test de la Boussole',
+      body: "Quelques minutes pour découvrir avec quels candidats vous êtes le plus en accord, sans citer aucun nom pendant les questions.",
+      smallIcon: SMALL_ICON,
+      largeIcon: LARGE_ICON,
+      iconColor: ICON_COLOR,
+      schedule: { at: new Date(weeklyWednesday), repeats: true, every: 'week' },
+    });
+  }
+  if (weeklyFriday > now) {
+    toSchedule.push({
+      id: IDS.weeklyProgrammes,
+      title: 'Comparez les programmes',
+      body: "Économie, écologie, sécurité, social… Lisez et opposez les propositions des candidats sur les thématiques qui vous concernent.",
+      smallIcon: SMALL_ICON,
+      largeIcon: LARGE_ICON,
+      iconColor: ICON_COLOR,
+      schedule: { at: new Date(weeklyFriday), repeats: true, every: 'week' },
+    });
   }
 
   if (toSchedule.length === 0) return;
