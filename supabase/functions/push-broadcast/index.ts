@@ -2,12 +2,15 @@
 // via the FCM HTTP v1 API.
 //
 // Requires a Google service account JSON for the Firebase project,
-// stored as the FCM_SERVICE_ACCOUNT_JSON edge-function secret. The
-// service account needs the "Firebase Cloud Messaging API" enabled
-// and the firebaseadmin role.
+// stored as the FCM_SERVICE_ACCOUNT_JSON edge-function secret.
 //
 // POST body: { title: string, body: string, url?: string }
-// Response: { sent: int, failed: int, totalTokens: int }
+//   - or no body (then a sane default of "Nouvelle actualité" is used).
+//
+// GET ?diag=1 returns a non-secret status report (no values leaked):
+//   { secret_present, project_id, token_count }.
+//
+// Response: { sent, failed, totalTokens } on success.
 
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -98,40 +101,58 @@ function pemToBin(pem: string): ArrayBuffer {
   return buf;
 }
 
+function parseServiceAccount(): ServiceAccount | null {
+  if (!FCM_SA) return null;
+  try { return JSON.parse(FCM_SA); } catch { return null; }
+}
+
 // ---- Send loop ----
 
 interface SendInput {
-  title: string;
-  body: string;
+  title?: string;
+  body?: string;
   url?: string;
 }
 
 Deno.serve(async (req) => {
-  if (!FCM_SA) {
+  const url = new URL(req.url);
+
+  // Diag mode: report secret + token state without leaking values.
+  if (url.searchParams.get("diag") === "1") {
+    const sa = parseServiceAccount();
+    const { count } = await supabase.from("push_tokens").select("token", { count: "exact", head: true });
+    return Response.json({
+      secret_present: !!FCM_SA,
+      secret_parses: !!sa,
+      project_id: sa?.project_id ?? null,
+      client_email_domain: sa?.client_email ? sa.client_email.split("@")[1] : null,
+      token_count: count ?? 0,
+    });
+  }
+
+  const sa = parseServiceAccount();
+  if (!sa) {
     return Response.json(
-      { error: "FCM_SERVICE_ACCOUNT_JSON edge function secret not set" },
+      { error: "FCM_SERVICE_ACCOUNT_JSON edge-function secret not set or malformed" },
       { status: 503 },
     );
   }
 
-  let payload: SendInput;
+  let payload: SendInput = {};
   try {
-    payload = await req.json();
+    if (req.method !== "GET") payload = await req.json();
   } catch {
-    return Response.json({ error: "invalid JSON body" }, { status: 400 });
+    // empty body is fine; defaults below
   }
-  if (!payload.title || !payload.body) {
-    return Response.json({ error: "title and body required" }, { status: 400 });
-  }
+  const title = payload.title?.trim() || "Nouvelle actualité";
+  const body = payload.body?.trim() || "Ouvrez CAP 2027 pour la consulter";
 
-  let sa: ServiceAccount;
+  let accessToken: string;
   try {
-    sa = JSON.parse(FCM_SA);
-  } catch {
-    return Response.json({ error: "FCM_SERVICE_ACCOUNT_JSON malformed" }, { status: 500 });
+    accessToken = await getAccessToken(sa);
+  } catch (e: any) {
+    return Response.json({ error: "oauth: " + (e?.message ?? e) }, { status: 502 });
   }
-
-  const accessToken = await getAccessToken(sa);
   const fcmUrl = `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`;
 
   const { data: tokens } = await supabase
@@ -139,11 +160,12 @@ Deno.serve(async (req) => {
     .select("token, platform");
 
   let sent = 0, failed = 0;
+  const errors: string[] = [];
   for (const t of (tokens ?? []) as { token: string; platform: string }[]) {
     const message = {
       message: {
         token: t.token,
-        notification: { title: payload.title, body: payload.body },
+        notification: { title, body },
         data: payload.url ? { url: payload.url } : undefined,
         android: {
           priority: "HIGH",
@@ -168,24 +190,24 @@ Deno.serve(async (req) => {
         sent++;
       } else {
         failed++;
-        // Permanent invalid token → drop it from the table to keep
-        // future sends fast.
+        const txt = await r.text().catch(() => "");
+        if (errors.length < 5) errors.push(`HTTP ${r.status}: ${txt.slice(0, 200)}`);
+        // Permanent invalid token → drop from the table to keep future
+        // sends fast.
         if (r.status === 404 || r.status === 400) {
           await supabase.from("push_tokens").delete().eq("token", t.token);
         }
       }
-    } catch {
+    } catch (e: any) {
       failed++;
+      if (errors.length < 5) errors.push("net: " + (e?.message ?? e));
     }
   }
 
-  await supabase.from("push_broadcasts").insert({
-    title: payload.title,
-    body: payload.body,
-    url: payload.url ?? null,
-    sent_count: sent,
-    failed_count: failed,
+  return Response.json({
+    sent,
+    failed,
+    totalTokens: tokens?.length ?? 0,
+    sample_errors: errors,
   });
-
-  return Response.json({ sent, failed, totalTokens: tokens?.length ?? 0 });
 });

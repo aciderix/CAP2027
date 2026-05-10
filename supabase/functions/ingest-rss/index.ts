@@ -523,8 +523,10 @@ Deno.serve(async (req) => {
     if (typeof (res as any).inserted === "number") totalInserted += (res as any).inserted;
   }
 
-  // Notifications are now handled client-side by the Capacitor
-  // background runner (see public/background.js). No server push.
+  // FCM push notifications are dispatched by a separate edge function
+  // (notify-after-ingest), scheduled via cron 1 minute after this one.
+  // That keeps ingest-rss focused on ingest+tagging and lets the push
+  // logic evolve without redeploying this heavy function.
 
   return new Response(JSON.stringify({ results, totalInserted }, null, 2), {
     headers: { "Content-Type": "application/json" },

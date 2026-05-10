@@ -8,6 +8,7 @@ import {
   getNotificationsEnabled,
   setNotificationsEnabled as persistNotifs,
 } from '../lib/notifications';
+import { registerPushNotifications } from '../lib/push';
 import { cancelElectionReminders } from '../lib/electionReminders';
 
 interface SettingsModalProps {
@@ -60,6 +61,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         setPermState(ask.display as any);
         if (ask.display !== 'granted') {
           setError("Permission refusée. Activez « CAP 2027 » dans Réglages → Apps → Notifications du téléphone.");
+        }
+        // Re-register the FCM token in case the user just flipped from
+        // OFF (where we may have skipped registration) to ON.
+        const res = await registerPushNotifications();
+        if (!res.ok && res.error && res.error !== 'opt-in required' && res.error !== 'permission denied') {
+          setError((prev) => prev ?? `FCM : ${res.error}`);
         }
       }
     } catch (e: any) {

@@ -93,7 +93,7 @@ export function ParrainagesList() {
           ou collectivités, sans qu'aucun département ne fournisse plus de 50 signatures.
           {' '}
           <a
-            href="https://www.conseil-constitutionnel.fr/elections/election-presidentielle"
+            href="https://www.conseil-constitutionnel.fr"
             target="_blank"
             rel="noopener noreferrer"
             className="text-[#1a56db] hover:underline inline-flex items-center gap-0.5 font-semibold"

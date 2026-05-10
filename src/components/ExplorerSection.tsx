@@ -1,4 +1,4 @@
-import { User, BookOpen, Scale, BadgeCheck, Stamp } from 'lucide-react';
+import { User, BookOpen, Scale, BadgeCheck } from 'lucide-react';
 
 interface ExplorerItemProps {
   icon: React.ReactNode;
@@ -37,8 +37,8 @@ export function ExplorerSection({ onNavigate }: { onNavigate: (view: string) => 
           Explorer
         </h2>
       </div>
-      
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-4 md:gap-5">
+
+      <div className="grid grid-cols-4 gap-2 sm:gap-4 md:gap-5">
         <ExplorerItem
           icon={<User className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10" strokeWidth={2.5} />}
           title="Candidats"
@@ -57,7 +57,7 @@ export function ExplorerSection({ onNavigate }: { onNavigate: (view: string) => 
         />
         <ExplorerItem
           icon={<Scale className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10" strokeWidth={2.5} />}
-          title={<>Compa-<br/>rateur</>}
+          title={<>Comparateur<br/>thématique</>}
           onClick={() => onNavigate('comparateur')}
           iconClass="text-emerald-600"
           bgClass="bg-emerald-50"
@@ -70,14 +70,6 @@ export function ExplorerSection({ onNavigate }: { onNavigate: (view: string) => 
           iconClass="text-indigo-600"
           bgClass="bg-indigo-50"
           borderClass="border-indigo-100"
-        />
-        <ExplorerItem
-          icon={<Stamp className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10" strokeWidth={2.5} />}
-          title={<>Parrai-<br/>nages</>}
-          onClick={() => onNavigate('parrainages')}
-          iconClass="text-amber-600"
-          bgClass="bg-amber-50"
-          borderClass="border-amber-100"
         />
       </div>
     </div>

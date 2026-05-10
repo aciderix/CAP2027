@@ -51,7 +51,7 @@ export function ParrainagesCard({ onSeeAll }: ParrainagesCardProps) {
           Parrainages
         </h2>
         <a
-          href="https://www.conseil-constitutionnel.fr/elections/election-presidentielle"
+          href="https://www.conseil-constitutionnel.fr"
           target="_blank"
           rel="noopener noreferrer"
           className="text-[11px] font-bold text-slate-400 hover:text-[#1a56db] hover:underline whitespace-nowrap inline-flex items-center gap-1"
