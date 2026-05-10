@@ -25,7 +25,6 @@ import {
   useResumeNotificationsHook,
   maybeAskFirstLaunchPermission,
 } from './lib/notifications';
-import { registerPushNotifications } from './lib/push';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('accueil');
@@ -46,9 +45,8 @@ export default function App() {
         setShowOnboarding(true);
       } else {
         // Returning user: ask for notif permission on first launch
-        // post-onboarding, then register for FCM. Both calls are
-        // idempotent and silent on web / when already granted.
-        void maybeAskFirstLaunchPermission().then(() => registerPushNotifications());
+        // post-onboarding (idempotent, silent on web / when already granted).
+        void maybeAskFirstLaunchPermission();
       }
     }, 2500);
     return () => clearTimeout(splashTimer);
@@ -67,8 +65,9 @@ export default function App() {
     localStorage.setItem('hasSeenOnboarding', 'true');
     setShowOnboarding(false);
     // Right after the user closes onboarding, ask for the OS notif
-    // permission once. Then register with FCM (no-op if denied).
-    void maybeAskFirstLaunchPermission().then(() => registerPushNotifications());
+    // permission once. The background runner + foreground hook will
+    // pick it up automatically.
+    void maybeAskFirstLaunchPermission();
   };
 
 
