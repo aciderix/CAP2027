@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import type { Tables, Enums } from '../lib/database.types';
 import { useFollowedCandidates } from '../lib/follows';
 import { CandidateParrainagesInline } from './CandidateParrainagesInline';
+import { TwitterPostCard } from './TwitterPostCard';
 
 type CandidateRow = Tables<'candidates'>;
 type PartyRow = Tables<'parties'>;
@@ -419,9 +420,24 @@ export function CandidatesList() {
                     detail.news.length === 0 ? (
                       <EmptyTab message="Pas encore d'article associé. Le tagueur attribuera des actualités dès qu'il détectera les noms du candidat ou de son parti." />
                     ) : (
-                      <ul className="space-y-2.5">
-                        {detail.news.map((n) => <CandidateNewsCard key={n.id} article={n} />)}
-                      </ul>
+                      <div className="space-y-2.5">
+                        {detail.news.map((n) => (
+                          n.kind === 'twitter_post' ? (
+                            <TwitterPostCard
+                              key={n.id}
+                              title={n.title}
+                              summary={n.summary}
+                              url={n.url}
+                              image_url={n.image_url}
+                              published_at={n.published_at}
+                              source={n.source}
+                              candidateName={fullName(selectedCandidate)}
+                            />
+                          ) : (
+                            <CandidateNewsCard key={n.id} article={n} />
+                          )
+                        ))}
+                      </div>
                     )
                   )}
                 </div>

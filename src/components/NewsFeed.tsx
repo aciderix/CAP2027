@@ -6,6 +6,7 @@ import {
 import Fuse from 'fuse.js';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { TwitterPostCard } from './TwitterPostCard';
 
 type Mode = 'news' | 'factcheck';
 
@@ -383,8 +384,44 @@ export function NewsFeed({ mode }: { mode: Mode }) {
       {/* Featured + list */}
       {!loading && featured && (
         <div className="flex flex-col gap-3 pb-4">
-          <FeaturedCard article={featured} />
-          {rest.map((a) => <CompactCard key={a.id} article={a} />)}
+          {featured.kind === 'twitter_post' ? (
+            <TwitterPostCard
+              title={featured.title}
+              summary={featured.summary}
+              url={featured.url}
+              image_url={featured.image_url}
+              published_at={featured.published_at}
+              source={featured.source}
+              candidateName={
+                featured.article_candidates
+                  .map((x) => x.candidate)
+                  .filter((c): c is CandidateLite => !!c)
+                  .map((c) => fullName(c))[0] ?? null
+              }
+            />
+          ) : (
+            <FeaturedCard article={featured} />
+          )}
+          {rest.map((a) => {
+            if (a.kind === 'twitter_post') {
+              const candidate = a.article_candidates
+                .map((x) => x.candidate)
+                .filter((c): c is CandidateLite => !!c)[0] ?? null;
+              return (
+                <TwitterPostCard
+                  key={a.id}
+                  title={a.title}
+                  summary={a.summary}
+                  url={a.url}
+                  image_url={a.image_url}
+                  published_at={a.published_at}
+                  source={a.source}
+                  candidateName={candidate ? fullName(candidate) : null}
+                />
+              );
+            }
+            return <CompactCard key={a.id} article={a} />;
+          })}
         </div>
       )}
     </div>
