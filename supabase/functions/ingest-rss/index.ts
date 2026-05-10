@@ -507,7 +507,16 @@ Deno.serve(async (req) => {
     .from("news_sources")
     .select("id, slug, name, rss_url, is_factcheck, kind, candidate_id")
     .eq("is_active", true);
-  if (onlySlug) sourcesQuery.eq("slug", onlySlug);
+  if (onlySlug) {
+    // Manual override (?source=<slug>) bypasses the fetch_via_github
+    // filter so an admin can still force-ingest a GitHub-flagged
+    // source from the dashboard for testing.
+    sourcesQuery.eq("slug", onlySlug);
+  } else {
+    // Hourly cron path: skip GitHub-handled sources to avoid wasted
+    // 30 s timeouts on endpoints that block the Supabase IP.
+    sourcesQuery.eq("fetch_via_github", false);
+  }
   const { data: sources, error: srcErr } = await sourcesQuery;
   if (srcErr) return new Response(JSON.stringify({ error: srcErr.message }), { status: 500 });
   if (!sources || sources.length === 0) {
