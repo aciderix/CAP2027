@@ -8,6 +8,7 @@ import type { Tables, Enums } from '../lib/database.types';
 import { useFollowedCandidates } from '../lib/follows';
 import { CandidateParrainagesInline } from './CandidateParrainagesInline';
 import { TwitterPostCard } from './TwitterPostCard';
+import { STABLE_STALE_MS } from '../lib/queryClient';
 
 type CandidateRow = Tables<'candidates'>;
 type PartyRow = Tables<'parties'>;
@@ -82,7 +83,7 @@ export function CandidatesList() {
 
   const candidatesQuery = useQuery({
     queryKey: ['candidatesList'],
-    staleTime: 30 * 60 * 1000,
+    staleTime: STABLE_STALE_MS,
     queryFn: async (): Promise<CandidateWithParty[]> => {
       const { data, error } = await supabase
         .from('candidates')
@@ -104,7 +105,7 @@ export function CandidatesList() {
   const candidateDetailQuery = useQuery({
     queryKey: ['candidateDetail', selectedCandidate?.id],
     enabled: !!selectedCandidate,
-    staleTime: 30 * 60 * 1000,
+    staleTime: STABLE_STALE_MS,
     queryFn: async (): Promise<CandidateDetail> => {
       const candidateId = selectedCandidate!.id;
       const [bioRes, propRes, affRes, newsRes] = await Promise.all([

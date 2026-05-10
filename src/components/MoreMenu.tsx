@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Modal } from './ui/Modal';
 import { SettingsModal } from './SettingsModal';
 import { supabase } from '../lib/supabase';
+import { STABLE_STALE_MS } from '../lib/queryClient';
 
 interface MoreMenuProps {
   onGoToCandidates: () => void;
@@ -162,7 +163,7 @@ function MethodologyModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
   const sourcesQuery = useQuery({
     queryKey: ['methodologySources'],
     enabled: isOpen,
-    staleTime: 30 * 60 * 1000,
+    staleTime: STABLE_STALE_MS,
     queryFn: async (): Promise<SourceRow[]> => {
       const { data, error } = await supabase
         .from('news_sources')

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Heart, Star, ChevronRight, Play, ExternalLink } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
 import { useFollowedCandidates } from '../lib/follows';
 import { TwitterPostCard } from './TwitterPostCard';
 
@@ -68,7 +69,7 @@ export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
   const candidatesQuery = useQuery({
     queryKey: ['candidatesByIds', followedKey],
     enabled: followedIds.length > 0,
-    staleTime: 30 * 60 * 1000,
+    staleTime: STABLE_STALE_MS,
     queryFn: async (): Promise<CandidateLite[]> => {
       const { data, error } = await supabase
         .from('candidates')
@@ -82,6 +83,7 @@ export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
   const articlesQuery = useQuery({
     queryKey: ['myFeedArticles', followedKey],
     enabled: followedIds.length > 0,
+    staleTime: ARTICLE_STALE_MS,
     queryFn: async (): Promise<ArticleRow[]> => {
       const { data, error } = await supabase
         .from('article_candidates')

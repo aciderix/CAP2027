@@ -6,6 +6,7 @@ import {
 import Fuse from 'fuse.js';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
 import { TwitterPostCard } from './TwitterPostCard';
 
 type Mode = 'news' | 'factcheck';
@@ -95,9 +96,10 @@ export function NewsFeed({ mode }: { mode: Mode }) {
     setAdvancedOpen(false);
   }, [mode]);
 
-  // Articles: 5 min stale (default), refetched on focus
+  // Articles: 30 min stale (server cron runs hourly), focus refetch.
   const articlesQuery = useQuery({
     queryKey: ['articles', mode],
+    staleTime: ARTICLE_STALE_MS,
     queryFn: async (): Promise<ArticleRow[]> => {
       const { data, error } = await supabase
         .from('news_articles')
@@ -116,10 +118,10 @@ export function NewsFeed({ mode }: { mode: Mode }) {
     },
   });
 
-  // Filter options: refresh much less often (30 min)
+  // Filter options: reference data, very stable.
   const filtersQuery = useQuery({
     queryKey: ['newsFeedFilters'],
-    staleTime: 30 * 60 * 1000,
+    staleTime: STABLE_STALE_MS,
     queryFn: async (): Promise<FilterOption> => {
       const [tRes, cRes, pRes, sRes] = await Promise.all([
         supabase.from('themes').select('id, slug, name, color').order('order_index'),

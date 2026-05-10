@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Scale, LayoutGrid, Columns3, Check } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { STABLE_STALE_MS } from '../lib/queryClient';
 import type { Tables } from '../lib/database.types';
 
 type CandidateRow = Tables<'candidates'>;
@@ -50,7 +51,7 @@ export function Comparateur() {
 
   const candidatesQuery = useQuery({
     queryKey: ['comparateurCandidates'],
-    staleTime: 30 * 60 * 1000,
+    staleTime: STABLE_STALE_MS,
     queryFn: async (): Promise<CandidateWithParty[]> => {
       const { data, error } = await supabase
         .from('candidates').select('*, parties(name, abbreviation, color)').eq('is_published', true);
@@ -63,7 +64,7 @@ export function Comparateur() {
 
   const themesQuery = useQuery({
     queryKey: ['themes'],
-    staleTime: 60 * 60 * 1000,
+    staleTime: STABLE_STALE_MS,
     queryFn: async (): Promise<ThemeRow[]> => {
       const { data, error } = await supabase.from('themes').select('*').order('order_index');
       if (error) throw error;
@@ -73,7 +74,7 @@ export function Comparateur() {
 
   const statementsQuery = useQuery({
     queryKey: ['matchPropositions'],
-    staleTime: 30 * 60 * 1000,
+    staleTime: STABLE_STALE_MS,
     queryFn: async (): Promise<Statement[]> => {
       const { data, error } = await supabase
         .from('candidate_match_propositions')
