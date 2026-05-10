@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Capacitor } from '@capacitor/core';
 
 const KEY = 'cap2027.followedCandidates';
 
@@ -14,15 +15,37 @@ function read(): Set<string> {
   }
 }
 
+// Mirror to Capacitor Preferences so the background runner (separate
+// JS context, no localStorage) can scope its notif queries to the
+// candidates the user follows.
+async function mirrorToPreferences(arr: string[]): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    const { Preferences } = await import('@capacitor/preferences');
+    await Preferences.set({ key: KEY, value: JSON.stringify(arr) });
+  } catch {
+    // best-effort
+  }
+}
+
 function write(set: Set<string>) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(KEY, JSON.stringify([...set]));
+  const arr = [...set];
+  localStorage.setItem(KEY, JSON.stringify(arr));
+  void mirrorToPreferences(arr);
   // Notify other listeners in the same tab
   window.dispatchEvent(new Event('cap2027:follows-changed'));
 }
 
 export function useFollowedCandidates() {
   const [followed, setFollowed] = useState<Set<string>>(read);
+
+  // On first mount, ensure Preferences is in sync with whatever
+  // localStorage already has — covers existing installs upgrading
+  // to the new mirror.
+  useEffect(() => {
+    void mirrorToPreferences([...read()]);
+  }, []);
 
   useEffect(() => {
     const sync = () => setFollowed(read());

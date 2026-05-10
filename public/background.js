@@ -1,6 +1,13 @@
 // Background runner — wakes ~hourly even with the app killed and asks
-// Supabase if there are new articles since `lastSeenAt`. If yes, fires
-// a local OS notification.
+// Supabase for new content since `lastSeenAt`. If yes, fires a local
+// OS notification.
+//
+// Two notif paths handled here:
+//   1. New articles (or YouTube videos / X posts via news_sources).
+//      If the user follows specific candidates, the query is scoped
+//      to those candidates only — they don't get pinged about the
+//      whole campaign. If they follow nobody, fall back to global.
+//   2. New candidate published in the admin console.
 //
 // Lives in /public so Vite copies it to /dist, which Capacitor then
 // mirrors into the Android assets bundle. Reference path in
@@ -10,10 +17,6 @@
 // no localStorage). Available globals (per @capacitor/background-runner
 // docs): fetch, crypto, console, setTimeout/Interval, addEventListener,
 // CapacitorKV (string KV), CapacitorNotifications (schedule).
-//
-// Each event call instantiates a fresh context — no state persists
-// between calls. State must come from CapacitorKV (Capacitor
-// Preferences on the foreground side, mirrored from src/lib/notifications.ts).
 
 // Hardcoded Supabase coords. Publishable key, designed to be embedded
 // in the client; RLS guards the data. Same values as the GitHub Actions
@@ -24,14 +27,18 @@ const SUPABASE_KEY = 'sb_publishable_nycw__S1NdZYIVyu4LH4SQ_830IdXPA';
 const LAST_SEEN_KEY = 'cap2027.notifications.lastSeenAt';
 const LAST_FIRED_KEY = 'cap2027.notifications.lastResumeFiredAt';
 const PREF_KEY = 'cap2027.notifications.enabled';
+const FOLLOWS_KEY = 'cap2027.followedCandidates';
 
-const RESUME_NOTIF_ID = 9000001;
+const ARTICLE_NOTIF_ID = 9000001;
+
 const SMALL_ICON = 'ic_stat_cap2027';
 const LARGE_ICON = 'ic_notif_cap2027';
 
 // Mirrors the foreground throttle exactly so we never double-notify
 // when the runner fires and the user opens the app a few seconds later.
 const THROTTLE_MS = 5 * 60 * 1000;
+
+// ---------- KV helpers ----------
 
 function kvGet(key) {
   try {
@@ -68,6 +75,144 @@ function setLastFired(ts) {
   kvSet(LAST_FIRED_KEY, String(ts));
 }
 
+function getFollowedIds() {
+  // Mirror written by src/lib/follows.ts. JSON-encoded array of UUIDs.
+  const raw = kvGet(FOLLOWS_KEY);
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+// ---------- Supabase REST helpers ----------
+
+const baseHeaders = {
+  apikey: SUPABASE_KEY,
+  Authorization: 'Bearer ' + SUPABASE_KEY,
+};
+
+async function sbGet(path) {
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, { headers: baseHeaders });
+  if (!res.ok) {
+    console.warn('[bg] sbGet ' + path + ' → HTTP ' + res.status);
+    return null;
+  }
+  return res.json();
+}
+
+// ---------- Articles check ----------
+
+async function checkArticles(lastSeen, followedIds) {
+  if (followedIds.length > 0) {
+    // Scoped to the candidates the user follows. We hit
+    // article_candidates with an inner join filter, so PostgREST
+    // returns only rows whose related news_articles.published_at is
+    // newer than lastSeen.
+    const inList = followedIds
+      .map((id) => '"' + id.replace(/"/g, '\\"') + '"')
+      .join(',');
+    const rows = await sbGet(
+      'article_candidates'
+        + '?candidate_id=in.(' + encodeURIComponent(inList) + ')'
+        + '&select=candidate_id,article:news_articles!inner(id,title,url,published_at,kind)'
+        + '&article.published_at=gt.' + encodeURIComponent(lastSeen)
+        + '&order=article(published_at).desc'
+        + '&limit=20',
+    );
+    if (!Array.isArray(rows)) return null;
+    // Dedupe — an article tagged on N followed candidates returns N rows.
+    const seen = new Set();
+    const articles = [];
+    let firstFollowedCandidateId = null;
+    for (const r of rows) {
+      const a = r && r.article;
+      if (!a || !a.id || seen.has(a.id)) continue;
+      seen.add(a.id);
+      articles.push(a);
+      if (!firstFollowedCandidateId) firstFollowedCandidateId = r.candidate_id;
+    }
+    return { articles: articles.slice(0, 5), scoped: true, firstFollowedCandidateId };
+  }
+
+  // No follows → global. Pre-check max(published_at) first to avoid
+  // a heavier query when nothing is new.
+  const head = await sbGet(
+    'news_articles?select=published_at&order=published_at.desc&limit=1',
+  );
+  if (!Array.isArray(head)) return null;
+  const max = head[0] && head[0].published_at;
+  if (!max || Date.parse(max) <= Date.parse(lastSeen)) {
+    return { articles: [], scoped: false, firstFollowedCandidateId: null };
+  }
+  const articles = await sbGet(
+    'news_articles'
+      + '?select=id,title,url,published_at,kind'
+      + '&published_at=gt.' + encodeURIComponent(lastSeen)
+      + '&order=published_at.desc&limit=5',
+  );
+  if (!Array.isArray(articles)) return null;
+  return { articles, scoped: false, firstFollowedCandidateId: null };
+}
+
+async function getCandidateLastName(id) {
+  const rows = await sbGet(
+    'candidates?select=last_name&id=eq.' + encodeURIComponent(id) + '&limit=1',
+  );
+  return Array.isArray(rows) && rows[0] ? rows[0].last_name : null;
+}
+
+function articleKindLabel(kind) {
+  if (kind === 'youtube_video') return 'vidéo';
+  if (kind === 'mastodon_post' || kind === 'bluesky_post') return 'publication';
+  return 'actualité';
+}
+
+async function buildArticleNotif(check) {
+  const count = check.articles.length;
+  if (count === 0) return null;
+  const sample = check.articles[0];
+  const sampleTitle = (sample && sample.title ? String(sample.title) : '').slice(0, 140);
+
+  if (check.scoped) {
+    // We know the user follows these candidates. Try to mention the
+    // first followed candidate by name to make the notif specific.
+    const lastName = check.firstFollowedCandidateId
+      ? await getCandidateLastName(check.firstFollowedCandidateId)
+      : null;
+    const kind = articleKindLabel(sample && sample.kind);
+    const title = lastName
+      ? (count === 1
+          ? 'Nouvelle ' + kind + ' : ' + lastName
+          : count + ' nouveautés de vos candidats suivis')
+      : (count === 1 ? 'Une nouveauté de vos candidats suivis' : count + ' nouveautés de vos candidats suivis');
+    const body = sampleTitle || 'Ouvrez CAP 2027 pour les consulter';
+    return { title: title, body: body };
+  }
+
+  // Unfiltered (no follows).
+  return {
+    title: count === 1 ? 'Une nouvelle actualité' : count + ' nouvelles actualités',
+    body: sampleTitle || 'Ouvrez CAP 2027 pour les consulter',
+  };
+}
+
+function fireNotification(id, title, body) {
+  CapacitorNotifications.schedule([
+    {
+      id: id,
+      title: title,
+      body: body,
+      smallIcon: SMALL_ICON,
+      largeIcon: LARGE_ICON,
+    },
+  ]);
+}
+
+// ---------- Event entrypoint ----------
+
 addEventListener('checkArticles', async (resolve, reject) => {
   try {
     if (!isEnabled()) {
@@ -83,74 +228,22 @@ addEventListener('checkArticles', async (resolve, reject) => {
     }
 
     const lastSeen = getLastSeen();
+    const followedIds = getFollowedIds();
 
-    // Pre-check: ask Supabase for the single most recent published_at.
-    // If <= lastSeen, no new articles — bail out. The query hits the
-    // existing news_articles_published_idx index, costs <1ms.
-    const headRes = await fetch(
-      SUPABASE_URL + '/rest/v1/news_articles?select=published_at&order=published_at.desc&limit=1',
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: 'Bearer ' + SUPABASE_KEY,
-        },
-      },
-    );
-    if (!headRes.ok) {
-      console.warn('[bg] head check HTTP ' + headRes.status);
-      resolve();
-      return;
-    }
-    const headRows = await headRes.json();
-    const head = headRows && headRows[0] ? headRows[0].published_at : null;
-    if (!head || Date.parse(head) <= Date.parse(lastSeen)) {
-      console.log('[bg] nothing new since ' + lastSeen);
+    const check = await checkArticles(lastSeen, followedIds);
+    if (!check || check.articles.length === 0) {
+      console.log('[bg] nothing new for user' + (followedIds.length ? ' (scoped)' : ' (global)'));
       resolve();
       return;
     }
 
-    // There IS new stuff — fetch the top 5 unseen for a meaningful title.
-    const url = SUPABASE_URL + '/rest/v1/news_articles'
-      + '?select=id,title,url,published_at'
-      + '&published_at=gt.' + encodeURIComponent(lastSeen)
-      + '&order=published_at.desc&limit=5';
-    const res = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: 'Bearer ' + SUPABASE_KEY,
-      },
-    });
-    if (!res.ok) {
-      console.warn('[bg] articles fetch HTTP ' + res.status);
-      resolve();
-      return;
-    }
-    const articles = await res.json();
-    if (!Array.isArray(articles) || articles.length === 0) {
-      resolve();
-      return;
+    const notif = await buildArticleNotif(check);
+    if (notif) {
+      fireNotification(ARTICLE_NOTIF_ID, notif.title, notif.body);
+      setLastFired(Date.now());
+      console.log('[bg] notified about ' + check.articles.length + ' articles ' + (check.scoped ? '(scoped)' : '(global)'));
     }
 
-    const count = articles.length;
-    const sample = articles[0];
-    const title = count === 1
-      ? 'Une nouvelle actualité'
-      : count + ' nouvelles actualités';
-    const body = (sample && sample.title ? String(sample.title) : '').slice(0, 140)
-      || 'Ouvrez CAP 2027 pour les consulter';
-
-    CapacitorNotifications.schedule([
-      {
-        id: RESUME_NOTIF_ID,
-        title: title,
-        body: body,
-        smallIcon: SMALL_ICON,
-        largeIcon: LARGE_ICON,
-      },
-    ]);
-
-    setLastFired(Date.now());
-    console.log('[bg] notified about ' + count + ' articles');
     resolve();
   } catch (err) {
     console.error('[bg] error', String(err));
