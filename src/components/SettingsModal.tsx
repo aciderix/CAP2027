@@ -1,4 +1,4 @@
-import { Bell, Trash2, Shield, AlertTriangle, Send } from 'lucide-react';
+import { Bell, Trash2, Shield, AlertTriangle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -7,8 +7,6 @@ import { Button } from './ui/Button';
 import {
   getNotificationsEnabled,
   setNotificationsEnabled as persistNotifs,
-  fireResumeNotification,
-  type UnseenArticle,
 } from '../lib/notifications';
 import { cancelElectionReminders } from '../lib/electionReminders';
 
@@ -23,7 +21,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
-  const [testMsg, setTestMsg] = useState<string | null>(null);
 
   const refreshPerm = () => {
     if (Capacitor.isNativePlatform()) {
@@ -38,25 +35,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (!isOpen) return;
     setNotifEnabled(getNotificationsEnabled());
     setError(null);
-    setTestMsg(null);
     setConfirmClear(false);
     refreshPerm();
   }, [isOpen]);
-
-  const fireTestLocal = async () => {
-    setTestMsg(null);
-    if (!Capacitor.isNativePlatform()) {
-      setTestMsg('Test impossible sur le navigateur — ouvrez l\'app Android.');
-      return;
-    }
-    const fake: UnseenArticle = {
-      id: 'test', title: 'Notification de test CAP 2027', url: '',
-      published_at: new Date().toISOString(),
-      source_name: 'Test', source_color: '#102a5c', is_factcheck: false,
-    };
-    await fireResumeNotification(1, fake);
-    setTestMsg('Si vous ne voyez pas la notif, vérifiez l\'autorisation système ci-dessus.');
-  };
 
   const toggleNotifs = async () => {
     setError(null);
@@ -154,22 +135,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <p className="text-xs text-slate-500 bg-white rounded-lg p-2">
               Sur le navigateur, les nouvelles actus s'affichent dans la cloche en haut.
             </p>
-          )}
-
-          {/* Test button */}
-          {Capacitor.isNativePlatform() && notifEnabled && (
-            <div className="pt-1">
-              <Button
-                variant="outline"
-                onClick={fireTestLocal}
-                className="w-full h-9 text-xs gap-1.5 inline-flex items-center justify-center"
-              >
-                <Send className="w-3.5 h-3.5" /> Tester une notif locale
-              </Button>
-            </div>
-          )}
-          {testMsg && (
-            <p className="text-[11px] text-slate-600 bg-white rounded-lg p-2 border border-slate-200">{testMsg}</p>
           )}
         </div>
 
