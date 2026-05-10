@@ -2,15 +2,28 @@
 // notification IDs so this can be called every render without
 // stacking duplicates (Capacitor's `schedule` upserts by id).
 //
+// Three families of reminders:
+//   1. Election day milestones — eve at 18 h, J-day at 8 h,
+//      results at the configured `results_at` timestamp.
+//   2. Civic reminders — inscription électorale deadline (J-6 sem
+//      before R1), procuration reminders (J-3 sem and J-1 sem
+//      before each round).
+//   3. Boussole — single reminder J-30 before R1 nudging the user
+//      to take the Match test.
+//
 // Legal note on French silence électoral (art. L49 du code électoral):
 // la loi interdit la diffusion de tout message ayant le caractère de
 // PROPAGANDE électorale à partir de la veille du scrutin à zéro heure.
-// Les rappels que nous envoyons sont strictement civiques et neutres
-// ("Demain, élection présidentielle, bureaux ouverts de 8 h à 20 h"),
-// sans citer de candidat ni d'opinion — équivalents aux SMS de rappel
-// envoyés par certaines mairies. Ils ne constituent pas de la
-// propagande au sens de la loi. Toute mention de candidat, d'orientation
-// ou d'incitation au vote pour un camp est interdite ici.
+// Tous les rappels que nous envoyons sont strictement civiques et
+// neutres ("Demain, élection présidentielle, bureaux ouverts de 8 h
+// à 20 h"), sans citer de candidat ni d'opinion. Pour les rappels
+// d'inscription / procuration, ils sont équivalents aux SMS envoyés
+// par certaines mairies. Le rappel Boussole évite le J-1 / J-day
+// pour ne pas interférer avec la période de silence (J-30, donc
+// largement avant).
+//
+// Toute mention de candidat, d'orientation ou d'incitation au vote
+// pour un camp est interdite ici.
 
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -31,17 +44,38 @@ interface RoundReminders {
 /**
  * Stable IDs per round/event so re-scheduling never duplicates notifs.
  * Range chosen well above NotificationsBell's incrementing ID counter.
+ *
+ *   1_000_xxx — election day milestones (R1 + R2)
+ *   1_100_xxx — civic reminders (inscription + procuration)
+ *   1_200_xxx — Boussole nudge
  */
 const IDS = {
+  // 1. Election day
   r1Eve: 1_000_001,
   r1Day: 1_000_002,
   r1Res: 1_000_003,
   r2Eve: 1_000_004,
   r2Day: 1_000_005,
   r2Res: 1_000_006,
+  // 2. Civic
+  inscription: 1_100_001,        // J-6 sem before R1, applies to both rounds
+  procurationR1Eve3w: 1_100_002, // J-3 sem before R1
+  procurationR1Eve1w: 1_100_003, // J-1 sem before R1
+  procurationR2Eve3w: 1_100_004, // J-3 sem before R2
+  procurationR2Eve1w: 1_100_005, // J-1 sem before R2
+  // 3. Boussole
+  boussoleR1J30: 1_200_001,      // J-30 before R1
 };
 
 const ALL_IDS = Object.values(IDS);
+
+const DAY_MS = 86_400_000;
+
+function atLocalHour(base: Date, hour: number): Date {
+  const d = new Date(base);
+  d.setHours(hour, 0, 0, 0);
+  return d;
+}
 
 export async function scheduleElectionReminders(rounds: RoundReminders) {
   if (!Capacitor.isNativePlatform()) return;
@@ -65,9 +99,11 @@ export async function scheduleElectionReminders(rounds: RoundReminders) {
   }
 
   const now = Date.now();
-  const toSchedule = [];
+  const toSchedule: any[] = [];
 
-  const buildRoundNotifs = (
+  // ---------- 1. Election day milestones (per round) ----------
+
+  const buildRoundMilestones = (
     round: ElectionRound | undefined,
     label: '1er' | '2nd',
     ids: { eve: number; day: number; res: number },
@@ -81,13 +117,10 @@ export async function scheduleElectionReminders(rounds: RoundReminders) {
     // Eve at 18 h local of the day before the election.
     const eveDate = new Date(start);
     eveDate.setDate(eveDate.getDate() - 1);
-    eveDate.setHours(18, 0, 0, 0);
-    const eveAt = eveDate.getTime();
+    const eveAt = atLocalHour(eveDate, 18).getTime();
 
     // J-day at 8 h local (poll opening).
-    const dayDate = new Date(start);
-    dayDate.setHours(8, 0, 0, 0);
-    const dayAt = dayDate.getTime();
+    const dayAt = atLocalHour(new Date(start), 8).getTime();
 
     if (eveAt > now) {
       toSchedule.push({
@@ -124,8 +157,110 @@ export async function scheduleElectionReminders(rounds: RoundReminders) {
     }
   };
 
-  buildRoundNotifs(rounds.round1, '1er', { eve: IDS.r1Eve, day: IDS.r1Day, res: IDS.r1Res });
-  buildRoundNotifs(rounds.round2, '2nd', { eve: IDS.r2Eve, day: IDS.r2Day, res: IDS.r2Res });
+  buildRoundMilestones(rounds.round1, '1er', { eve: IDS.r1Eve, day: IDS.r1Day, res: IDS.r1Res });
+  buildRoundMilestones(rounds.round2, '2nd', { eve: IDS.r2Eve, day: IDS.r2Day, res: IDS.r2Res });
+
+  // ---------- 2. Civic reminders (R1 only for inscription, both for procuration) ----------
+
+  const r1 = rounds.round1;
+  if (r1 && r1.is_official) {
+    const r1Start = new Date(r1.scheduled_at).getTime();
+    if (!Number.isNaN(r1Start)) {
+      // Inscription: 6 weeks before R1, fires at 10 h local.
+      // The legal deadline applies to both rounds (one inscription
+      // covers everything), so a single reminder is enough.
+      const inscriptionAt = atLocalHour(new Date(r1Start - 42 * DAY_MS), 10).getTime();
+      if (inscriptionAt > now) {
+        toSchedule.push({
+          id: IDS.inscription,
+          title: 'Listes électorales : 6 semaines pour vous inscrire',
+          body: "Vous avez déménagé, ou vous votez pour la première fois ? Vérifiez votre situation et inscrivez-vous sur service-public.fr avant la fermeture des listes.",
+          smallIcon: SMALL_ICON,
+          largeIcon: LARGE_ICON,
+          iconColor: ICON_COLOR,
+          schedule: { at: new Date(inscriptionAt) },
+        });
+      }
+
+      // Procuration R1 — 3 sem et 1 sem avant, à 10 h.
+      const procR1_3w = atLocalHour(new Date(r1Start - 21 * DAY_MS), 10).getTime();
+      const procR1_1w = atLocalHour(new Date(r1Start - 7 * DAY_MS), 10).getTime();
+      if (procR1_3w > now) {
+        toSchedule.push({
+          id: IDS.procurationR1Eve3w,
+          title: 'Procuration — plus que 3 semaines avant le 1er tour',
+          body: "Pas disponible le jour du vote ? Faites votre procuration en ligne sur maprocuration.gouv.fr (validation en commissariat ou via France Identité).",
+          smallIcon: SMALL_ICON,
+          largeIcon: LARGE_ICON,
+          iconColor: ICON_COLOR,
+          schedule: { at: new Date(procR1_3w) },
+        });
+      }
+      if (procR1_1w > now) {
+        toSchedule.push({
+          id: IDS.procurationR1Eve1w,
+          title: 'Procuration — dernière ligne droite avant le 1er tour',
+          body: "Si vous serez absent dimanche, donnez procuration à un autre électeur sur maprocuration.gouv.fr. Compter quelques jours d'instruction.",
+          smallIcon: SMALL_ICON,
+          largeIcon: LARGE_ICON,
+          iconColor: ICON_COLOR,
+          schedule: { at: new Date(procR1_1w) },
+        });
+      }
+    }
+  }
+
+  const r2 = rounds.round2;
+  if (r2 && r2.is_official) {
+    const r2Start = new Date(r2.scheduled_at).getTime();
+    if (!Number.isNaN(r2Start)) {
+      const procR2_3w = atLocalHour(new Date(r2Start - 21 * DAY_MS), 10).getTime();
+      const procR2_1w = atLocalHour(new Date(r2Start - 7 * DAY_MS), 10).getTime();
+      if (procR2_3w > now) {
+        toSchedule.push({
+          id: IDS.procurationR2Eve3w,
+          title: 'Procuration — plus que 3 semaines avant le 2nd tour',
+          body: "Pas disponible le jour du vote ? Faites votre procuration en ligne sur maprocuration.gouv.fr (validation en commissariat ou via France Identité).",
+          smallIcon: SMALL_ICON,
+          largeIcon: LARGE_ICON,
+          iconColor: ICON_COLOR,
+          schedule: { at: new Date(procR2_3w) },
+        });
+      }
+      if (procR2_1w > now) {
+        toSchedule.push({
+          id: IDS.procurationR2Eve1w,
+          title: 'Procuration — dernière ligne droite avant le 2nd tour',
+          body: "Si vous serez absent dimanche, donnez procuration à un autre électeur sur maprocuration.gouv.fr. Compter quelques jours d'instruction.",
+          smallIcon: SMALL_ICON,
+          largeIcon: LARGE_ICON,
+          iconColor: ICON_COLOR,
+          schedule: { at: new Date(procR2_1w) },
+        });
+      }
+    }
+  }
+
+  // ---------- 3. Boussole — J-30 before R1 ----------
+
+  if (r1 && r1.is_official) {
+    const r1Start = new Date(r1.scheduled_at).getTime();
+    if (!Number.isNaN(r1Start)) {
+      // 11 h local — outside work peak, before lunch.
+      const boussoleAt = atLocalHour(new Date(r1Start - 30 * DAY_MS), 11).getTime();
+      if (boussoleAt > now) {
+        toSchedule.push({
+          id: IDS.boussoleR1J30,
+          title: 'Plus que 30 jours avant le 1er tour',
+          body: "Avez-vous fait le test de la Boussole ? Quelques minutes pour découvrir avec quels candidats vous êtes le plus en accord, sans citer aucun nom pendant les questions.",
+          smallIcon: SMALL_ICON,
+          largeIcon: LARGE_ICON,
+          iconColor: ICON_COLOR,
+          schedule: { at: new Date(boussoleAt) },
+        });
+      }
+    }
+  }
 
   if (toSchedule.length === 0) return;
 
