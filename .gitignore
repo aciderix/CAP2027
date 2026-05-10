@@ -7,6 +7,9 @@ coverage/
 .env*
 !.env.example
 
+# Netlify CLI local cache
+.netlify/
+
 # Android / Capacitor build artifacts
 android/.gradle/
 android/build/
