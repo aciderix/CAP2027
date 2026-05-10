@@ -1,4 +1,4 @@
-import { Bell, Trash2, Shield, AlertTriangle, Activity } from 'lucide-react';
+import { Bell, Trash2, Shield, AlertTriangle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -8,7 +8,7 @@ import {
   getNotificationsEnabled,
   setNotificationsEnabled as persistNotifs,
 } from '../lib/notifications';
-import { registerPushNotifications, readPushDiag, type PushDiag } from '../lib/push';
+import { registerPushNotifications } from '../lib/push';
 import { cancelElectionReminders } from '../lib/electionReminders';
 
 interface SettingsModalProps {
@@ -22,11 +22,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
-  const [diag, setDiag] = useState<PushDiag>({});
-  const [diagOpen, setDiagOpen] = useState(false);
 
-  const refreshDiag = () => {
-    setDiag(readPushDiag());
+  const refreshPerm = () => {
     if (Capacitor.isNativePlatform()) {
       LocalNotifications.checkPermissions()
         .then((p) => setPermState(p.display as any))
@@ -40,21 +37,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setNotifEnabled(getNotificationsEnabled());
     setError(null);
     setConfirmClear(false);
-    refreshDiag();
+    refreshPerm();
   }, [isOpen]);
-
-  const reRegister = async () => {
-    setBusy(true); setError(null);
-    try {
-      const res = await registerPushNotifications();
-      if (!res.ok && res.error && res.error !== 'opt-in required' && res.error !== 'permission denied') {
-        setError(`FCM : ${res.error}`);
-      }
-      // Token arrives async via FCM listener — refresh diag a few times.
-      setTimeout(refreshDiag, 1500);
-      setTimeout(refreshDiag, 5000);
-    } finally { setBusy(false); }
-  };
 
   const toggleNotifs = async () => {
     setError(null);
@@ -161,47 +145,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           )}
         </div>
 
-        {/* FCM diag panel — only on native */}
-        {Capacitor.isNativePlatform() && (
-          <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 mt-2">
-            <button
-              onClick={() => { setDiagOpen((o) => !o); refreshDiag(); }}
-              className="w-full flex items-center justify-between text-left"
-            >
-              <span className="text-sm font-bold text-[#102a5c] inline-flex items-center gap-1.5">
-                <Activity className="w-4 h-4" /> Diagnostic notifications
-              </span>
-              <span className="text-xs text-slate-400">{diagOpen ? 'masquer' : 'afficher'}</span>
-            </button>
-            {diagOpen && (
-              <>
-                <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
-                  <DiagRow label="Plateforme" value={Capacitor.getPlatform()} />
-                  <DiagRow label="Notifs activées (app)" value={notifEnabled ? 'oui' : 'non'} />
-                  <DiagRow label="Étape courante" value={diag.step ?? '—'} mono />
-                  <DiagRow label="Permission OS (locale)" value={permState} />
-                  <DiagRow label="Permission OS (push)" value={diag.permission ?? '—'} />
-                  <DiagRow label="register() appelé à" value={diag.registerCalledAt ? new Date(diag.registerCalledAt).toLocaleTimeString('fr') : '—'} />
-                  <DiagRow label="Token FCM reçu à" value={diag.tokenAt ? new Date(diag.tokenAt).toLocaleTimeString('fr') : '— (pas encore)'} />
-                  <DiagRow label="Token (preview)" value={diag.tokenPreview ?? '—'} mono />
-                  <DiagRow label="Upsert Supabase" value={diag.upsertOk === undefined ? '—' : diag.upsertOk ? 'OK' : 'échec'} />
-                  {diag.upsertError && <DiagRow label="Erreur upsert" value={diag.upsertError} mono full />}
-                  {diag.registrationError && <DiagRow label="Erreur registration" value={diag.registrationError} mono full />}
-                  {diag.lastError && <DiagRow label="Dernière erreur" value={diag.lastError} mono full />}
-                </dl>
-                <Button
-                  variant="outline"
-                  onClick={reRegister}
-                  disabled={busy}
-                  className="w-full mt-3 h-8 text-xs gap-1.5 inline-flex items-center justify-center"
-                >
-                  <Activity className="w-3 h-3" /> Forcer l'enregistrement push
-                </Button>
-              </>
-            )}
-          </div>
-        )}
-
         {/* Quick info */}
         <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex items-start gap-3 mt-2">
           <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-emerald-600 shrink-0">
@@ -248,14 +191,5 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </p>
       </div>
     </Modal>
-  );
-}
-
-function DiagRow({ label, value, mono, full }: { label: string; value: string; mono?: boolean; full?: boolean }) {
-  return (
-    <>
-      <dt className={`text-slate-500 font-medium ${full ? 'col-span-2 mt-1' : ''}`}>{label}</dt>
-      <dd className={`${full ? 'col-span-2' : ''} ${mono ? 'font-mono' : ''} text-slate-800 break-all`}>{value}</dd>
-    </>
   );
 }
