@@ -4,28 +4,33 @@
 //   1. On app start (post-permission), Capacitor PushNotifications
 //      registers with FCM and surfaces a token → upserted in
 //      public.push_tokens.
-//   2. The push-broadcast edge function (called by ingest-rss after
-//      new inserts) iterates all tokens and sends a notification
+//   2. The push-broadcast edge function (called by notify-after-ingest
+//      after each ingest) iterates all tokens and sends a notification
 //      payload via FCM HTTP v1.
 //   3. On Android, the FCM payload includes a notification block so
-//      it always renders even if the app is in "stopped" state. The
-//      data block carries optional candidate hints; the foreground
-//      pushNotificationReceived listener only re-fires a polished
-//      LocalNotification when the app is in foreground (Android
-//      otherwise renders the system notif itself).
+//      it always renders even if the app is in "stopped" state.
 //
 // This is layered on top of the WorkManager background runner
 // (public/background.js) which still acts as the fallback when FCM
 // is unreachable (Huawei without GMS, custom ROMs, etc.).
+//
+// Defensive: every step writes a progress checkpoint to the diag
+// before/after, every native call has a 10 s timeout. If the native
+// bridge is missing (cap sync didn't run, plugin not in
+// capacitor.plugins.json, etc.) we surface "step X timed out" in the
+// Settings panel rather than leaving the user staring at empty rows.
 
 import { Capacitor } from '@capacitor/core';
+import { PushNotifications } from '@capacitor/push-notifications';
 import { supabase } from './supabase';
 import { getNotificationsEnabled } from './notifications';
 
 const VERSION = '1.0.0';
 const DIAG_KEY = 'cap2027.push.diag';
+const NATIVE_CALL_TIMEOUT_MS = 10_000;
 
 export interface PushDiag {
+  step?: string;
   permission?: 'granted' | 'denied' | 'prompt' | 'unknown';
   registerCalledAt?: string;
   tokenAt?: string;
@@ -50,38 +55,54 @@ function writeDiag(patch: Partial<PushDiag>) {
   try { localStorage.setItem(DIAG_KEY, JSON.stringify(next)); } catch { /* noop */ }
 }
 
-let registered = false;
+let listenersInstalled = false;
 
-async function getPlugin() {
-  const mod = await import('@capacitor/push-notifications');
-  return mod.PushNotifications;
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timed out: ' + label)), ms);
+    p.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); },
+    );
+  });
 }
 
 /**
  * Idempotent. Safe to call from multiple places (App mount + Settings
- * toggle) — duplicate listeners are guarded by the `registered` flag.
+ * toggle) — duplicate listeners are guarded by `listenersInstalled`.
  *
  * Returns { ok, error } so the caller can surface the failure mode in
  * UI without throwing.
  */
 export async function registerPushNotifications(): Promise<{ ok: boolean; error?: string }> {
+  writeDiag({ step: 'entered', lastError: undefined });
+
   if (!Capacitor.isNativePlatform()) {
-    writeDiag({ lastError: 'native-only' });
+    writeDiag({ step: 'web — skipping', lastError: 'native-only' });
     return { ok: false, error: 'native-only' };
   }
   if (!getNotificationsEnabled()) {
-    writeDiag({ lastError: 'opt-in required' });
+    writeDiag({ step: 'opt-in required', lastError: 'opt-in required' });
     return { ok: false, error: 'opt-in required' };
   }
 
   try {
-    const PushNotifications = await getPlugin();
+    writeDiag({ step: 'checkPermissions' });
+    let perm = await withTimeout(
+      PushNotifications.checkPermissions(),
+      NATIVE_CALL_TIMEOUT_MS,
+      'checkPermissions',
+    );
+    writeDiag({ permission: perm.receive as any, step: 'checkPermissions ok' });
 
-    let perm = await PushNotifications.checkPermissions();
-    writeDiag({ permission: perm.receive as any });
     if (perm.receive !== 'granted') {
-      const ask = await PushNotifications.requestPermissions();
-      writeDiag({ permission: ask.receive as any });
+      writeDiag({ step: 'requestPermissions' });
+      const ask = await withTimeout(
+        PushNotifications.requestPermissions(),
+        NATIVE_CALL_TIMEOUT_MS,
+        'requestPermissions',
+      );
+      writeDiag({ permission: ask.receive as any, step: 'requestPermissions ok' });
       if (ask.receive !== 'granted') {
         writeDiag({ lastError: 'permission denied' });
         return { ok: false, error: 'permission denied' };
@@ -89,12 +110,13 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
       perm = ask;
     }
 
-    if (!registered) {
-      registered = true;
+    if (!listenersInstalled) {
+      listenersInstalled = true;
+      writeDiag({ step: 'installing listeners' });
 
       PushNotifications.addListener('registration', async (token) => {
         const preview = token.value.slice(0, 16) + '…';
-        writeDiag({ tokenAt: new Date().toISOString(), tokenPreview: preview });
+        writeDiag({ tokenAt: new Date().toISOString(), tokenPreview: preview, step: 'token received' });
         try {
           const { error } = await supabase.from('push_tokens').upsert(
             {
@@ -119,29 +141,21 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
         writeDiag({ registrationError: String(err?.error ?? err?.message ?? err) });
       });
 
-      // Foreground notif arrives — Android by default does NOT render
-      // the system notif when the app is in foreground; we'd just see
-      // it appear in the bell on next refresh. For a more visible UX,
-      // re-fire a LocalNotification ourselves so the user sees a banner.
       PushNotifications.addListener('pushNotificationReceived', async (notif) => {
         writeDiag({ lastNotifAt: new Date().toISOString() });
         // Bell will refresh on the next visibility / focus event;
-        // nothing else to do — the OS already handled the notif when
-        // the app was in background. In foreground, a banner via
-        // LocalNotifications would feel intrusive (the user is
-        // looking at the app), so we skip.
+        // nothing else to do — the OS already rendered the notif.
         void notif;
       });
 
-      // Tap: nothing to do beyond the OS opening the app. We keep the
-      // listener so Capacitor doesn't warn about missing handlers.
       PushNotifications.addListener('pushNotificationActionPerformed', () => {
         /* noop — opening the app is enough */
       });
     }
 
-    writeDiag({ registerCalledAt: new Date().toISOString(), lastError: undefined });
-    await PushNotifications.register();
+    writeDiag({ registerCalledAt: new Date().toISOString(), step: 'register' });
+    await withTimeout(PushNotifications.register(), NATIVE_CALL_TIMEOUT_MS, 'register');
+    writeDiag({ step: 'register call returned' });
     return { ok: true };
   } catch (err: any) {
     const msg = String(err?.message ?? err);

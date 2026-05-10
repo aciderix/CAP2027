@@ -178,6 +178,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
                   <DiagRow label="Plateforme" value={Capacitor.getPlatform()} />
                   <DiagRow label="Notifs activées (app)" value={notifEnabled ? 'oui' : 'non'} />
+                  <DiagRow label="Étape courante" value={diag.step ?? '—'} mono />
                   <DiagRow label="Permission OS (locale)" value={permState} />
                   <DiagRow label="Permission OS (push)" value={diag.permission ?? '—'} />
                   <DiagRow label="register() appelé à" value={diag.registerCalledAt ? new Date(diag.registerCalledAt).toLocaleTimeString('fr') : '—'} />
