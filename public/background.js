@@ -29,7 +29,15 @@ const LAST_FIRED_KEY = 'cap2027.notifications.lastResumeFiredAt';
 const PREF_KEY = 'cap2027.notifications.enabled';
 const FOLLOWS_KEY = 'cap2027.followedCandidates';
 
+// New-candidate detection state. Tracks the most recent
+// candidates.created_at we've already notified about, plus a 24 h
+// throttle so a batch admin import never fires more than one notif.
+const LAST_CAND_CHECK_KEY = 'cap2027.notifications.lastCandidateCreatedAt';
+const LAST_CAND_FIRED_KEY = 'cap2027.notifications.lastCandidateFiredAt';
+const CANDIDATE_THROTTLE_MS = 24 * 60 * 60 * 1000;
+
 const ARTICLE_NOTIF_ID = 9000001;
+const CANDIDATE_NOTIF_ID = 9000002;
 
 const SMALL_ICON = 'ic_stat_cap2027';
 const LARGE_ICON = 'ic_notif_cap2027';
@@ -85,6 +93,22 @@ function getFollowedIds() {
   } catch {
     return [];
   }
+}
+
+function getLastCandidateCheck() {
+  return kvGet(LAST_CAND_CHECK_KEY);
+}
+
+function setLastCandidateCheck(iso) {
+  kvSet(LAST_CAND_CHECK_KEY, iso);
+}
+
+function getLastCandidateFired() {
+  return Number(kvGet(LAST_CAND_FIRED_KEY) || '0');
+}
+
+function setLastCandidateFired(ts) {
+  kvSet(LAST_CAND_FIRED_KEY, String(ts));
 }
 
 // ---------- Supabase REST helpers ----------
@@ -164,6 +188,64 @@ async function getCandidateLastName(id) {
   return Array.isArray(rows) && rows[0] ? rows[0].last_name : null;
 }
 
+// ---------- New-candidate check ----------
+
+async function checkNewCandidates() {
+  if (Date.now() - getLastCandidateFired() < CANDIDATE_THROTTLE_MS) {
+    return null;
+  }
+
+  // First run: bootstrap from the latest published candidate so we
+  // don't notify retroactively about the entire seed list.
+  let lastCheck = getLastCandidateCheck();
+  if (!lastCheck) {
+    const seedRows = await sbGet(
+      'candidates?select=created_at&is_published=eq.true&order=created_at.desc&limit=1',
+    );
+    const seed = Array.isArray(seedRows) && seedRows[0]
+      ? seedRows[0].created_at
+      : new Date().toISOString();
+    setLastCandidateCheck(seed);
+    return null;
+  }
+
+  const rows = await sbGet(
+    'candidates'
+      + '?is_published=eq.true'
+      + '&created_at=gt.' + encodeURIComponent(lastCheck)
+      + '&select=id,first_name,last_name,created_at,parties(name,abbreviation)'
+      + '&order=created_at.desc&limit=5',
+  );
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  return rows;
+}
+
+function buildCandidateNotif(candidates) {
+  if (candidates.length === 1) {
+    const c = candidates[0];
+    const name = (c.first_name + ' ' + c.last_name).trim();
+    const partyName = c.parties && (c.parties.name || c.parties.abbreviation);
+    const body = partyName
+      ? "Découvrez sa fiche dans CAP 2027 — " + partyName
+      : "Découvrez sa fiche dans CAP 2027.";
+    return {
+      title: 'Nouveau candidat publié : ' + name,
+      body: body,
+    };
+  }
+  // Multiple at once (admin batch). Keep it generic.
+  const names = candidates
+    .slice(0, 3)
+    .map((c) => (c.last_name || '').trim())
+    .filter(Boolean)
+    .join(', ');
+  return {
+    title: candidates.length + ' nouveaux candidats publiés',
+    body: names ? names + ' — découvrez leurs fiches dans CAP 2027.' : 'Découvrez leurs fiches dans CAP 2027.',
+  };
+}
+
 function articleKindLabel(kind) {
   if (kind === 'youtube_video') return 'vidéo';
   if (kind === 'mastodon_post' || kind === 'bluesky_post') return 'publication';
@@ -221,8 +303,26 @@ addEventListener('checkArticles', async (resolve, reject) => {
       return;
     }
 
+    // 1. New-candidate check first — independent from the article
+    // throttle, since it has its own 24 h cooldown and is much rarer.
+    const newCandidates = await checkNewCandidates();
+    if (newCandidates && newCandidates.length > 0) {
+      const candNotif = buildCandidateNotif(newCandidates);
+      fireNotification(CANDIDATE_NOTIF_ID, candNotif.title, candNotif.body);
+      setLastCandidateFired(Date.now());
+      // Advance the high-water mark so we don't re-notify next wake.
+      setLastCandidateCheck(newCandidates[0].created_at);
+      console.log('[bg] notified about ' + newCandidates.length + ' new candidate(s)');
+      // Don't also fire an article notif in the same wake — keep the
+      // user's notification shade clean.
+      resolve();
+      return;
+    }
+
+    // 2. Article check, throttled to avoid double-notifying with the
+    // foreground hook.
     if (Date.now() - getLastFired() < THROTTLE_MS) {
-      console.log('[bg] throttled (recent notif)');
+      console.log('[bg] articles throttled (recent notif)');
       resolve();
       return;
     }
