@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { Heart, Star, ChevronRight, Play, ExternalLink } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
 import { useFollowedCandidates } from '../lib/follows';
+import { TwitterPostCard } from './TwitterPostCard';
 
 type Mode = 'mine';
 
@@ -62,12 +64,12 @@ export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
   const followedKey = followedIds.join(',');
 
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
-  const [kindFilter, setKindFilter] = useState<'all' | 'press' | 'video'>('all');
+  const [kindFilter, setKindFilter] = useState<'all' | 'press' | 'video' | 'post'>('all');
 
   const candidatesQuery = useQuery({
     queryKey: ['candidatesByIds', followedKey],
     enabled: followedIds.length > 0,
-    staleTime: 30 * 60 * 1000,
+    staleTime: STABLE_STALE_MS,
     queryFn: async (): Promise<CandidateLite[]> => {
       const { data, error } = await supabase
         .from('candidates')
@@ -81,6 +83,7 @@ export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
   const articlesQuery = useQuery({
     queryKey: ['myFeedArticles', followedKey],
     enabled: followedIds.length > 0,
+    staleTime: ARTICLE_STALE_MS,
     queryFn: async (): Promise<ArticleRow[]> => {
       const { data, error } = await supabase
         .from('article_candidates')
@@ -116,6 +119,7 @@ export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
       if (activeFilter && !a.article_candidates.some((x) => x.candidate?.id === activeFilter)) return false;
       if (kindFilter === 'press' && a.kind !== 'article') return false;
       if (kindFilter === 'video' && a.kind !== 'youtube_video') return false;
+      if (kindFilter === 'post' && a.kind !== 'twitter_post') return false;
       return true;
     });
   }, [articles, activeFilter, kindFilter]);
@@ -204,6 +208,7 @@ export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
           { id: 'all', label: 'Tout' },
           { id: 'press', label: 'Articles' },
           { id: 'video', label: 'Vidéos' },
+          { id: 'post', label: 'Posts' },
         ] as const).map((opt) => (
           <button
             key={opt.id}
@@ -247,7 +252,26 @@ export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
 
       {!loading && filtered.length > 0 && (
         <div className="flex flex-col gap-2.5 pb-4">
-          {filtered.map((a) => <FeedCard key={a.id} article={a} />)}
+          {filtered.map((a) => {
+            if (a.kind === 'twitter_post') {
+              const candidate = a.article_candidates
+                .map((x) => x.candidate)
+                .find((c): c is CandidateLite => !!c);
+              return (
+                <TwitterPostCard
+                  key={a.id}
+                  title={a.title}
+                  summary={a.summary}
+                  url={a.url}
+                  image_url={a.image_url}
+                  published_at={a.published_at}
+                  source={a.source}
+                  candidateName={candidate ? `${candidate.first_name} ${candidate.last_name}`.trim() : null}
+                />
+              );
+            }
+            return <FeedCard key={a.id} article={a} />;
+          })}
         </div>
       )}
     </div>

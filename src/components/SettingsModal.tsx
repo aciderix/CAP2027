@@ -153,8 +153,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <div>
             <p className="font-bold text-[#102a5c] text-sm">Confidentialité</p>
             <p className="text-xs text-slate-500 leading-snug mt-0.5">
-              Aucun compte. Aucun cookie tiers. Aucun pixel publicitaire. Les seules données
-              transitent depuis Supabase pour récupérer le contenu public.
+              Aucun compte. Aucun cookie tiers. Aucun pixel publicitaire. Aucune donnée personnelle partagée.
             </p>
           </div>
         </div>
@@ -168,8 +167,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div>
               <p className="font-bold text-[#102a5c] text-sm">Effacer mes données locales</p>
               <p className="text-xs text-slate-500 leading-snug mt-0.5">
-                Supprime vos candidats suivis, vos résultats de boussole, l'onboarding et le
-                cache. Ne touche pas aux données sur le serveur.
+                Supprime vos candidats suivis, vos résultats de boussole, l'onboarding et le cache.
               </p>
             </div>
           </div>

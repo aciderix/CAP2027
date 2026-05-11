@@ -72,6 +72,16 @@ export default function App() {
     void maybeAskFirstLaunchPermission().then(() => registerPushNotifications());
   };
 
+  // Tapping a bottom-nav / header tab always returns to that tab's
+  // root view. Without this, tapping Explorer while already on
+  // explorer/candidats would do nothing — the user expected a
+  // "back to Explorer main" behaviour, matching iOS / Android tab
+  // bar convention.
+  const handleTabChange = (tab: string) => {
+    if (tab === 'explorer') setExplorerView('main');
+    setActiveTab(tab);
+  };
+
 
   const getTabContent = () => {
     switch(activeTab) {
@@ -119,7 +129,7 @@ export default function App() {
         {showOnboarding && <Onboarding key="onboarding" onComplete={handleOnboardingComplete} />}
       </AnimatePresence>
       <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
-        <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+        <Header activeTab={activeTab} setActiveTab={handleTabChange} />
 
       
 
@@ -285,7 +295,7 @@ export default function App() {
 
         </motion.div>
       </main>
-      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+      <BottomNav activeTab={activeTab} setActiveTab={handleTabChange} />
     </div>
     </>
   );

@@ -19,6 +19,11 @@ function fallbackPhoto(c: CandidateRow) {
   return c.gender === 'F' ? '/card_red.png' : '/card_blue.png';
 }
 
+/** Lowercase + strip diacritics so "Pecresse" matches "Pécresse". */
+function normaliseSearch(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
 export function ProgrammesList() {
   const [candidates, setCandidates] = useState<CandidateWithCount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,11 +61,11 @@ export function ProgrammesList() {
   }, []);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = normaliseSearch(search);
     if (!q) return candidates;
     return candidates.filter((c) => {
-      const name = fullName(c).toLowerCase();
-      const party = (c.parties?.name || c.parties?.abbreviation || '').toLowerCase();
+      const name = normaliseSearch(fullName(c));
+      const party = normaliseSearch(c.parties?.name || c.parties?.abbreviation || '');
       return name.includes(q) || party.includes(q);
     });
   }, [candidates, search]);

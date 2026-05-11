@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase';
 import type { Tables, Enums } from '../lib/database.types';
 import { useFollowedCandidates } from '../lib/follows';
 import { CandidateParrainagesInline } from './CandidateParrainagesInline';
+import { TwitterPostCard } from './TwitterPostCard';
+import { STABLE_STALE_MS } from '../lib/queryClient';
 
 type CandidateRow = Tables<'candidates'>;
 type PartyRow = Tables<'parties'>;
@@ -66,6 +68,11 @@ function fallbackPhoto(c: CandidateRow) {
   return c.gender === 'F' ? '/card_red.png' : '/card_blue.png';
 }
 
+/** Lowercase + strip diacritics so "Pecresse" matches "Pécresse". */
+function normaliseSearch(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
 export function CandidatesList() {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -76,7 +83,7 @@ export function CandidatesList() {
 
   const candidatesQuery = useQuery({
     queryKey: ['candidatesList'],
-    staleTime: 30 * 60 * 1000,
+    staleTime: STABLE_STALE_MS,
     queryFn: async (): Promise<CandidateWithParty[]> => {
       const { data, error } = await supabase
         .from('candidates')
@@ -98,7 +105,7 @@ export function CandidatesList() {
   const candidateDetailQuery = useQuery({
     queryKey: ['candidateDetail', selectedCandidate?.id],
     enabled: !!selectedCandidate,
-    staleTime: 30 * 60 * 1000,
+    staleTime: STABLE_STALE_MS,
     queryFn: async (): Promise<CandidateDetail> => {
       const candidateId = selectedCandidate!.id;
       const [bioRes, propRes, affRes, newsRes] = await Promise.all([
@@ -137,11 +144,11 @@ export function CandidatesList() {
   const detailLoading = candidateDetailQuery.isLoading && !!selectedCandidate;
 
   const filteredCandidates = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = normaliseSearch(searchQuery);
     if (!q) return candidates;
     return candidates.filter(c => {
-      const name = fullName(c).toLowerCase();
-      const party = (c.parties?.name || c.parties?.abbreviation || '').toLowerCase();
+      const name = normaliseSearch(fullName(c));
+      const party = normaliseSearch(c.parties?.name || c.parties?.abbreviation || '');
       return name.includes(q) || party.includes(q);
     });
   }, [candidates, searchQuery]);
@@ -414,9 +421,24 @@ export function CandidatesList() {
                     detail.news.length === 0 ? (
                       <EmptyTab message="Pas encore d'article associé. Le tagueur attribuera des actualités dès qu'il détectera les noms du candidat ou de son parti." />
                     ) : (
-                      <ul className="space-y-2.5">
-                        {detail.news.map((n) => <CandidateNewsCard key={n.id} article={n} />)}
-                      </ul>
+                      <div className="space-y-2.5">
+                        {detail.news.map((n) => (
+                          n.kind === 'twitter_post' ? (
+                            <TwitterPostCard
+                              key={n.id}
+                              title={n.title}
+                              summary={n.summary}
+                              url={n.url}
+                              image_url={n.image_url}
+                              published_at={n.published_at}
+                              source={n.source}
+                              candidateName={fullName(selectedCandidate)}
+                            />
+                          ) : (
+                            <CandidateNewsCard key={n.id} article={n} />
+                          )
+                        ))}
+                      </div>
                     )
                   )}
                 </div>

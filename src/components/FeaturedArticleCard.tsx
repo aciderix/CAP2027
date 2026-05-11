@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, BadgeCheck, Sparkles, Play } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { ARTICLE_STALE_MS } from '../lib/queryClient';
 import { useFollowedCandidates } from '../lib/follows';
 
 interface Source {
@@ -59,6 +60,7 @@ export function FeaturedArticleCard({ onNavigate, onNavigateFactcheck }: Feature
 
   const heroQuery = useQuery({
     queryKey: ['featuredHero', followedKey],
+    staleTime: ARTICLE_STALE_MS,
     queryFn: async (): Promise<{ news: ArticleHero[]; factchecks: ArticleHero[] }> => {
       const baseSelect = `
         id, url, title, summary, image_url, published_at, is_factcheck, verdict, kind,

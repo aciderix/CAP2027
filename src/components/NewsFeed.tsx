@@ -6,6 +6,8 @@ import {
 import Fuse from 'fuse.js';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
+import { TwitterPostCard } from './TwitterPostCard';
 
 type Mode = 'news' | 'factcheck';
 
@@ -94,9 +96,10 @@ export function NewsFeed({ mode }: { mode: Mode }) {
     setAdvancedOpen(false);
   }, [mode]);
 
-  // Articles: 5 min stale (default), refetched on focus
+  // Articles: 30 min stale (server cron runs hourly), focus refetch.
   const articlesQuery = useQuery({
     queryKey: ['articles', mode],
+    staleTime: ARTICLE_STALE_MS,
     queryFn: async (): Promise<ArticleRow[]> => {
       const { data, error } = await supabase
         .from('news_articles')
@@ -115,10 +118,10 @@ export function NewsFeed({ mode }: { mode: Mode }) {
     },
   });
 
-  // Filter options: refresh much less often (30 min)
+  // Filter options: reference data, very stable.
   const filtersQuery = useQuery({
     queryKey: ['newsFeedFilters'],
-    staleTime: 30 * 60 * 1000,
+    staleTime: STABLE_STALE_MS,
     queryFn: async (): Promise<FilterOption> => {
       const [tRes, cRes, pRes, sRes] = await Promise.all([
         supabase.from('themes').select('id, slug, name, color').order('order_index'),
@@ -383,8 +386,44 @@ export function NewsFeed({ mode }: { mode: Mode }) {
       {/* Featured + list */}
       {!loading && featured && (
         <div className="flex flex-col gap-3 pb-4">
-          <FeaturedCard article={featured} />
-          {rest.map((a) => <CompactCard key={a.id} article={a} />)}
+          {featured.kind === 'twitter_post' ? (
+            <TwitterPostCard
+              title={featured.title}
+              summary={featured.summary}
+              url={featured.url}
+              image_url={featured.image_url}
+              published_at={featured.published_at}
+              source={featured.source}
+              candidateName={
+                featured.article_candidates
+                  .map((x) => x.candidate)
+                  .filter((c): c is CandidateLite => !!c)
+                  .map((c) => fullName(c))[0] ?? null
+              }
+            />
+          ) : (
+            <FeaturedCard article={featured} />
+          )}
+          {rest.map((a) => {
+            if (a.kind === 'twitter_post') {
+              const candidate = a.article_candidates
+                .map((x) => x.candidate)
+                .filter((c): c is CandidateLite => !!c)[0] ?? null;
+              return (
+                <TwitterPostCard
+                  key={a.id}
+                  title={a.title}
+                  summary={a.summary}
+                  url={a.url}
+                  image_url={a.image_url}
+                  published_at={a.published_at}
+                  source={a.source}
+                  candidateName={candidate ? fullName(candidate) : null}
+                />
+              );
+            }
+            return <CompactCard key={a.id} article={a} />;
+          })}
         </div>
       )}
     </div>
