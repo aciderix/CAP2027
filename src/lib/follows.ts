@@ -36,13 +36,26 @@ async function mirrorToPreferences(arr: string[]): Promise<void> {
 // user_id). Skipped silently when no token is registered (web, native
 // where registration hasn't happened yet — the cap2027:push-token-ready
 // event will trigger a full re-sync once it does).
+//
+// We deliberately use plain INSERT (not upsert) and swallow duplicate
+// errors (PG code 23505). The reason: upsert lands on the
+// INSERT ... ON CONFLICT DO UPDATE path, which requires a SELECT
+// policy to read the conflicting row — that policy would leak the
+// full (token, candidate_id) list to anyone holding the publishable
+// key. Plain INSERT only needs INSERT, keeping the table read-only
+// for service_role on the server.
 async function pushOneFollowToDb(candidateId: string) {
   const token = getPushToken();
   if (!token) return;
   try {
-    await supabase
+    const { error } = await supabase
       .from('push_token_follows')
-      .upsert({ token, candidate_id: candidateId }, { onConflict: 'token,candidate_id' });
+      .insert({ token, candidate_id: candidateId });
+    // 23505 = unique_violation — the row was already there from a
+    // previous toggle or sync; nothing to do.
+    if (error && (error as any).code !== '23505') {
+      // best-effort: leave it; next syncAllFollowsToDb run retries.
+    }
   } catch {
     // best-effort
   }
@@ -67,16 +80,10 @@ async function syncAllFollowsToDb() {
   if (!token) return;
   const all = [...read()];
   if (all.length === 0) return;
-  try {
-    await supabase
-      .from('push_token_follows')
-      .upsert(
-        all.map((cid) => ({ token, candidate_id: cid })),
-        { onConflict: 'token,candidate_id' },
-      );
-  } catch {
-    // best-effort
-  }
+  // Insert each row individually so a duplicate on one candidate
+  // doesn't fail the whole batch. Fire in parallel — at most a
+  // handful of follows per device.
+  await Promise.all(all.map((cid) => pushOneFollowToDb(cid)));
 }
 
 function write(set: Set<string>) {
@@ -135,21 +142,15 @@ export function useFollowedCandidates() {
     const next = new Set(ids);
     setFollowed(next);
     write(next);
-    // Full re-sync: upsert the new set, then drop anything stale.
+    // Full re-sync: insert each new follow ignoring duplicates,
+    // then drop anything that's no longer in the set.
     void (async () => {
       const token = getPushToken();
       if (!token) return;
       try {
-        if (next.size > 0) {
-          await supabase
-            .from('push_token_follows')
-            .upsert(
-              [...next].map((cid) => ({ token, candidate_id: cid })),
-              { onConflict: 'token,candidate_id' },
-            );
-        }
-        // Remove rows that are no longer in the new set.
         const stillThere = [...next];
+        await Promise.all(stillThere.map((cid) => pushOneFollowToDb(cid)));
+        // Remove rows that are no longer in the new set.
         let q = supabase.from('push_token_follows').delete().eq('token', token);
         if (stillThere.length > 0) q = q.not('candidate_id', 'in', `(${stillThere.join(',')})`);
         await q;
