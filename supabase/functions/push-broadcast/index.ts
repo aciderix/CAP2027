@@ -120,7 +120,8 @@ interface SendInput {
   body?: string;
   url?: string;
   candidate_id?: string;
-  orientation?: string;
+  orientation?: string;          // single — legacy / per-orientation calls
+  orientations?: string[];       // array — single consolidated press notif
 }
 
 Deno.serve(async (req) => {
@@ -164,12 +165,12 @@ Deno.serve(async (req) => {
   }
   const fcmUrl = `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`;
 
-  // Token selection. Three modes, candidate_id > orientation > all:
-  //   1. candidate_id   → only tokens that follow that candidate
-  //   2. orientation    → tokens with no orientation rows (legacy =
-  //                        receive everything) OR rows matching the
-  //                        orientation
-  //   3. (neither)      → broadcast to every registered token
+  // Token selection. Priority:
+  //   1. candidate_id      → tokens that follow that candidate
+  //   2. orientations[]    → union of all matched orientations (single
+  //                           consolidated press notif spanning bords)
+  //   3. orientation       → single orientation (legacy / per-bord)
+  //   4. (neither)         → broadcast to every registered token
   let tokens: { token: string; platform: string }[] = [];
   if (payload.candidate_id) {
     const { data: follows, error: fErr } = await supabase
@@ -183,6 +184,15 @@ Deno.serve(async (req) => {
       token: r.token,
       platform: r.push_tokens?.platform ?? "android",
     }));
+  } else if (payload.orientations && payload.orientations.length > 0) {
+    const { data, error: oErr } = await supabase.rpc(
+      "tokens_for_press_orientations",
+      { orients: payload.orientations },
+    );
+    if (oErr) {
+      return Response.json({ error: "orientations rpc: " + oErr.message }, { status: 500 });
+    }
+    tokens = (data ?? []) as { token: string; platform: string }[];
   } else if (payload.orientation) {
     const { data, error: oErr } = await supabase.rpc(
       "tokens_for_press_orientation",
@@ -248,6 +258,7 @@ Deno.serve(async (req) => {
     totalTokens: tokens.length,
     candidate_id: payload.candidate_id ?? null,
     orientation: payload.orientation ?? null,
+    orientations: payload.orientations ?? null,
     sample_errors: errors,
   });
 });

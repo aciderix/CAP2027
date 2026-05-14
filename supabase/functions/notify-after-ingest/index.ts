@@ -39,7 +39,14 @@ interface ArticleRow {
   article_candidates?: Array<{ candidate: Candidate | null }>;
 }
 
-interface PostPayload { title: string; body: string; url?: string; candidate_id?: string; orientation?: string }
+interface PostPayload {
+  title: string;
+  body: string;
+  url?: string;
+  candidate_id?: string;
+  orientation?: string;
+  orientations?: string[];
+}
 
 async function callBroadcast(payload: PostPayload, dryRun: boolean) {
   if (dryRun) return { dry: true, payload };
@@ -153,30 +160,30 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ---- 2. Per-orientation broadcast for fresh press articles ---------
+  // ---- 2. Consolidated press notif --------------------------------
   //
-  // Group press articles by source orientation. For each orientation
-  // bucket, push-broadcast is called with the orientation tag; the
-  // RPC tokens_for_press_orientation handles the opt-in restrictif
-  // rule (no rows = receive everything, rows = match only).
+  // Press articles can land from sources of different orientations,
+  // but the user expects ONE notif total — not one per bord. We
+  // collect all orientations represented in the batch and dispatch a
+  // single push-broadcast call with the orientations array; the RPC
+  // tokens_for_press_orientations handles the opt-in restrictif rule
+  // (no rows = lenient default, rows = match at least one orientation).
   const pressArticles = articles.filter((a) => a.kind === "article");
-  const pressByOrientation = new Map<string, ArticleRow[]>();
+  const pressOrientations = new Set<string>();
   for (const a of pressArticles) {
-    const o = a.source?.orientation ?? "transverse";
-    if (!pressByOrientation.has(o)) pressByOrientation.set(o, []);
-    pressByOrientation.get(o)!.push(a);
+    pressOrientations.add(a.source?.orientation ?? "transverse");
   }
-  for (const [orientation, bucket] of pressByOrientation.entries()) {
-    const sample = bucket[0];
+  if (pressArticles.length > 0) {
+    const sample = pressArticles[0];
     const pressTitle =
-      bucket.length === 1
+      pressArticles.length === 1
         ? "Une nouvelle actualité"
-        : `${bucket.length} nouvelles actualités`;
+        : `${pressArticles.length} nouvelles actualités`;
     dispatched.push(await callBroadcast({
       title: pressTitle,
       body: (sample.title || "").slice(0, 140) || "Ouvrez CAP 2027 pour les consulter",
       url: sample.url,
-      orientation,
+      orientations: [...pressOrientations],
     }, dryRun));
   }
 
@@ -185,7 +192,7 @@ Deno.serve(async (req) => {
     since,
     per_candidate: perCandidate.size,
     press_articles: pressArticles.length,
-    press_orientations: pressByOrientation.size,
+    press_orientations: [...pressOrientations],
     dispatched,
   });
 });
