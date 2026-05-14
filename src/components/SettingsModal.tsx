@@ -9,7 +9,6 @@ import {
   setNotificationsEnabled as persistNotifs,
 } from '../lib/notifications';
 import { registerPushNotifications } from '../lib/push';
-import { cancelElectionReminders } from '../lib/electionReminders';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -44,10 +43,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setError(null);
     const next = !notifEnabled;
     if (!next) {
-      // Disabling: cancel scheduled reminders, persist, done.
+      // Disabling: persist the pref. FCM-side, the server still has the
+      // token but the OS-level notif channel will be muted by Android
+      // once the user denies permission in system settings (the toggle
+      // here is mainly an in-app "mute" — to fully cut server pushes,
+      // the user must revoke at OS level).
       persistNotifs(false);
       setNotifEnabled(false);
-      await cancelElectionReminders();
       return;
     }
     // Enabling: persist first so the background runner sees it ON

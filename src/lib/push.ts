@@ -27,7 +27,16 @@ import { getNotificationsEnabled } from './notifications';
 
 const VERSION = '1.0.0';
 const DIAG_KEY = 'cap2027.push.diag';
+const TOKEN_KEY = 'cap2027.push.token';
 const NATIVE_CALL_TIMEOUT_MS = 10_000;
+
+/** Latest FCM device token, set after a successful registration. Used
+ *  by lib/follows.ts to mirror per-candidate follows into the
+ *  push_token_follows table so the server can target push notifs. */
+export function getPushToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(TOKEN_KEY);
+}
 
 export interface PushDiag {
   step?: string;
@@ -118,6 +127,9 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
         const preview = token.value.slice(0, 16) + '…';
         writeDiag({ tokenAt: new Date().toISOString(), tokenPreview: preview, step: 'token received' });
         try {
+          localStorage.setItem(TOKEN_KEY, token.value);
+        } catch { /* noop */ }
+        try {
           const { error } = await supabase.from('push_tokens').upsert(
             {
               token: token.value,
@@ -135,6 +147,13 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
         } catch (e: any) {
           writeDiag({ upsertOk: false, upsertError: String(e?.message ?? e) });
         }
+        // Tell lib/follows.ts a token is now available so it can mirror
+        // any locally-stored follows into push_token_follows. Fired even
+        // on token refresh: the row's PK is (token, candidate_id), so a
+        // refreshed token will start an empty server-side follow set
+        // and this re-sync repopulates it.
+        try { window.dispatchEvent(new Event('cap2027:push-token-ready')); }
+        catch { /* noop */ }
       });
 
       PushNotifications.addListener('registrationError', (err: any) => {

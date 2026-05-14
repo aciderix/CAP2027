@@ -38,6 +38,21 @@ export function Sources() {
     },
   });
 
+  // Candidate list — needed by the editor to attach a source to a
+  // candidate. The notify-after-ingest function uses that link to send
+  // "Nouveau post de X" to followers when a new social-media item lands.
+  const candidates = useQuery({
+    queryKey: ['admin', 'candidates-min'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('candidates')
+        .select('id, first_name, last_name, slug')
+        .order('last_name');
+      if (error) throw error;
+      return (data ?? []) as { id: string; first_name: string; last_name: string; slug: string }[];
+    },
+  });
+
   const [editing, setEditing] = useState<Source | 'new' | null>(null);
 
   const toggle = useMutation({
@@ -142,6 +157,7 @@ export function Sources() {
       {editing && (
         <SourceEditor
           source={editing === 'new' ? null : editing}
+          candidates={candidates.data ?? []}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -154,9 +170,10 @@ export function Sources() {
 }
 
 function SourceEditor({
-  source, onClose, onSaved,
+  source, candidates, onClose, onSaved,
 }: {
   source: Source | null;
+  candidates: { id: string; first_name: string; last_name: string; slug: string }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -266,6 +283,24 @@ function SourceEditor({
               <input type="checkbox" checked={form.fetch_via_github} onChange={(e) => set('fetch_via_github', e.target.checked)} />
               <span className="text-sm">Fetch côté GitHub puis POST à <code className="text-[10px]">ingest-from-xml</code></span>
             </label>
+          </Field>
+          <Field
+            label="Candidat lié"
+            wide
+            hint="Optionnel. Pour une source X / YouTube d'un candidat, lie-la ici — la notif deviendra « Nouveau post de … » / « Nouvelle vidéo de … » et ne sera envoyée qu'aux utilisateurs qui suivent ce candidat."
+          >
+            <select
+              value={form.candidate_id ?? ''}
+              onChange={(e) => set('candidate_id', e.target.value || null)}
+              className="input"
+            >
+              <option value="">— Aucun (source non rattachée) —</option>
+              {candidates.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.first_name} {c.last_name}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
 

@@ -4,7 +4,10 @@
 // Requires a Google service account JSON for the Firebase project,
 // stored as the FCM_SERVICE_ACCOUNT_JSON edge-function secret.
 //
-// POST body: { title: string, body: string, url?: string }
+// POST body: { title: string, body: string, url?: string, candidate_id?: string }
+//   - candidate_id: when present, only tokens that follow this candidate
+//     (per public.push_token_follows) receive the notification. Lets
+//     notify-after-ingest dispatch "Nouveau post de X" only to followers.
 //   - or no body (then a sane default of "Nouvelle actualité" is used).
 //
 // GET ?diag=1 returns a non-secret status report (no values leaked):
@@ -112,6 +115,7 @@ interface SendInput {
   title?: string;
   body?: string;
   url?: string;
+  candidate_id?: string;
 }
 
 Deno.serve(async (req) => {
@@ -155,13 +159,30 @@ Deno.serve(async (req) => {
   }
   const fcmUrl = `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`;
 
-  const { data: tokens } = await supabase
-    .from("push_tokens")
-    .select("token, platform");
+  // When candidate_id is set, restrict to tokens that follow it; this is
+  // the per-candidate notif path (Twitter / YouTube post by a followed
+  // candidate). Without it, broadcast to every registered device.
+  let tokens: { token: string; platform: string }[] = [];
+  if (payload.candidate_id) {
+    const { data: follows, error: fErr } = await supabase
+      .from("push_token_follows")
+      .select("token, push_tokens!inner(platform)")
+      .eq("candidate_id", payload.candidate_id);
+    if (fErr) {
+      return Response.json({ error: "follows query: " + fErr.message }, { status: 500 });
+    }
+    tokens = (follows ?? []).map((r: any) => ({
+      token: r.token,
+      platform: r.push_tokens?.platform ?? "android",
+    }));
+  } else {
+    const { data } = await supabase.from("push_tokens").select("token, platform");
+    tokens = (data ?? []) as { token: string; platform: string }[];
+  }
 
   let sent = 0, failed = 0;
   const errors: string[] = [];
-  for (const t of (tokens ?? []) as { token: string; platform: string }[]) {
+  for (const t of tokens) {
     const message = {
       message: {
         token: t.token,
@@ -207,7 +228,8 @@ Deno.serve(async (req) => {
   return Response.json({
     sent,
     failed,
-    totalTokens: tokens?.length ?? 0,
+    totalTokens: tokens.length,
+    candidate_id: payload.candidate_id ?? null,
     sample_errors: errors,
   });
 });

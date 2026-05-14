@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Clock } from 'lucide-react';
 import { useAppConfig, type ElectionRound } from '../lib/appConfig';
-import { scheduleElectionReminders } from '../lib/electionReminders';
 
 function diffDays(targetMs: number, nowMs: number) {
   return Math.ceil((targetMs - nowMs) / 86_400_000);
@@ -35,20 +34,11 @@ export function CountdownBanner() {
     return () => clearInterval(id);
   }, []);
 
-  // Schedule J-1, J-day and result-time local notifications. Idempotent:
-  // stable IDs, so re-scheduling on every render does NOT spam the user.
-  const r1Sched = cfg?.['election.round1']?.scheduled_at;
-  const r2Sched = cfg?.['election.round2']?.scheduled_at;
-  const r1Off = cfg?.['election.round1']?.is_official;
-  const r2Off = cfg?.['election.round2']?.is_official;
-  useEffect(() => {
-    if (!cfg) return;
-    const round1 = cfg['election.round1'];
-    const round2 = cfg['election.round2'];
-    if (round1 || round2) {
-      void scheduleElectionReminders({ round1, round2 });
-    }
-  }, [cfg, r1Sched, r2Sched, r1Off, r2Off]);
+  // Election-day reminders are now scheduled server-side via pg_cron
+  // jobs that fire exact-time POSTs to the dispatch-election-reminders
+  // edge function (see migration 20260514_election_reminders_scheduler).
+  // No local LocalNotifications scheduling here anymore — the FCM
+  // path is more reliable for users who don't reopen the app daily.
 
   const text = computeBannerText(now, cfg?.['election.round1'], cfg?.['election.round2']);
 
