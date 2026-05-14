@@ -131,11 +131,19 @@ Deno.serve(async (req) => {
       // — aggregate. The body picks the most recent item's title.
       const total = twitter.length + youtube.length;
       const latest = (twitter[0] ?? youtube[0]);
-      const kind = twitter.length > 0 && youtube.length > 0
-        ? "publications"
-        : (twitter.length > 0 ? "posts" : "vidéos");
+      // "posts" is masculine ("nouveaux"), "vidéos" and "publications"
+      // are feminine ("nouvelles"). Branch on the mix to pick the
+      // right article.
+      let title: string;
+      if (twitter.length > 0 && youtube.length === 0) {
+        title = `${total} nouveaux posts de ${name}`;
+      } else if (youtube.length > 0 && twitter.length === 0) {
+        title = `${total} nouvelles vidéos de ${name}`;
+      } else {
+        title = `${total} nouvelles publications de ${name}`;
+      }
       dispatched.push(await callBroadcast({
-        title: `${total} nouvelles ${kind} de ${name}`,
+        title,
         body: (latest.title || "").slice(0, 140) || "Ouvrez CAP 2027 pour les consulter",
         url: latest.url,
         candidate_id: candidate.id,
