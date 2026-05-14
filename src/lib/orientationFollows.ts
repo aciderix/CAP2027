@@ -61,12 +61,13 @@ async function pushOneOrientationToDb(orientation: string) {
 async function deleteOneOrientationFromDb(orientation: string) {
   const token = getPushToken();
   if (!token) return;
+  // SECURITY DEFINER RPC — see follows.ts for the rationale (no
+  // SELECT policy means a plain DELETE matches 0 rows under RLS).
   try {
-    await supabase
-      .from('push_token_orientations')
-      .delete()
-      .eq('token', token)
-      .eq('orientation', orientation);
+    await supabase.rpc('unfollow_orientation', {
+      p_token: token,
+      p_orientation: orientation,
+    });
   } catch {
     // best-effort
   }
@@ -128,18 +129,16 @@ export function useFollowedOrientations() {
   }, []);
 
   const clear = useCallback(() => {
-    const prev = [...read()];
     setFollowed(new Set());
     write(new Set());
     void (async () => {
       const token = getPushToken();
       if (!token) return;
       try {
-        await supabase.from('push_token_orientations').delete().eq('token', token);
+        await supabase.rpc('clear_orientations', { p_token: token });
       } catch {
         // best-effort
       }
-      void prev;
     })();
   }, []);
 
