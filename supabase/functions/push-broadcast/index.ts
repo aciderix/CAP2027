@@ -4,11 +4,15 @@
 // Requires a Google service account JSON for the Firebase project,
 // stored as the FCM_SERVICE_ACCOUNT_JSON edge-function secret.
 //
-// POST body: { title: string, body: string, url?: string, candidate_id?: string }
+// POST body: { title, body, url?, candidate_id?, orientation? }
 //   - candidate_id: when present, only tokens that follow this candidate
 //     (per public.push_token_follows) receive the notification. Lets
 //     notify-after-ingest dispatch "Nouveau post de X" only to followers.
-//   - or no body (then a sane default of "Nouvelle actualité" is used).
+//   - orientation: when present, only tokens that either have an
+//     explicit subscription to this orientation OR have no orientation
+//     rows at all (legacy default = receive everything) get the notif.
+//     Routed through the tokens_for_press_orientation RPC.
+//   - candidate_id wins over orientation if both are set.
 //
 // GET ?diag=1 returns a non-secret status report (no values leaked):
 //   { secret_present, project_id, token_count }.
@@ -116,6 +120,7 @@ interface SendInput {
   body?: string;
   url?: string;
   candidate_id?: string;
+  orientation?: string;
 }
 
 Deno.serve(async (req) => {
@@ -159,9 +164,12 @@ Deno.serve(async (req) => {
   }
   const fcmUrl = `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`;
 
-  // When candidate_id is set, restrict to tokens that follow it; this is
-  // the per-candidate notif path (Twitter / YouTube post by a followed
-  // candidate). Without it, broadcast to every registered device.
+  // Token selection. Three modes, candidate_id > orientation > all:
+  //   1. candidate_id   → only tokens that follow that candidate
+  //   2. orientation    → tokens with no orientation rows (legacy =
+  //                        receive everything) OR rows matching the
+  //                        orientation
+  //   3. (neither)      → broadcast to every registered token
   let tokens: { token: string; platform: string }[] = [];
   if (payload.candidate_id) {
     const { data: follows, error: fErr } = await supabase
@@ -175,6 +183,15 @@ Deno.serve(async (req) => {
       token: r.token,
       platform: r.push_tokens?.platform ?? "android",
     }));
+  } else if (payload.orientation) {
+    const { data, error: oErr } = await supabase.rpc(
+      "tokens_for_press_orientation",
+      { orient: payload.orientation },
+    );
+    if (oErr) {
+      return Response.json({ error: "orientation rpc: " + oErr.message }, { status: 500 });
+    }
+    tokens = (data ?? []) as { token: string; platform: string }[];
   } else {
     const { data } = await supabase.from("push_tokens").select("token, platform");
     tokens = (data ?? []) as { token: string; platform: string }[];
@@ -230,6 +247,7 @@ Deno.serve(async (req) => {
     failed,
     totalTokens: tokens.length,
     candidate_id: payload.candidate_id ?? null,
+    orientation: payload.orientation ?? null,
     sample_errors: errors,
   });
 });

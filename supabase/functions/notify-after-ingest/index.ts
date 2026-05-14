@@ -35,10 +35,11 @@ interface ArticleRow {
   url: string;
   published_at: string;
   kind: string;
+  source?: { orientation: string | null } | null;
   article_candidates?: Array<{ candidate: Candidate | null }>;
 }
 
-interface PostPayload { title: string; body: string; url?: string; candidate_id?: string }
+interface PostPayload { title: string; body: string; url?: string; candidate_id?: string; orientation?: string }
 
 async function callBroadcast(payload: PostPayload, dryRun: boolean) {
   if (dryRun) return { dry: true, payload };
@@ -66,6 +67,7 @@ Deno.serve(async (req) => {
     .from("news_articles")
     .select(`
       id, title, summary, url, published_at, kind,
+      source:news_sources(orientation),
       article_candidates(candidate:candidates(id, first_name, last_name))
     `)
     .gt("fetched_at", since)
@@ -151,18 +153,30 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ---- 2. Generic broadcast for fresh press articles -----------------
+  // ---- 2. Per-orientation broadcast for fresh press articles ---------
+  //
+  // Group press articles by source orientation. For each orientation
+  // bucket, push-broadcast is called with the orientation tag; the
+  // RPC tokens_for_press_orientation handles the opt-in restrictif
+  // rule (no rows = receive everything, rows = match only).
   const pressArticles = articles.filter((a) => a.kind === "article");
-  if (pressArticles.length > 0) {
-    const sample = pressArticles[0];
+  const pressByOrientation = new Map<string, ArticleRow[]>();
+  for (const a of pressArticles) {
+    const o = a.source?.orientation ?? "transverse";
+    if (!pressByOrientation.has(o)) pressByOrientation.set(o, []);
+    pressByOrientation.get(o)!.push(a);
+  }
+  for (const [orientation, bucket] of pressByOrientation.entries()) {
+    const sample = bucket[0];
     const pressTitle =
-      pressArticles.length === 1
+      bucket.length === 1
         ? "Une nouvelle actualité"
-        : `${pressArticles.length} nouvelles actualités`;
+        : `${bucket.length} nouvelles actualités`;
     dispatched.push(await callBroadcast({
       title: pressTitle,
       body: (sample.title || "").slice(0, 140) || "Ouvrez CAP 2027 pour les consulter",
       url: sample.url,
+      orientation,
     }, dryRun));
   }
 
@@ -171,6 +185,7 @@ Deno.serve(async (req) => {
     since,
     per_candidate: perCandidate.size,
     press_articles: pressArticles.length,
+    press_orientations: pressByOrientation.size,
     dispatched,
   });
 });

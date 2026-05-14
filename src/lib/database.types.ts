@@ -394,6 +394,20 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["push_token_follows"]["Insert"]>
         Relationships: []
       }
+      push_token_orientations: {
+        Row: {
+          token: string
+          orientation: string
+          created_at: string
+        }
+        Insert: {
+          token: string
+          orientation: string
+          created_at?: string
+        }
+        Update: Partial<Database["public"]["Tables"]["push_token_orientations"]["Insert"]>
+        Relationships: []
+      }
       election_reminders_sent: {
         Row: {
           milestone_key: string
