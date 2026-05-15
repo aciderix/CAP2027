@@ -32,7 +32,9 @@ const SHARE_URL = 'https://cap2027.fr';
 export interface ShareTimings {
   total: number;
   image: number;
+  b64: number;
   write: number;
+  share: number;
   size: number;
 }
 let lastTimings: ShareTimings | null = null;
@@ -281,6 +283,24 @@ async function generateImage(scores: ScoreLike[], totalAnswered: number, totalPr
   });
 }
 
+// Fast base64 encoder: chunked btoa on the raw bytes. For sub-MB
+// blobs this is consistently faster than FileReader.readAsDataURL
+// in Android WebView because it skips data-URL string assembly and
+// the prefix split.
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 0x8000; // 32 KB chunks to stay under fromCharCode arg limit
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(
+      null,
+      bytes.subarray(i, Math.min(i + chunk, bytes.length)) as unknown as number[],
+    );
+  }
+  return btoa(binary);
+}
+
 function buildShareText(scores: ScoreLike[]): string {
   const top = scores[0];
   if (!top || top.answered === 0) {
@@ -310,31 +330,35 @@ export async function shareBoussoleResults(
   if (Capacitor.isNativePlatform()) {
     try {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const base64 = await blobToBase64(blob);
+      const tB64 = performance.now();
+      console.log(`[share] base64 in ${(tB64 - tImg).toFixed(0)}ms`);
       const filename = `cap2027-boussole-${Date.now()}.jpg`;
-      // Capacitor 6+: Filesystem.writeFile accepts a Blob directly,
-      // skipping the FileReader→base64→native-base64-decode round-trip.
-      // Type-cast because @capacitor/filesystem's older TS defs still
-      // narrow `data` to string in some versions.
       const saved = await Filesystem.writeFile({
         path: filename,
-        data: blob as unknown as string,
+        data: base64,
         directory: Directory.Cache,
       });
       const tFs = performance.now();
-      console.log(`[share] fs write in ${(tFs - tImg).toFixed(0)}ms → ${saved.uri}`);
+      console.log(`[share] fs write in ${(tFs - tB64).toFixed(0)}ms → ${saved.uri}`);
       const { Share } = await import('@capacitor/share');
+      const tShareStart = performance.now();
       await Share.share({
         title: 'Mes affinités CAP 2027',
         text,
         url: saved.uri,
         dialogTitle: 'Partager mes résultats',
       });
-      const total = performance.now() - t0;
+      const tShareEnd = performance.now();
+      console.log(`[share] share intent ${(tShareEnd - tShareStart).toFixed(0)}ms`);
+      const total = tShareEnd - t0;
       console.log(`[share] total ${total.toFixed(0)}ms`);
       lastTimings = {
         total: Math.round(total),
         image: Math.round(tImg - t0),
-        write: Math.round(tFs - tImg),
+        b64: Math.round(tB64 - tImg),
+        write: Math.round(tFs - tB64),
+        share: Math.round(tShareEnd - tShareStart),
         size: blob.size,
       };
       return { ok: true };

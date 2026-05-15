@@ -751,7 +751,7 @@ function ShareInline({
 }: { scores: CandidateScore[]; totalAnswered: number; totalProps: number }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [timings, setTimings] = useState<{ total: number; image: number; write: number; size: number } | null>(null);
+  const [timings, setTimings] = useState<{ total: number; image: number; b64: number; write: number; share: number; size: number } | null>(null);
 
   // Warm the CORS photo cache as soon as Results renders, so by the
   // time the user taps Partager the network round-trip is already done.
@@ -789,7 +789,7 @@ function ShareInline({
       )}
       {timings && (
         <div className="text-[10px] text-white/70 tabular-nums leading-tight">
-          ⏱ {timings.total}ms total — img {timings.image}ms · write {timings.write}ms · {(timings.size / 1024).toFixed(0)} KB
+          ⏱ {timings.total}ms — img {timings.image} · b64 {timings.b64} · write {timings.write} · share {timings.share} · {(timings.size / 1024).toFixed(0)}KB
         </div>
       )}
     </div>
