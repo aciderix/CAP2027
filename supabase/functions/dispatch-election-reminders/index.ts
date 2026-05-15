@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
       "Content-Type": "application/json",
       Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
     },
-    body: JSON.stringify(notif),
+    body: JSON.stringify({ ...notif, type: "election_milestone" }),
   });
 
   let broadcastResult: any = null;

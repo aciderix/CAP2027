@@ -24,6 +24,7 @@ import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { supabase } from './supabase';
 import { getNotificationsEnabled } from './notifications';
+import { queryClient } from './queryClient';
 
 const VERSION = '1.0.0';
 const DIAG_KEY = 'cap2027.push.diag';
@@ -162,9 +163,60 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
 
       PushNotifications.addListener('pushNotificationReceived', async (notif) => {
         writeDiag({ lastNotifAt: new Date().toISOString() });
-        // Bell will refresh on the next visibility / focus event;
-        // nothing else to do — the OS already rendered the notif.
-        void notif;
+        // Invalidate the right TanStack Query caches so the app shows
+        // fresh content as soon as the user opens it. Without this,
+        // the 24 h staleTime on reference data (candidates, programmes,
+        // app_config) makes the in-app view lag a full day behind the
+        // notification.
+        try {
+          const t = (notif?.data as { type?: string } | undefined)?.type;
+          switch (t) {
+            case 'candidate_published':
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
+                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
+                queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
+              ]);
+              break;
+            case 'new_programme':
+              // Programmes are loaded via a useEffect in ProgrammesList /
+              // ProgrammeDetail (no TanStack key). They re-fetch on
+              // remount; nothing else to invalidate here. The fiche
+              // candidate detail cache covers proposals separately.
+              await queryClient.invalidateQueries({ queryKey: ['candidateDetail'] });
+              break;
+            case 'date_official':
+              await queryClient.invalidateQueries({ queryKey: ['appConfig'] });
+              break;
+            case 'parrainages_update':
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['parrainagesLatest'] }),
+                queryClient.invalidateQueries({ queryKey: ['parrainagesAll'] }),
+                queryClient.invalidateQueries({ queryKey: ['parrainagesForCandidate'] }),
+                queryClient.invalidateQueries({ queryKey: ['appConfig'] }),
+              ]);
+              break;
+            case 'article_press':
+            case 'article_social':
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['articles'] }),
+                queryClient.invalidateQueries({ queryKey: ['myFeedArticles'] }),
+                queryClient.invalidateQueries({ queryKey: ['featuredHero'] }),
+                queryClient.invalidateQueries({ queryKey: ['unseenArticles'] }),
+              ]);
+              break;
+            case 'election_milestone':
+            default:
+              // Election milestone notifs (eve/day/results/proc/etc.)
+              // carry no in-app data change beyond appConfig timing,
+              // which is already covered by the date_official path
+              // when the date flips. No invalidation needed.
+              break;
+          }
+        } catch {
+          // best-effort — invalidate failures don't affect the notif itself
+        }
       });
 
       PushNotifications.addListener('pushNotificationActionPerformed', () => {

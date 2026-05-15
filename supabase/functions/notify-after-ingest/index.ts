@@ -46,6 +46,7 @@ interface PostPayload {
   candidate_id?: string;
   orientation?: string;
   orientations?: string[];
+  type?: string;
 }
 
 async function callBroadcast(payload: PostPayload, dryRun: boolean) {
@@ -126,6 +127,7 @@ Deno.serve(async (req) => {
           || "Ouvrez CAP 2027 pour le consulter",
         url: a.url,
         candidate_id: candidate.id,
+        type: "article_social",
       }, dryRun));
     } else if (youtube.length === 1 && twitter.length === 0) {
       const a = youtube[0];
@@ -134,15 +136,13 @@ Deno.serve(async (req) => {
         body: (a.title || "").slice(0, 140) || "Ouvrez CAP 2027 pour la voir",
         url: a.url,
         candidate_id: candidate.id,
+        type: "article_social",
       }, dryRun));
     } else {
       // Multiple posts/videos for the same candidate in the same window
       // — aggregate. The body picks the most recent item's title.
       const total = twitter.length + youtube.length;
       const latest = (twitter[0] ?? youtube[0]);
-      // "posts" is masculine ("nouveaux"), "vidéos" and "publications"
-      // are feminine ("nouvelles"). Branch on the mix to pick the
-      // right article.
       let title: string;
       if (twitter.length > 0 && youtube.length === 0) {
         title = `${total} nouveaux posts de ${name}`;
@@ -156,6 +156,7 @@ Deno.serve(async (req) => {
         body: (latest.title || "").slice(0, 140) || "Ouvrez CAP 2027 pour les consulter",
         url: latest.url,
         candidate_id: candidate.id,
+        type: "article_social",
       }, dryRun));
     }
   }
@@ -184,6 +185,7 @@ Deno.serve(async (req) => {
       body: (sample.title || "").slice(0, 140) || "Ouvrez CAP 2027 pour les consulter",
       url: sample.url,
       orientations: [...pressOrientations],
+      type: "article_press",
     }, dryRun));
   }
 

@@ -120,8 +120,13 @@ interface SendInput {
   body?: string;
   url?: string;
   candidate_id?: string;
-  orientation?: string;          // single — legacy / per-orientation calls
-  orientations?: string[];       // array — single consolidated press notif
+  orientation?: string;
+  orientations?: string[];
+  // Category tag for client-side cache invalidation on reception.
+  // The push.ts pushNotificationReceived listener reads notif.data.type
+  // and invalidates the matching TanStack Query keys so the app shows
+  // fresh content the moment the user opens it (no 24 h wait).
+  type?: string;
 }
 
 Deno.serve(async (req) => {
@@ -210,11 +215,18 @@ Deno.serve(async (req) => {
   let sent = 0, failed = 0;
   const errors: string[] = [];
   for (const t of tokens) {
+    // FCM `data` is sent alongside the notification block. Capacitor
+    // exposes it on the pushNotificationReceived event so the client
+    // can decide what to invalidate.
+    const fcmData: Record<string, string> = {};
+    if (payload.url) fcmData.url = payload.url;
+    if (payload.type) fcmData.type = payload.type;
+    if (payload.candidate_id) fcmData.candidate_id = payload.candidate_id;
     const message = {
       message: {
         token: t.token,
         notification: { title, body },
-        data: payload.url ? { url: payload.url } : undefined,
+        data: Object.keys(fcmData).length > 0 ? fcmData : undefined,
         android: {
           priority: "HIGH",
           notification: {
