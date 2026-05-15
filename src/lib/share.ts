@@ -27,6 +27,19 @@ interface ScoreLike {
 
 const SHARE_URL = 'https://cap2027.fr';
 
+// Debug: last share's per-phase timings, exposed so the in-app UI can
+// surface them without needing chrome://inspect.
+export interface ShareTimings {
+  total: number;
+  image: number;
+  write: number;
+  size: number;
+}
+let lastTimings: ShareTimings | null = null;
+export function getLastShareTimings(): ShareTimings | null {
+  return lastTimings;
+}
+
 function fullName(c: ScoreLike['candidate']) {
   return `${c.first_name} ${c.last_name}`.trim();
 }
@@ -102,13 +115,20 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 async function generateImage(scores: ScoreLike[], totalAnswered: number, totalProps: number): Promise<Blob> {
+  // 4:5 portrait. Bitmap is 900x1125 (down from 1080x1350) — cuts JPEG
+  // encoding time roughly in half on mid-range Android with no visible
+  // quality drop at share-card viewing distances. We still draw in the
+  // original 1080x1350 coordinate space via ctx.scale() so all the
+  // layout math below stays unchanged.
   const W = 1080;
   const H = 1350;
+  const SCALE = 0.834; // 900 / 1080
   const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
+  canvas.width = Math.round(W * SCALE);
+  canvas.height = Math.round(H * SCALE);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('canvas 2d unsupported');
+  ctx.scale(SCALE, SCALE);
 
   // Background gradient — same blue family as the in-app hero card
   const grad = ctx.createLinearGradient(0, 0, W, H);
@@ -270,19 +290,6 @@ function buildShareText(scores: ScoreLike[]): string {
   return `Mon top match pour la présidentielle 2027 selon CAP 2027 : ${fullName(top.candidate)} (${sign}${top.total}).\n\nFais le test : ${SHARE_URL}`;
 }
 
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
-      // result is "data:image/png;base64,XXX"; strip the prefix
-      resolve(result.split(',')[1] ?? '');
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
-
 export async function shareBoussoleResults(
   scores: ScoreLike[],
   totalAnswered: number,
@@ -303,17 +310,18 @@ export async function shareBoussoleResults(
   if (Capacitor.isNativePlatform()) {
     try {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
-      const base64 = await blobToBase64(blob);
-      const tB64 = performance.now();
-      console.log(`[share] base64 in ${(tB64 - tImg).toFixed(0)}ms`);
       const filename = `cap2027-boussole-${Date.now()}.jpg`;
+      // Capacitor 6+: Filesystem.writeFile accepts a Blob directly,
+      // skipping the FileReader→base64→native-base64-decode round-trip.
+      // Type-cast because @capacitor/filesystem's older TS defs still
+      // narrow `data` to string in some versions.
       const saved = await Filesystem.writeFile({
         path: filename,
-        data: base64,
+        data: blob as unknown as string,
         directory: Directory.Cache,
       });
       const tFs = performance.now();
-      console.log(`[share] fs write in ${(tFs - tB64).toFixed(0)}ms → ${saved.uri}`);
+      console.log(`[share] fs write in ${(tFs - tImg).toFixed(0)}ms → ${saved.uri}`);
       const { Share } = await import('@capacitor/share');
       await Share.share({
         title: 'Mes affinités CAP 2027',
@@ -321,7 +329,14 @@ export async function shareBoussoleResults(
         url: saved.uri,
         dialogTitle: 'Partager mes résultats',
       });
-      console.log(`[share] total ${(performance.now() - t0).toFixed(0)}ms`);
+      const total = performance.now() - t0;
+      console.log(`[share] total ${total.toFixed(0)}ms`);
+      lastTimings = {
+        total: Math.round(total),
+        image: Math.round(tImg - t0),
+        write: Math.round(tFs - tImg),
+        size: blob.size,
+      };
       return { ok: true };
     } catch (e: any) {
       return { ok: false, reason: 'native: ' + (e?.message ?? e) };

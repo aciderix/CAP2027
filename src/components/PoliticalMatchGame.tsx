@@ -8,7 +8,7 @@ import {
 import { Button } from './ui/Button';
 import { supabase } from '../lib/supabase';
 import type { Tables } from '../lib/database.types';
-import { shareBoussoleResults, preloadShareImages, preloadCandidatePhotos } from '../lib/share';
+import { shareBoussoleResults, preloadShareImages, preloadCandidatePhotos, getLastShareTimings } from '../lib/share';
 
 type Stance = 'pour' | 'contre' | 'neutre';
 type Phase = 'tutorial' | 'loading' | 'resume_prompt' | 'game' | 'results' | 'error';
@@ -751,6 +751,7 @@ function ShareInline({
 }: { scores: CandidateScore[]; totalAnswered: number; totalProps: number }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [timings, setTimings] = useState<{ total: number; image: number; write: number; size: number } | null>(null);
 
   // Warm the CORS photo cache as soon as Results renders, so by the
   // time the user taps Partager the network round-trip is already done.
@@ -766,6 +767,7 @@ function ShareInline({
     if (!res.ok) {
       setErr(res.reason ?? 'erreur inconnue');
     }
+    setTimings(getLastShareTimings());
     setBusy(false);
   };
 
@@ -783,6 +785,11 @@ function ShareInline({
       {err && (
         <div className="text-[11px] text-white bg-rose-500/30 border border-rose-100/30 rounded-lg px-2 py-1">
           {err}
+        </div>
+      )}
+      {timings && (
+        <div className="text-[10px] text-white/70 tabular-nums leading-tight">
+          ⏱ {timings.total}ms total — img {timings.image}ms · write {timings.write}ms · {(timings.size / 1024).toFixed(0)} KB
         </div>
       )}
     </div>
