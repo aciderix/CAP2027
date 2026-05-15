@@ -39,14 +39,41 @@ function partyLabel(p: ScoreLike['candidate']['parties']): string {
   return p?.name || p?.abbreviation || '';
 }
 
+// Module-level cache of CORS-loaded images so we don't refetch
+// between preload (on Results mount) and the actual share click,
+// and across repeated shares within the same session.
+const imageCache = new Map<string, Promise<HTMLImageElement>>();
+
 function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
+  const cached = imageCache.get(src);
+  if (cached) return cached;
+  const p = new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('image load failed: ' + src));
+    img.onerror = () => {
+      imageCache.delete(src); // don't cache failures
+      reject(new Error('image load failed: ' + src));
+    };
     img.src = src;
   });
+  imageCache.set(src, p);
+  return p;
+}
+
+// Fire-and-forget warm-up. Called from the Results screen as soon as
+// it renders so that by the time the user taps "Partager", the
+// candidate photos are already decoded and ready to draw.
+export function preloadShareImages(scores: ScoreLike[]) {
+  const top3 = scores.slice(0, 3);
+  for (const s of top3) {
+    const primary = s.candidate.photo_url || fallbackPhoto(s.candidate.gender);
+    loadImage(primary).catch(() => {
+      // fall back silently
+      const fb = fallbackPhoto(s.candidate.gender);
+      if (fb !== primary) loadImage(fb).catch(() => {});
+    });
+  }
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -104,6 +131,24 @@ async function generateImage(scores: ScoreLike[], totalAnswered: number, totalPr
   const cardGap = 30;
   const cardY0 = 300;
 
+  // Parallel-fetch all candidate photos before drawing. Single
+  // Promise.all turns 3 sequential round-trips into one — biggest
+  // perf win in this whole function.
+  const photos: (HTMLImageElement | null)[] = await Promise.all(
+    top3.map(async (s) => {
+      const primary = s.candidate.photo_url || fallbackPhoto(s.candidate.gender);
+      try {
+        return await loadImage(primary);
+      } catch {
+        try {
+          return await loadImage(fallbackPhoto(s.candidate.gender));
+        } catch {
+          return null;
+        }
+      }
+    }),
+  );
+
   for (let i = 0; i < top3.length; i++) {
     const s = top3[i];
     const y = cardY0 + i * (cardH + cardGap);
@@ -123,16 +168,7 @@ async function generateImage(scores: ScoreLike[], totalAnswered: number, totalPr
     const photoR = 70;
     const photoX = cardX + 150 + photoR;
     const photoY = y + cardH / 2;
-    let img: HTMLImageElement | null = null;
-    try {
-      img = await loadImage(s.candidate.photo_url || fallbackPhoto(s.candidate.gender));
-    } catch {
-      try {
-        img = await loadImage(fallbackPhoto(s.candidate.gender));
-      } catch {
-        img = null;
-      }
-    }
+    const img = photos[i];
     if (img) {
       ctx.save();
       ctx.beginPath();

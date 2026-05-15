@@ -8,7 +8,7 @@ import {
 import { Button } from './ui/Button';
 import { supabase } from '../lib/supabase';
 import type { Tables } from '../lib/database.types';
-import { shareBoussoleResults } from '../lib/share';
+import { shareBoussoleResults, preloadShareImages } from '../lib/share';
 
 type Stance = 'pour' | 'contre' | 'neutre';
 type Phase = 'tutorial' | 'loading' | 'resume_prompt' | 'game' | 'results' | 'error';
@@ -747,6 +747,12 @@ function ShareInline({
 }: { scores: CandidateScore[]; totalAnswered: number; totalProps: number }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Warm the CORS photo cache as soon as Results renders, so by the
+  // time the user taps Partager the network round-trip is already done.
+  useEffect(() => {
+    preloadShareImages(scores);
+  }, [scores]);
 
   const handle = async () => {
     if (busy) return;
