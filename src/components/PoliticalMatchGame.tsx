@@ -3,11 +3,12 @@ import { motion, useAnimation, PanInfo } from 'motion/react';
 import {
   ArrowLeft, ArrowRight, ArrowUp,
   CheckCircle, XCircle, HelpCircle,
-  RotateCcw, Trophy, ChevronRight,
+  RotateCcw, Trophy, ChevronRight, Share2,
 } from 'lucide-react';
 import { Button } from './ui/Button';
 import { supabase } from '../lib/supabase';
 import type { Tables } from '../lib/database.types';
+import { shareBoussoleResults } from '../lib/share';
 
 type Stance = 'pour' | 'contre' | 'neutre';
 type Phase = 'tutorial' | 'loading' | 'resume_prompt' | 'game' | 'results' | 'error';
@@ -723,6 +724,8 @@ function Results({
         })}
       </div>
 
+      <ShareButton scores={scores} totalAnswered={totalAnswered} totalProps={totalProps} />
+
       <div className="flex flex-col sm:flex-row gap-2 mt-2">
         {onResume && (
           <Button onClick={onResume} className="flex-1 bg-[#102a5c] hover:bg-[#153b82] text-white py-2.5 rounded-xl gap-2">
@@ -736,6 +739,45 @@ function Results({
           Fermer
         </Button>
       </div>
+    </div>
+  );
+}
+
+function ShareButton({
+  scores, totalAnswered, totalProps,
+}: { scores: CandidateScore[]; totalAnswered: number; totalProps: number }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const handle = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    const res = await shareBoussoleResults(scores, totalAnswered, totalProps);
+    if (!res.ok) {
+      setErr(res.reason ?? 'erreur inconnue');
+    }
+    setBusy(false);
+  };
+
+  const hasAnswers = scores.some((s) => s.answered > 0);
+  if (!hasAnswers) return null;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Button
+        onClick={handle}
+        disabled={busy}
+        className="w-full bg-white hover:bg-slate-50 border border-[#102a5c]/15 text-[#102a5c] py-2.5 rounded-xl gap-2 font-bold"
+      >
+        <Share2 className="w-4 h-4" />
+        {busy ? 'Génération…' : 'Partager mes résultats'}
+      </Button>
+      {err && (
+        <div className="text-[11px] text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1">
+          {err}
+        </div>
+      )}
     </div>
   );
 }
