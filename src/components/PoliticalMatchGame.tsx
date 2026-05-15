@@ -8,7 +8,7 @@ import {
 import { Button } from './ui/Button';
 import { supabase } from '../lib/supabase';
 import type { Tables } from '../lib/database.types';
-import { shareBoussoleResults, preloadShareImages } from '../lib/share';
+import { shareBoussoleResults, preloadShareImages, preloadCandidatePhotos } from '../lib/share';
 
 type Stance = 'pour' | 'contre' | 'neutre';
 type Phase = 'tutorial' | 'loading' | 'resume_prompt' | 'game' | 'results' | 'error';
@@ -151,6 +151,10 @@ export function PoliticalMatchGame({ onClose }: { onClose: () => void }) {
       const cands = (candRes.data ?? []) as unknown as CandidateLite[];
       setPropositions(props);
       setCandidates(cands);
+
+      // Warm the CORS image cache early so the share image is
+      // ready instantly when the user reaches the Results screen.
+      preloadCandidatePhotos(cands);
 
       const current = loadAnswers();
       setAnswers(current);

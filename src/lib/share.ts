@@ -69,10 +69,21 @@ export function preloadShareImages(scores: ScoreLike[]) {
   for (const s of top3) {
     const primary = s.candidate.photo_url || fallbackPhoto(s.candidate.gender);
     loadImage(primary).catch(() => {
-      // fall back silently
       const fb = fallbackPhoto(s.candidate.gender);
       if (fb !== primary) loadImage(fb).catch(() => {});
     });
+  }
+}
+
+// Aggressively warm the cache from raw candidate data — called when
+// candidates first load at game start, ~30s+ before Results renders.
+// Every candidate is preloaded so any top-3 permutation is hot.
+export function preloadCandidatePhotos(
+  candidates: Array<{ photo_url: string | null; gender: string | null }>,
+) {
+  for (const c of candidates) {
+    const url = c.photo_url || fallbackPhoto(c.gender);
+    loadImage(url).catch(() => {});
   }
 }
 
@@ -233,11 +244,19 @@ async function generateImage(scores: ScoreLike[], totalAnswered: number, totalPr
   ctx.font = '24px Inter, system-ui, sans-serif';
   ctx.fillText("S'informer. Comparer. Choisir.", W / 2, H - 50);
 
+  // JPEG is ~3-4x faster to encode than PNG in Android WebView and
+  // gives a 60% smaller file. Quality 0.9 is visually indistinguishable
+  // for photos + flat color UI text.
   return new Promise<Blob>((resolve, reject) => {
+    const t = performance.now();
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('toBlob failed'))),
-      'image/png',
-      0.95,
+      (blob) => {
+        console.log(`[share] toBlob in ${(performance.now() - t).toFixed(0)}ms`);
+        if (blob) resolve(blob);
+        else reject(new Error('toBlob failed'));
+      },
+      'image/jpeg',
+      0.9,
     );
   });
 }
@@ -269,12 +288,15 @@ export async function shareBoussoleResults(
   totalAnswered: number,
   totalProps: number,
 ): Promise<{ ok: boolean; reason?: string }> {
+  const t0 = performance.now();
   let blob: Blob;
   try {
     blob = await generateImage(scores, totalAnswered, totalProps);
   } catch (e: any) {
     return { ok: false, reason: 'image: ' + (e?.message ?? e) };
   }
+  const tImg = performance.now();
+  console.log(`[share] image generated in ${(tImg - t0).toFixed(0)}ms (${blob.size} bytes, ${blob.type})`);
 
   const text = buildShareText(scores);
 
@@ -282,12 +304,16 @@ export async function shareBoussoleResults(
     try {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
       const base64 = await blobToBase64(blob);
-      const filename = `cap2027-boussole-${Date.now()}.png`;
+      const tB64 = performance.now();
+      console.log(`[share] base64 in ${(tB64 - tImg).toFixed(0)}ms`);
+      const filename = `cap2027-boussole-${Date.now()}.jpg`;
       const saved = await Filesystem.writeFile({
         path: filename,
         data: base64,
         directory: Directory.Cache,
       });
+      const tFs = performance.now();
+      console.log(`[share] fs write in ${(tFs - tB64).toFixed(0)}ms → ${saved.uri}`);
       const { Share } = await import('@capacitor/share');
       await Share.share({
         title: 'Mes affinités CAP 2027',
@@ -295,6 +321,7 @@ export async function shareBoussoleResults(
         url: saved.uri,
         dialogTitle: 'Partager mes résultats',
       });
+      console.log(`[share] total ${(performance.now() - t0).toFixed(0)}ms`);
       return { ok: true };
     } catch (e: any) {
       return { ok: false, reason: 'native: ' + (e?.message ?? e) };
@@ -303,7 +330,7 @@ export async function shareBoussoleResults(
 
   // Web: try navigator.share with the file, then fallback to download.
   try {
-    const file = new File([blob], 'cap2027-boussole.png', { type: 'image/png' });
+    const file = new File([blob], 'cap2027-boussole.jpg', { type: 'image/jpeg' });
     if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [file] })) {
       await navigator.share({
         title: 'Mes affinités CAP 2027',
@@ -320,7 +347,7 @@ export async function shareBoussoleResults(
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'cap2027-boussole.png';
+    a.download = 'cap2027-boussole.jpg';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
