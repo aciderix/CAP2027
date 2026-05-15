@@ -668,6 +668,7 @@ function Results({
               {top.total > 0 ? '+' : ''}{top.total}
             </div>
           </div>
+          <ShareInline scores={scores} totalAnswered={totalAnswered} totalProps={totalProps} />
         </div>
       )}
 
@@ -724,8 +725,6 @@ function Results({
         })}
       </div>
 
-      <ShareButton scores={scores} totalAnswered={totalAnswered} totalProps={totalProps} />
-
       <div className="flex flex-col sm:flex-row gap-2 mt-2">
         {onResume && (
           <Button onClick={onResume} className="flex-1 bg-[#102a5c] hover:bg-[#153b82] text-white py-2.5 rounded-xl gap-2">
@@ -743,7 +742,7 @@ function Results({
   );
 }
 
-function ShareButton({
+function ShareInline({
   scores, totalAnswered, totalProps,
 }: { scores: CandidateScore[]; totalAnswered: number; totalProps: number }) {
   const [busy, setBusy] = useState(false);
@@ -760,21 +759,19 @@ function ShareButton({
     setBusy(false);
   };
 
-  const hasAnswers = scores.some((s) => s.answered > 0);
-  if (!hasAnswers) return null;
-
   return (
-    <div className="flex flex-col gap-1">
-      <Button
+    <div className="mt-4 pt-4 border-t border-white/15 flex flex-col gap-1.5">
+      <button
+        type="button"
         onClick={handle}
         disabled={busy}
-        className="w-full bg-white hover:bg-slate-50 border border-[#102a5c]/15 text-[#102a5c] py-2.5 rounded-xl gap-2 font-bold"
+        className="w-full inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-100 active:bg-slate-200 text-[#102a5c] font-bold text-sm py-2.5 px-4 rounded-xl transition-colors disabled:opacity-60"
       >
         <Share2 className="w-4 h-4" />
-        {busy ? 'Génération…' : 'Partager mes résultats'}
-      </Button>
+        {busy ? 'Génération de l’image…' : 'Partager mes résultats'}
+      </button>
       {err && (
-        <div className="text-[11px] text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1">
+        <div className="text-[11px] text-white bg-rose-500/30 border border-rose-100/30 rounded-lg px-2 py-1">
           {err}
         </div>
       )}
