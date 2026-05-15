@@ -22,6 +22,7 @@ import { ParrainagesCard } from './components/ParrainagesCard';
 import { ParrainagesList } from './components/ParrainagesList';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
+import { VideoModal } from './components/VideoModal';
 import {
   useResumeNotificationsHook,
   maybeAskFirstLaunchPermission,
@@ -296,6 +297,7 @@ export default function App() {
         </motion.div>
       </main>
       <BottomNav activeTab={activeTab} setActiveTab={handleTabChange} />
+      <VideoModal />
     </div>
     </>
   );

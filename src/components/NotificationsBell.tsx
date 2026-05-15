@@ -1,6 +1,7 @@
 import { Bell, ExternalLink, Check, BadgeCheck } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useUnseenArticles, markAllSeen, type UnseenArticle } from '../lib/notifications';
+import { openLink } from '../lib/openLink';
 
 function relativeTime(iso: string) {
   const d = new Date(iso);
@@ -88,8 +89,7 @@ function NotifRow({ article }: { article: UnseenArticle }) {
     <li>
       <a
         href={article.url}
-        target="_blank"
-        rel="noopener noreferrer"
+        onClick={(e) => { e.preventDefault(); void openLink(article.url); }}
         className="block px-4 py-3 hover:bg-slate-50 transition-colors"
       >
         <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mb-0.5">

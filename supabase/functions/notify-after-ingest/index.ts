@@ -170,16 +170,28 @@ Deno.serve(async (req) => {
   // tokens_for_press_orientations handles the opt-in restrictif rule
   // (no rows = lenient default, rows = match at least one orientation).
   const pressArticles = articles.filter((a) => a.kind === "article");
+  // Aussi inclure les twitter_post / youtube_video qui ne sont liés à
+  // aucun candidat (ex: chaîne YouTube de Brut, post X d'un média
+  // généraliste). Ils tombent comme la presse dans le broadcast par
+  // orientation pour que les utilisateurs reçoivent quand même la
+  // notif. Les vidéos / posts liés à un candidat ont déjà été traités
+  // dans la boucle perCandidate ci-dessus.
+  const orphanMedia = articles.filter((a) => {
+    if (a.kind !== "twitter_post" && a.kind !== "youtube_video") return false;
+    const linked = (a.article_candidates ?? []).some((l) => !!l.candidate);
+    return !linked;
+  });
+  const pressItems = [...pressArticles, ...orphanMedia];
   const pressOrientations = new Set<string>();
-  for (const a of pressArticles) {
+  for (const a of pressItems) {
     pressOrientations.add(a.source?.orientation ?? "transverse");
   }
-  if (pressArticles.length > 0) {
-    const sample = pressArticles[0];
+  if (pressItems.length > 0) {
+    const sample = pressItems[0];
     const pressTitle =
-      pressArticles.length === 1
+      pressItems.length === 1
         ? "Une nouvelle actualité"
-        : `${pressArticles.length} nouvelles actualités`;
+        : `${pressItems.length} nouvelles actualités`;
     dispatched.push(await callBroadcast({
       title: pressTitle,
       body: (sample.title || "").slice(0, 140) || "Ouvrez CAP 2027 pour les consulter",
@@ -194,6 +206,7 @@ Deno.serve(async (req) => {
     since,
     per_candidate: perCandidate.size,
     press_articles: pressArticles.length,
+    orphan_media: orphanMedia.length,
     press_orientations: [...pressOrientations],
     dispatched,
   });

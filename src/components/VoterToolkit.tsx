@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
+import { openLink } from '../lib/openLink';
 
 export function VoterToolkit() {
   const [activeModal, setActiveModal] = useState<'inscription' | 'procuration' | 'calendrier' | 'vote' | null>(null);
@@ -73,7 +74,9 @@ export function VoterToolkit() {
             </p>
           </div>
           <div className="pt-4 flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
-            <a href="https://www.service-public.fr/particuliers/vosdroits/R51788" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto">
+            <a href="https://www.service-public.fr/particuliers/vosdroits/R51788"
+               onClick={(e) => { e.preventDefault(); void openLink('https://www.service-public.fr/particuliers/vosdroits/R51788'); }}
+               className="w-full sm:w-auto">
               <Button className="w-full justify-center flex items-center gap-2">
                 Vérifier ma situation <ExternalLink className="w-4 h-4 ml-1 opacity-70" />
               </Button>
@@ -108,7 +111,9 @@ export function VoterToolkit() {
             </p>
           </div>
           <div className="pt-4 flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
-            <a href="https://www.maprocuration.gouv.fr/" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto">
+            <a href="https://www.maprocuration.gouv.fr/"
+               onClick={(e) => { e.preventDefault(); void openLink('https://www.maprocuration.gouv.fr/'); }}
+               className="w-full sm:w-auto">
               <Button className="w-full justify-center flex items-center gap-2">
                 Maprocuration.gouv.fr <ExternalLink className="w-4 h-4 ml-1 opacity-70" />
               </Button>
@@ -228,8 +233,7 @@ export function VoterToolkit() {
           <div className="pt-3 flex flex-col sm:flex-row justify-end gap-3">
             <a
               href="https://www.elections.interieur.gouv.fr/comprendre-elections/comment-je-vote"
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={(e) => { e.preventDefault(); void openLink('https://www.elections.interieur.gouv.fr/comprendre-elections/comment-je-vote'); }}
               className="w-full sm:w-auto"
             >
               <Button className="w-full justify-center flex items-center gap-2">

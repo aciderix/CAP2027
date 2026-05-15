@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
 import { TwitterPostCard } from './TwitterPostCard';
 import { useFollowedOrientations } from '../lib/orientationFollows';
+import { openLink } from '../lib/openLink';
 
 type Mode = 'news' | 'factcheck';
 
@@ -584,8 +585,7 @@ function FeaturedCard({ article }: { article: ArticleRow }) {
   return (
     <a
       href={article.url}
-      target="_blank"
-      rel="noopener noreferrer"
+      onClick={(e) => { e.preventDefault(); void openLink(article.url); }}
       className="group block bg-white rounded-[24px] border border-slate-100 hover:border-slate-200 hover:shadow-md transition-all overflow-hidden"
     >
       <div className="relative w-full aspect-[16/9] bg-slate-100 overflow-hidden">
@@ -639,8 +639,7 @@ function CompactCard({ article }: { article: ArticleRow }) {
   return (
     <a
       href={article.url}
-      target="_blank"
-      rel="noopener noreferrer"
+      onClick={(e) => { e.preventDefault(); void openLink(article.url); }}
       className="group block bg-white rounded-[20px] border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden"
     >
       <div className="flex gap-3 p-3 sm:p-4">

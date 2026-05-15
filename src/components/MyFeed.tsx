@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
 import { useFollowedCandidates } from '../lib/follows';
 import { TwitterPostCard } from './TwitterPostCard';
+import { openLink } from '../lib/openLink';
 
 // 30 days back-window. Articles older than this are aggressively
 // trimmed from the local cache — the server retention policy purges
@@ -370,8 +371,7 @@ function FeedCard({ article }: { article: ArticleRow }) {
   return (
     <a
       href={article.url}
-      target="_blank"
-      rel="noopener noreferrer"
+      onClick={(e) => { e.preventDefault(); void openLink(article.url); }}
       className="group block bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden"
     >
       <div className="flex gap-3 p-3">

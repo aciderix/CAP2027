@@ -3,6 +3,7 @@ import { Stamp, Search, Info, ExternalLink } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAppConfig } from '../lib/appConfig';
+import { openLink } from '../lib/openLink';
 
 interface ParrainageRow {
   candidate_id: string | null;
@@ -99,8 +100,7 @@ export function ParrainagesList() {
           {' '}
           <a
             href="https://www.conseil-constitutionnel.fr"
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={(e) => { e.preventDefault(); void openLink('https://www.conseil-constitutionnel.fr'); }}
             className="text-[#1a56db] hover:underline inline-flex items-center gap-0.5 font-semibold"
           >
             Source officielle <ExternalLink className="w-3 h-3" />

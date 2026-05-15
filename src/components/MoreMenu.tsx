@@ -8,6 +8,7 @@ import { Modal } from './ui/Modal';
 import { SettingsModal } from './SettingsModal';
 import { supabase } from '../lib/supabase';
 import { STABLE_STALE_MS } from '../lib/queryClient';
+import { openLink } from '../lib/openLink';
 
 interface MoreMenuProps {
   onGoToCandidates: () => void;
@@ -231,8 +232,7 @@ function MethodologyModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
                     {s.homepage_url ? (
                       <a
                         href={s.homepage_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        onClick={(e) => { e.preventDefault(); void openLink(s.homepage_url!); }}
                         className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold border border-slate-200 hover:border-slate-300 transition-colors"
                         style={{ color: s.color || '#475569' }}
                       >

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { ARTICLE_STALE_MS } from '../lib/queryClient';
 import { useFollowedCandidates } from '../lib/follows';
+import { openLink } from '../lib/openLink';
 
 interface Source {
   name: string;
@@ -250,8 +251,7 @@ function HeroSlide({ article, followedIds }: { article: ArticleHero; followedIds
   return (
     <a
       href={article.url}
-      target="_blank"
-      rel="noopener noreferrer"
+      onClick={(e) => { e.preventDefault(); void openLink(article.url); }}
       className="group block w-full shrink-0 snap-start"
     >
       <div className="relative w-full aspect-[16/10] sm:aspect-[2/1] bg-slate-100 overflow-hidden">
@@ -317,8 +317,7 @@ function FactcheckRow({ article }: { article: ArticleHero }) {
     <li>
       <a
         href={article.url}
-        target="_blank"
-        rel="noopener noreferrer"
+        onClick={(e) => { e.preventDefault(); void openLink(article.url); }}
         className="flex gap-3 px-4 sm:px-5 py-3 hover:bg-slate-50 transition-colors"
       >
         <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-slate-100">

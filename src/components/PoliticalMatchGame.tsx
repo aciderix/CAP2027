@@ -62,9 +62,37 @@ function loadAnswers(): Record<string, Stance> {
     return {};
   }
 }
+// Mirror to Capacitor Preferences (native storage) so the answers
+// survive a WebView storage wipe, an Android backup/restore, or any
+// other event that might empty localStorage. localStorage stays the
+// fast read path; Preferences is a write-through backup.
+async function mirrorAnswersToPreferences(answers: Record<string, Stance>) {
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (!Capacitor.isNativePlatform()) return;
+    const { Preferences } = await import('@capacitor/preferences');
+    await Preferences.set({ key: ANSWERS_KEY, value: JSON.stringify(answers) });
+  } catch {
+    // best-effort
+  }
+}
+async function restoreAnswersFromPreferencesIfMissing(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    if (localStorage.getItem(ANSWERS_KEY)) return;
+    const { Capacitor } = await import('@capacitor/core');
+    if (!Capacitor.isNativePlatform()) return;
+    const { Preferences } = await import('@capacitor/preferences');
+    const { value } = await Preferences.get({ key: ANSWERS_KEY });
+    if (value) localStorage.setItem(ANSWERS_KEY, value);
+  } catch {
+    // best-effort
+  }
+}
 function saveAnswers(a: Record<string, Stance>) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(ANSWERS_KEY, JSON.stringify(a));
+  void mirrorAnswersToPreferences(a);
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -94,6 +122,9 @@ export function PoliticalMatchGame({ onClose }: { onClose: () => void }) {
     if (phase !== 'loading') return;
     let cancelled = false;
     (async () => {
+      // Restore from native Preferences first if localStorage was
+      // cleared (Android backup/restore, manual wipe, etc.).
+      await restoreAnswersFromPreferencesIfMissing();
       const [propsRes, candRes] = await Promise.all([
         supabase
           .from('candidate_match_propositions')

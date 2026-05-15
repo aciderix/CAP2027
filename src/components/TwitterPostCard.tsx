@@ -4,6 +4,7 @@
 
 import { Repeat2, ExternalLink } from 'lucide-react';
 import { parseXPost, rewriteNitterUrl, rewriteNitterImage } from '../lib/twitter';
+import { openLink } from '../lib/openLink';
 
 interface SourceLite {
   name: string;
@@ -60,8 +61,7 @@ export function TwitterPostCard({
           </div>
           <a
             href={targetUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={(e) => { e.preventDefault(); void openLink(targetUrl); }}
             className="shrink-0 text-[11px] font-bold text-[#1a56db] hover:underline inline-flex items-center gap-1"
             title="Ouvrir sur x.com"
           >
@@ -85,7 +85,7 @@ export function TwitterPostCard({
 
         {/* Image */}
         {image && (
-          <a href={targetUrl} target="_blank" rel="noopener noreferrer" className="block mt-1 rounded-xl overflow-hidden bg-slate-100 border border-slate-100">
+          <a href={targetUrl} onClick={(e) => { e.preventDefault(); void openLink(targetUrl); }} className="block mt-1 rounded-xl overflow-hidden bg-slate-100 border border-slate-100">
             <img
               decoding="async"
               loading="lazy"

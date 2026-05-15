@@ -6,6 +6,7 @@ import { Button } from './ui/Button';
 import { supabase } from '../lib/supabase';
 import type { Tables, Enums } from '../lib/database.types';
 import { useFollowedCandidates } from '../lib/follows';
+import { openLink } from '../lib/openLink';
 import { CandidateParrainagesInline } from './CandidateParrainagesInline';
 import { TwitterPostCard } from './TwitterPostCard';
 import { STABLE_STALE_MS } from '../lib/queryClient';
@@ -368,7 +369,8 @@ export function CandidatesList() {
                                   <div className="font-semibold text-sm text-slate-800">{p.title}</div>
                                   {p.content && <p className="text-sm text-slate-600 mt-1">{p.content}</p>}
                                   {p.source_url && (
-                                    <a href={p.source_url} target="_blank" rel="noreferrer"
+                                    <a href={p.source_url}
+                                       onClick={(e) => { e.preventDefault(); void openLink(p.source_url!); }}
                                        className="text-xs text-[#1a56db] inline-flex items-center gap-1 mt-1 hover:underline">
                                        Source <ExternalLink className="w-3 h-3" />
                                     </a>
@@ -404,7 +406,8 @@ export function CandidatesList() {
                             {a.source_urls.length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {a.source_urls.map((u, i) => (
-                                  <a key={i} href={u} target="_blank" rel="noreferrer"
+                                  <a key={i} href={u}
+                                     onClick={(e) => { e.preventDefault(); void openLink(u); }}
                                      className="text-xs text-[#1a56db] inline-flex items-center gap-1 hover:underline">
                                     Source {i + 1} <ExternalLink className="w-3 h-3" />
                                   </a>
@@ -488,8 +491,7 @@ function CandidateNewsCard({ article }: { article: NewsArticle }) {
     <li>
       <a
         href={article.url}
-        target="_blank"
-        rel="noopener noreferrer"
+        onClick={(e) => { e.preventDefault(); void openLink(article.url); }}
         className="group block bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden"
       >
         <div className="flex gap-3 p-3">
