@@ -372,7 +372,7 @@ function FeedCard({ article }: { article: ArticleRow }) {
     <a
       href={article.url}
       onClick={(e) => { e.preventDefault(); void openLink(article.url); }}
-      className="group block bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden"
+      className="feed-card group block bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden"
     >
       <div className="flex gap-3 p-3">
         <div className="relative w-24 h-24 shrink-0 rounded-2xl overflow-hidden bg-slate-100">

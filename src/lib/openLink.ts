@@ -12,6 +12,7 @@
 // link in the news / programmes / candidates UI now goes through here.
 
 import { Capacitor } from '@capacitor/core';
+import { rewriteNitterUrl } from './twitter';
 
 export type VideoSource =
   | { kind: 'youtube'; id: string; url: string }
@@ -71,10 +72,17 @@ function detectVideo(url: string): VideoSource | null {
  *
  *  YouTube / Vimeo / direct video → in-app modal.
  *  Anything else → Chrome Custom Tabs (or system browser fallback).
+ *
+ *  Nitter URLs are transparently rewritten to x.com here so every
+ *  caller gets the canonical destination — components like the
+ *  featured carousel or the candidate news list use raw article.url
+ *  (which lives on nitter for ingested tweets) and shouldn't have to
+ *  know about the rewrite.
  */
 export async function openLink(url: string | null | undefined): Promise<void> {
   if (!url) return;
-  const video = detectVideo(url);
+  const target = rewriteNitterUrl(url) || url;
+  const video = detectVideo(target);
   if (video) {
     window.dispatchEvent(new CustomEvent<VideoSource>(OPEN_VIDEO_EVENT, { detail: video }));
     return;
@@ -82,11 +90,11 @@ export async function openLink(url: string | null | undefined): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     try {
       const { Browser } = await import('@capacitor/browser');
-      await Browser.open({ url, presentationStyle: 'fullscreen' });
+      await Browser.open({ url: target, presentationStyle: 'fullscreen' });
       return;
     } catch {
       // best-effort; fall through to window.open
     }
   }
-  try { window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* noop */ }
+  try { window.open(target, '_blank', 'noopener,noreferrer'); } catch { /* noop */ }
 }

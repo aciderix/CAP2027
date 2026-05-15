@@ -5,6 +5,14 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Scroll perf : skip painting/layout for off-screen items in long
+   article lists. The browser still reserves vertical space (the
+   contain-intrinsic-size hint) so the scrollbar stays accurate. */
+.feed-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+}
+
 /* Markdown content rendered inside .prose-program (candidate programmes) */
 .prose-program { color: #334155; font-size: 0.95rem; line-height: 1.65; }
 .prose-program > * + * { margin-top: 0.85rem; }

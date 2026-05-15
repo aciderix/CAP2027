@@ -492,7 +492,7 @@ function CandidateNewsCard({ article }: { article: NewsArticle }) {
       <a
         href={article.url}
         onClick={(e) => { e.preventDefault(); void openLink(article.url); }}
-        className="group block bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden"
+        className="feed-card group block bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden"
       >
         <div className="flex gap-3 p-3">
           <div className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-xl overflow-hidden bg-slate-100">

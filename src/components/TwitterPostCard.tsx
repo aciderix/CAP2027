@@ -44,7 +44,7 @@ export function TwitterPostCard({
   const displayName = candidateName || source?.name || 'X';
 
   return (
-    <article className="bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden">
+    <article className="feed-card bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden">
       <div className="p-3 sm:p-4 flex flex-col gap-2">
         {/* Header */}
         <div className="flex items-center justify-between gap-2">
