@@ -3,11 +3,12 @@ import { motion, useAnimation, PanInfo } from 'motion/react';
 import {
   ArrowLeft, ArrowRight, ArrowUp,
   CheckCircle, XCircle, HelpCircle,
-  RotateCcw, Trophy, ChevronRight,
+  RotateCcw, Trophy, ChevronRight, Share2,
 } from 'lucide-react';
 import { Button } from './ui/Button';
 import { supabase } from '../lib/supabase';
 import type { Tables } from '../lib/database.types';
+import { shareBoussoleResults, preloadShareImages, preloadCandidatePhotos, getLastShareTimings } from '../lib/share';
 
 type Stance = 'pour' | 'contre' | 'neutre';
 type Phase = 'tutorial' | 'loading' | 'resume_prompt' | 'game' | 'results' | 'error';
@@ -62,9 +63,37 @@ function loadAnswers(): Record<string, Stance> {
     return {};
   }
 }
+// Mirror to Capacitor Preferences (native storage) so the answers
+// survive a WebView storage wipe, an Android backup/restore, or any
+// other event that might empty localStorage. localStorage stays the
+// fast read path; Preferences is a write-through backup.
+async function mirrorAnswersToPreferences(answers: Record<string, Stance>) {
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (!Capacitor.isNativePlatform()) return;
+    const { Preferences } = await import('@capacitor/preferences');
+    await Preferences.set({ key: ANSWERS_KEY, value: JSON.stringify(answers) });
+  } catch {
+    // best-effort
+  }
+}
+async function restoreAnswersFromPreferencesIfMissing(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    if (localStorage.getItem(ANSWERS_KEY)) return;
+    const { Capacitor } = await import('@capacitor/core');
+    if (!Capacitor.isNativePlatform()) return;
+    const { Preferences } = await import('@capacitor/preferences');
+    const { value } = await Preferences.get({ key: ANSWERS_KEY });
+    if (value) localStorage.setItem(ANSWERS_KEY, value);
+  } catch {
+    // best-effort
+  }
+}
 function saveAnswers(a: Record<string, Stance>) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(ANSWERS_KEY, JSON.stringify(a));
+  void mirrorAnswersToPreferences(a);
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -94,6 +123,9 @@ export function PoliticalMatchGame({ onClose }: { onClose: () => void }) {
     if (phase !== 'loading') return;
     let cancelled = false;
     (async () => {
+      // Restore from native Preferences first if localStorage was
+      // cleared (Android backup/restore, manual wipe, etc.).
+      await restoreAnswersFromPreferencesIfMissing();
       const [propsRes, candRes] = await Promise.all([
         supabase
           .from('candidate_match_propositions')
@@ -119,6 +151,10 @@ export function PoliticalMatchGame({ onClose }: { onClose: () => void }) {
       const cands = (candRes.data ?? []) as unknown as CandidateLite[];
       setPropositions(props);
       setCandidates(cands);
+
+      // Warm the CORS image cache early so the share image is
+      // ready instantly when the user reaches the Results screen.
+      preloadCandidatePhotos(cands);
 
       const current = loadAnswers();
       setAnswers(current);
@@ -636,6 +672,7 @@ function Results({
               {top.total > 0 ? '+' : ''}{top.total}
             </div>
           </div>
+          <ShareInline scores={scores} totalAnswered={totalAnswered} totalProps={totalProps} />
         </div>
       )}
 
@@ -705,6 +742,56 @@ function Results({
           Fermer
         </Button>
       </div>
+    </div>
+  );
+}
+
+function ShareInline({
+  scores, totalAnswered, totalProps,
+}: { scores: CandidateScore[]; totalAnswered: number; totalProps: number }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [timings, setTimings] = useState<{ total: number; image: number; b64: number; write: number; share: number; size: number } | null>(null);
+
+  // Warm the CORS photo cache as soon as Results renders, so by the
+  // time the user taps Partager the network round-trip is already done.
+  useEffect(() => {
+    preloadShareImages(scores);
+  }, [scores]);
+
+  const handle = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    const res = await shareBoussoleResults(scores, totalAnswered, totalProps);
+    if (!res.ok) {
+      setErr(res.reason ?? 'erreur inconnue');
+    }
+    setTimings(getLastShareTimings());
+    setBusy(false);
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-white/15 flex flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={handle}
+        disabled={busy}
+        className="w-full inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-100 active:bg-slate-200 text-[#102a5c] font-bold text-sm py-2.5 px-4 rounded-xl transition-colors disabled:opacity-60"
+      >
+        <Share2 className="w-4 h-4" />
+        {busy ? 'Génération de l’image…' : 'Partager mes résultats'}
+      </button>
+      {err && (
+        <div className="text-[11px] text-white bg-rose-500/30 border border-rose-100/30 rounded-lg px-2 py-1">
+          {err}
+        </div>
+      )}
+      {timings && (
+        <div className="text-[10px] text-white/70 tabular-nums leading-tight">
+          ⏱ {timings.total}ms — img {timings.image} · b64 {timings.b64} · write {timings.write} · share {timings.share} · {(timings.size / 1024).toFixed(0)}KB
+        </div>
+      )}
     </div>
   );
 }

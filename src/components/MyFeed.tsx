@@ -1,10 +1,19 @@
 import { useMemo, useState } from 'react';
 import { Heart, Star, ChevronRight, Play, ExternalLink } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
 import { useFollowedCandidates } from '../lib/follows';
 import { TwitterPostCard } from './TwitterPostCard';
+import { openLink } from '../lib/openLink';
+
+// 30 days back-window. Articles older than this are aggressively
+// trimmed from the local cache — the server retention policy purges
+// them anyway, and keeping more would just bloat localStorage.
+const MYFEED_RETENTION_MS = 30 * 86400000;
+// Per-fetch cap. With incremental sync the cap mostly matters on the
+// very first load (cold cache); subsequent ticks fetch only the delta.
+const MYFEED_FETCH_LIMIT = 500;
 
 type Mode = 'mine';
 
@@ -62,6 +71,7 @@ export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
   const { followed, toggle } = useFollowedCandidates();
   const followedIds = useMemo(() => [...followed].sort(), [followed]);
   const followedKey = followedIds.join(',');
+  const qc = useQueryClient();
 
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<'all' | 'press' | 'video' | 'post'>('all');
@@ -80,32 +90,55 @@ export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
     },
   });
 
+  // Incremental sync : la cache TanStack Query (persistée en localStorage)
+  // garde l'historique des articles déjà vus. À chaque refetch on ne
+  // demande au serveur que les articles *plus récents* que le dernier
+  // qu'on a déjà → tu rates jamais rien dans la fenêtre de rétention DB,
+  // même après avoir fermé l'app pendant plusieurs jours. Ancienne
+  // version (limit 120 sans curseur) faisait sortir les vieux pour
+  // toujours dès que le volume dépassait 120.
   const articlesQuery = useQuery({
     queryKey: ['myFeedArticles', followedKey],
     enabled: followedIds.length > 0,
     staleTime: ARTICLE_STALE_MS,
     queryFn: async (): Promise<ArticleRow[]> => {
+      const cached = qc.getQueryData<ArticleRow[]>(['myFeedArticles', followedKey]) ?? [];
+      // Curseur incrémental : si on a déjà du cache, on ne fetch que
+      // ce qui est apparu depuis le plus récent connu. Sinon back-fill
+      // sur la fenêtre de rétention.
+      const cursorMs = cached.length > 0
+        ? Math.max(...cached.map((a) => +new Date(a.published_at)))
+        : Date.now() - MYFEED_RETENTION_MS;
+      const cursorIso = new Date(cursorMs).toISOString();
+      // On query news_articles directement (et non article_candidates
+      // comme avant) parce que PostgREST ne sait pas filtrer sur
+      // published_at quand il est embed depuis article_candidates.
+      // Avec un INNER JOIN sur article_candidates on garde la sémantique
+      // "uniquement les articles tagués à au moins un de mes candidats".
       const { data, error } = await supabase
-        .from('article_candidates')
+        .from('news_articles')
         .select(`
-          article:news_articles(
-            id, url, title, summary, image_url, published_at, kind, is_factcheck,
-            source:news_sources(name, orientation, color),
-            article_candidates(candidate:candidates(id, slug, first_name, last_name, photo_url, gender))
-          )
+          id, url, title, summary, image_url, published_at, kind, is_factcheck,
+          source:news_sources(name, orientation, color),
+          article_candidates!inner(candidate:candidates(id, slug, first_name, last_name, photo_url, gender))
         `)
-        .in('candidate_id', followedIds)
-        .order('article(published_at)', { ascending: false })
-        .limit(120);
+        .gt('published_at', cursorIso)
+        .in('article_candidates.candidate_id', followedIds)
+        .order('published_at', { ascending: false })
+        .limit(MYFEED_FETCH_LIMIT);
       if (error) throw error;
-      const dedup = new Map<string, ArticleRow>();
-      for (const r of (data ?? []) as any[]) {
-        const a = r.article;
-        if (a && !dedup.has(a.id)) dedup.set(a.id, a);
-      }
-      return [...dedup.values()].sort(
-        (a, b) => +new Date(b.published_at) - +new Date(a.published_at)
-      );
+      const fresh = (data ?? []) as unknown as ArticleRow[];
+
+      // Merge: nouveau d'abord (gagne en cas de duplicate id), puis
+      // anciens. Dédoublonnage par id. Tri desc par date. Trim aux
+      // 30 derniers jours.
+      const merged = new Map<string, ArticleRow>();
+      for (const a of fresh) merged.set(a.id, a);
+      for (const a of cached) if (!merged.has(a.id)) merged.set(a.id, a);
+      const cutoff = Date.now() - MYFEED_RETENTION_MS;
+      return [...merged.values()]
+        .filter((a) => +new Date(a.published_at) >= cutoff)
+        .sort((a, b) => +new Date(b.published_at) - +new Date(a.published_at));
     },
   });
 
@@ -338,9 +371,8 @@ function FeedCard({ article }: { article: ArticleRow }) {
   return (
     <a
       href={article.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group block bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden"
+      onClick={(e) => { e.preventDefault(); void openLink(article.url); }}
+      className="feed-card group block bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden"
     >
       <div className="flex gap-3 p-3">
         <div className="relative w-24 h-24 shrink-0 rounded-2xl overflow-hidden bg-slate-100">

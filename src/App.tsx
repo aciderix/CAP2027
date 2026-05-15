@@ -22,11 +22,24 @@ import { ParrainagesCard } from './components/ParrainagesCard';
 import { ParrainagesList } from './components/ParrainagesList';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
+import { VideoModal } from './components/VideoModal';
 import {
   useResumeNotificationsHook,
   maybeAskFirstLaunchPermission,
 } from './lib/notifications';
 import { registerPushNotifications } from './lib/push';
+
+// Wrapper that mounts its children once and only flips visibility via
+// CSS afterwards. Used for the heavy tabs (Actualités, Mon fil,
+// Candidats, Fact-checking) so switching back is instant — no
+// re-fetch, no Fuse rebuild, no image re-decode.
+function KeepMounted({ visible, children }: { visible: boolean; children: React.ReactNode }) {
+  return (
+    <div style={{ display: visible ? 'block' : 'none' }} aria-hidden={!visible}>
+      {children}
+    </div>
+  );
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('accueil');
@@ -135,8 +148,40 @@ export default function App() {
 
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-8 md:px-6 overflow-hidden">
-        <motion.div 
-          key={activeTab}
+        {/* Heavy views are always mounted — switching tabs only flips
+            CSS visibility, so no re-fetch / no image re-decode / no
+            Fuse index rebuild. Background invalidations from push
+            notifs still re-fetch in place; when the user returns to
+            the tab, content is already up to date. */}
+        <KeepMounted visible={activeTab === 'actualites'}>
+          <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+            <NewsFeed mode="news" />
+          </div>
+        </KeepMounted>
+        <KeepMounted visible={activeTab === 'fil'}>
+          <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+            <MyFeed onGoToCandidates={() => { setActiveTab('explorer'); setExplorerView('candidats'); }} />
+          </div>
+        </KeepMounted>
+        <KeepMounted visible={activeTab === 'candidats' || (activeTab === 'explorer' && explorerView === 'candidats')}>
+          <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+            <button onClick={() => { setActiveTab('explorer'); setExplorerView('main'); }} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
+              <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
+            </button>
+            <CandidatesList />
+          </div>
+        </KeepMounted>
+        <KeepMounted visible={activeTab === 'explorer' && explorerView === 'factchecking'}>
+          <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+            <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
+              <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
+            </button>
+            <NewsFeed mode="factcheck" />
+          </div>
+        </KeepMounted>
+
+        <motion.div
+          key={activeTab + ':' + explorerView}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
@@ -236,18 +281,6 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'actualites' && (
-            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
-              <NewsFeed mode="news" />
-            </div>
-          )}
-
-          {activeTab === 'fil' && (
-            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
-              <MyFeed onGoToCandidates={() => { setActiveTab('explorer'); setExplorerView('candidats'); }} />
-            </div>
-          )}
-
           {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && explorerView !== 'comparateur' && explorerView !== 'factchecking' && explorerView !== 'parrainages' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
                <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
@@ -276,15 +309,6 @@ export default function App() {
             </div>
           )}
 
-          {(activeTab === 'candidats' || (activeTab === 'explorer' && explorerView === 'candidats')) && (
-            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
-               <button onClick={() => { setActiveTab('explorer'); setExplorerView('main'); }} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
-                 <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
-               </button>
-               <CandidatesList />
-            </div>
-          )}
-
           {activeTab === 'plus' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
                <MoreMenu
@@ -296,6 +320,7 @@ export default function App() {
         </motion.div>
       </main>
       <BottomNav activeTab={activeTab} setActiveTab={handleTabChange} />
+      <VideoModal />
     </div>
     </>
   );

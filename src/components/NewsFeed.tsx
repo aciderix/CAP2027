@@ -8,6 +8,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
 import { TwitterPostCard } from './TwitterPostCard';
+import { useFollowedOrientations } from '../lib/orientationFollows';
+import { openLink } from '../lib/openLink';
 
 type Mode = 'news' | 'factcheck';
 
@@ -82,14 +84,21 @@ export function NewsFeed({ mode }: { mode: Mode }) {
   const [search, setSearch] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
-  const [selectedOrientation, setSelectedOrientation] = useState<string | null>(null);
+  // Persistent multi-select: drives both the in-app feed filter and
+  // the push-broadcast filter for press notifs. Empty set = "no
+  // filter, receive everything" (opt-in restrictif with lenient
+  // default). See lib/orientationFollows.ts.
+  const { followed: followedOrientations, toggle: toggleOrientation, clear: clearOrientations } =
+    useFollowedOrientations();
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const [selectedParty, setSelectedParty] = useState<string | null>(null);
 
-  // Reset on mode switch
+  const isFactcheck = mode === 'factcheck';
+
+  // Reset transient filters on mode switch. Orientation set is
+  // persistent across mode switches (it's a saved user preference).
   useEffect(() => {
     setSelectedTheme(null);
-    setSelectedOrientation(null);
     setSelectedCandidate(null);
     setSelectedParty(null);
     setSearch('');
@@ -150,12 +159,18 @@ export function NewsFeed({ mode }: { mode: Mode }) {
   const chipFiltered = useMemo(() => {
     return articles.filter((a) => {
       if (selectedTheme && !a.article_themes.some((x) => x.theme?.id === selectedTheme)) return false;
-      if (selectedOrientation && a.source?.orientation !== selectedOrientation) return false;
+      // Orientation filter: empty set = no filter, non-empty = must
+      // be one of the followed orientations (only applied in news
+      // mode — factcheck has its own dedicated tab).
+      if (!isFactcheck && followedOrientations.size > 0) {
+        const o = a.source?.orientation;
+        if (!o || !followedOrientations.has(o)) return false;
+      }
       if (selectedCandidate && !a.article_candidates.some((x) => x.candidate?.id === selectedCandidate)) return false;
       if (selectedParty && !a.article_parties.some((x) => x.party?.id === selectedParty)) return false;
       return true;
     });
-  }, [articles, selectedTheme, selectedOrientation, selectedCandidate, selectedParty]);
+  }, [articles, selectedTheme, followedOrientations, selectedCandidate, selectedParty, isFactcheck]);
 
   // Fuzzy search: tolerates typos and missing accents (e.g. "melanchon" → Mélenchon).
   const fuse = useMemo(() => new Fuse(chipFiltered, {
@@ -176,7 +191,6 @@ export function NewsFeed({ mode }: { mode: Mode }) {
   }, [chipFiltered, fuse, search]);
 
   const advancedFilterCount = (selectedCandidate ? 1 : 0) + (selectedParty ? 1 : 0);
-  const isFactcheck = mode === 'factcheck';
 
   const headerCount = filtered.length;
   const totalCount = articles.length;
@@ -186,7 +200,7 @@ export function NewsFeed({ mode }: { mode: Mode }) {
 
   const clearAll = () => {
     setSelectedTheme(null);
-    setSelectedOrientation(null);
+    clearOrientations();
     setSelectedCandidate(null);
     setSelectedParty(null);
     setSearch('');
@@ -254,12 +268,14 @@ export function NewsFeed({ mode }: { mode: Mode }) {
       {/* Filter ribbons */}
       {filters && (
         <div className="flex flex-col gap-2">
-          {/* Orientations (news only) */}
+          {/* Orientations (news only). Multi-select, persisted locally
+              and mirrored to push_token_orientations so the server can
+              filter press notifs the same way. */}
           {!isFactcheck && filters.orientations.length > 0 && (
-            <ScrollRow label="Orientations">
+            <ScrollRow label="Orientations suivies">
               <Chip
-                active={selectedOrientation === null}
-                onClick={() => setSelectedOrientation(null)}
+                active={followedOrientations.size === 0}
+                onClick={() => clearOrientations()}
                 label="Toutes"
               />
               {filters.orientations.map((o) => {
@@ -267,8 +283,8 @@ export function NewsFeed({ mode }: { mode: Mode }) {
                 return (
                   <Chip
                     key={o}
-                    active={selectedOrientation === o}
-                    onClick={() => setSelectedOrientation(selectedOrientation === o ? null : o)}
+                    active={followedOrientations.has(o)}
+                    onClick={() => toggleOrientation(o)}
                     label={meta?.short ?? o}
                     dotColor={meta?.dot}
                   />
@@ -333,7 +349,7 @@ export function NewsFeed({ mode }: { mode: Mode }) {
               />
             ))}
           </DrawerRow>
-          {(selectedTheme || selectedOrientation || selectedCandidate || selectedParty || search) && (
+          {(selectedTheme || followedOrientations.size > 0 || selectedCandidate || selectedParty || search) && (
             <button
               onClick={clearAll}
               className="self-start inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-700"
@@ -569,9 +585,8 @@ function FeaturedCard({ article }: { article: ArticleRow }) {
   return (
     <a
       href={article.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group block bg-white rounded-[24px] border border-slate-100 hover:border-slate-200 hover:shadow-md transition-all overflow-hidden"
+      onClick={(e) => { e.preventDefault(); void openLink(article.url); }}
+      className="feed-card group block bg-white rounded-[24px] border border-slate-100 hover:border-slate-200 hover:shadow-md transition-all overflow-hidden"
     >
       <div className="relative w-full aspect-[16/9] bg-slate-100 overflow-hidden">
         {article.image_url ? (
@@ -624,9 +639,8 @@ function CompactCard({ article }: { article: ArticleRow }) {
   return (
     <a
       href={article.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group block bg-white rounded-[20px] border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden"
+      onClick={(e) => { e.preventDefault(); void openLink(article.url); }}
+      className="feed-card group block bg-white rounded-[20px] border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all overflow-hidden"
     >
       <div className="flex gap-3 p-3 sm:p-4">
         <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-2xl overflow-hidden bg-slate-100">

@@ -329,6 +329,7 @@ const ARTICLE_KIND_FROM_SOURCE: Record<string, string> = {
   twitch: "twitch_clip",
   mastodon: "mastodon_post",
   bluesky: "bluesky_post",
+  twitter: "twitter_post",
 };
 function articleKindFor(sourceKind: string): string {
   return ARTICLE_KIND_FROM_SOURCE[sourceKind] ?? "article";

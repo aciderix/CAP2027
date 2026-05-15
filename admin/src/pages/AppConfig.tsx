@@ -71,8 +71,8 @@ function RoundCard({
 
   useEffect(() => {
     if (!value) return;
-    setScheduledAt(localFromIso(value.scheduled_at));
-    setResultsAt(localFromIso(value.results_at));
+    setScheduledAt(parisInputFromIso(value.scheduled_at));
+    setResultsAt(parisInputFromIso(value.results_at));
     setIsOfficial(value.is_official);
     setLabel(value.label);
   }, [value?.scheduled_at, value?.results_at, value?.is_official, value?.label]);
@@ -81,8 +81,8 @@ function RoundCard({
     setSaving(true); setError(null);
     try {
       const payload = {
-        scheduled_at: new Date(scheduledAt).toISOString(),
-        results_at: new Date(resultsAt).toISOString(),
+        scheduled_at: parisIsoFromInput(scheduledAt),
+        results_at: parisIsoFromInput(resultsAt),
         is_official: isOfficial,
         label: label || (isOfficial ? 'Officiel' : 'Estimé'),
       };
@@ -106,11 +106,11 @@ function RoundCard({
 
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Ouverture des bureaux</span>
+          <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Ouverture des bureaux <span className="text-slate-400 normal-case tracking-normal font-medium">— heure de Paris</span></span>
           <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className="input" />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Heure des résultats</span>
+          <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Heure des résultats <span className="text-slate-400 normal-case tracking-normal font-medium">— heure de Paris</span></span>
           <input type="datetime-local" value={resultsAt} onChange={(e) => setResultsAt(e.target.value)} className="input" />
         </label>
         <label className="flex flex-col gap-1 col-span-2">
@@ -228,4 +228,58 @@ function localFromIso(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ---- Paris-locked datetime-local conversions --------------------------
+//
+// `<input type="datetime-local">` is timezone-naive: when its value is
+// fed to `new Date(...)`, the browser interprets it in its OWN local
+// timezone. For an admin in Paris that's fine, but anyone editing dates
+// from another city would silently shift the whole election clock by N
+// hours. We force the input/output to Paris wall-clock so the field
+// always means what its label says.
+
+function parisOffsetMs(utcMs: number): number {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(new Date(utcMs));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? '0');
+  const asIfUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  return asIfUtc - utcMs;
+}
+
+function parisInputFromIso(iso: string): string {
+  // UTC ISO → "YYYY-MM-DDTHH:MM" rendered as Paris wall clock.
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '00';
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+}
+
+function parisIsoFromInput(input: string): string {
+  // "YYYY-MM-DDTHH:MM" interpreted as Paris wall clock → UTC ISO.
+  // Two-pass offset to handle the DST transition correctly when the
+  // typed instant is right around the spring-forward / fall-back hour.
+  if (!input) return '';
+  const [date, time] = input.split('T');
+  if (!date || !time) return '';
+  const [y, m, d] = date.split('-').map(Number);
+  const [h, mn] = time.split(':').map(Number);
+  if ([y, m, d, h, mn].some((n) => Number.isNaN(n))) return '';
+  const guess = Date.UTC(y, m - 1, d, h, mn);
+  const off1 = parisOffsetMs(guess);
+  const off2 = parisOffsetMs(guess - off1);
+  return new Date(guess - off2).toISOString();
 }

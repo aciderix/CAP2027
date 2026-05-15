@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Clock } from 'lucide-react';
 import { useAppConfig, type ElectionRound } from '../lib/appConfig';
-import { scheduleElectionReminders } from '../lib/electionReminders';
 
 function diffDays(targetMs: number, nowMs: number) {
   return Math.ceil((targetMs - nowMs) / 86_400_000);
@@ -35,20 +34,11 @@ export function CountdownBanner() {
     return () => clearInterval(id);
   }, []);
 
-  // Schedule J-1, J-day and result-time local notifications. Idempotent:
-  // stable IDs, so re-scheduling on every render does NOT spam the user.
-  const r1Sched = cfg?.['election.round1']?.scheduled_at;
-  const r2Sched = cfg?.['election.round2']?.scheduled_at;
-  const r1Off = cfg?.['election.round1']?.is_official;
-  const r2Off = cfg?.['election.round2']?.is_official;
-  useEffect(() => {
-    if (!cfg) return;
-    const round1 = cfg['election.round1'];
-    const round2 = cfg['election.round2'];
-    if (round1 || round2) {
-      void scheduleElectionReminders({ round1, round2 });
-    }
-  }, [cfg, r1Sched, r2Sched, r1Off, r2Off]);
+  // Election-day reminders are now scheduled server-side via pg_cron
+  // jobs that fire exact-time POSTs to the dispatch-election-reminders
+  // edge function (see migration 20260514_election_reminders_scheduler).
+  // No local LocalNotifications scheduling here anymore — the FCM
+  // path is more reliable for users who don't reopen the app daily.
 
   const text = computeBannerText(now, cfg?.['election.round1'], cfg?.['election.round2']);
 
@@ -63,34 +53,51 @@ export function CountdownBanner() {
   );
 }
 
+// Estimation utilisée tant que la date n'est pas saisie officiellement.
+// Premier tour de la présidentielle française : traditionnellement
+// l'avant-dernier dimanche d'avril. 2027 → 11 avril. Bureaux 8 h Paris
+// soit 06:00 UTC en avril (CEST = UTC+2).
+const ESTIMATED_R1_MS = Date.UTC(2027, 3, 11, 6, 0, 0);
+const ESTIMATED_R2_MS = Date.UTC(2027, 3, 25, 6, 0, 0);
+
+function approxOffset(targetMs: number, nowMs: number): string {
+  // "~X mois", "~X semaines", "~X jours". Bascule à 30 j / 7 j.
+  const dayMs = 86_400_000;
+  const days = Math.max(0, Math.ceil((targetMs - nowMs) / dayMs));
+  if (days >= 30) {
+    const months = diffMonths(targetMs, nowMs);
+    return `~${months} mois`;
+  }
+  if (days >= 7) return `~${Math.round(days / 7)} semaines`;
+  return `~${days} j`;
+}
+
 function computeBannerText(
   nowMs: number,
   r1?: ElectionRound,
   r2?: ElectionRound,
 ): string {
-  if (!r1 && !r2) return 'Présidentielle 2027';
-
-  const r1Start = r1 ? new Date(r1.scheduled_at).getTime() : Infinity;
-  const r1End   = r1 ? new Date(r1.results_at).getTime()   : Infinity;
-  const r2Start = r2 ? new Date(r2.scheduled_at).getTime() : Infinity;
-  const r2End   = r2 ? new Date(r2.results_at).getTime()   : Infinity;
+  // Cas où rien (ou seulement r2) n'est saisi : on bascule sur une
+  // estimation traditionnelle d'avril 2027 pour avoir un compte à
+  // rebours utile dès la sortie de l'app.
+  const r1Start = r1 ? new Date(r1.scheduled_at).getTime() : ESTIMATED_R1_MS;
+  const r1End   = r1 ? new Date(r1.results_at).getTime()   : Number.POSITIVE_INFINITY;
+  const r2Start = r2 ? new Date(r2.scheduled_at).getTime() : ESTIMATED_R2_MS;
+  const r2End   = r2 ? new Date(r2.results_at).getTime()   : Number.POSITIVE_INFINITY;
 
   const r1Official = r1?.is_official === true;
   const r2Official = r2?.is_official === true;
 
   if (nowMs < r1Start) {
     if (r1Official) return `J-${diffDays(r1Start, nowMs)} avant le 1er tour`;
-    const months = diffMonths(r1Start, nowMs);
-    if (months <= 0) return 'Présidentielle 2027 — date à confirmer';
-    return `~${months} mois avant le 1er tour`;
+    return `${approxOffset(r1Start, nowMs)} avant le 1er tour`;
   }
   if (nowMs < r1End) {
     return `${formatHMS(r1End - nowMs)} avant les résultats du 1er tour`;
   }
   if (nowMs < r2Start) {
     if (r2Official) return `J-${diffDays(r2Start, nowMs)} avant le 2nd tour`;
-    const days = diffDays(r2Start, nowMs);
-    return `~${days} j avant le 2nd tour`;
+    return `${approxOffset(r2Start, nowMs)} avant le 2nd tour`;
   }
   if (nowMs < r2End) {
     return `${formatHMS(r2End - nowMs)} avant les résultats finaux`;

@@ -4,8 +4,15 @@
 // Requires a Google service account JSON for the Firebase project,
 // stored as the FCM_SERVICE_ACCOUNT_JSON edge-function secret.
 //
-// POST body: { title: string, body: string, url?: string }
-//   - or no body (then a sane default of "Nouvelle actualité" is used).
+// POST body: { title, body, url?, candidate_id?, orientation? }
+//   - candidate_id: when present, only tokens that follow this candidate
+//     (per public.push_token_follows) receive the notification. Lets
+//     notify-after-ingest dispatch "Nouveau post de X" only to followers.
+//   - orientation: when present, only tokens that either have an
+//     explicit subscription to this orientation OR have no orientation
+//     rows at all (legacy default = receive everything) get the notif.
+//     Routed through the tokens_for_press_orientation RPC.
+//   - candidate_id wins over orientation if both are set.
 //
 // GET ?diag=1 returns a non-secret status report (no values leaked):
 //   { secret_present, project_id, token_count }.
@@ -112,6 +119,14 @@ interface SendInput {
   title?: string;
   body?: string;
   url?: string;
+  candidate_id?: string;
+  orientation?: string;
+  orientations?: string[];
+  // Category tag for client-side cache invalidation on reception.
+  // The push.ts pushNotificationReceived listener reads notif.data.type
+  // and invalidates the matching TanStack Query keys so the app shows
+  // fresh content the moment the user opens it (no 24 h wait).
+  type?: string;
 }
 
 Deno.serve(async (req) => {
@@ -155,18 +170,63 @@ Deno.serve(async (req) => {
   }
   const fcmUrl = `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`;
 
-  const { data: tokens } = await supabase
-    .from("push_tokens")
-    .select("token, platform");
+  // Token selection. Priority:
+  //   1. candidate_id      → tokens that follow that candidate
+  //   2. orientations[]    → union of all matched orientations (single
+  //                           consolidated press notif spanning bords)
+  //   3. orientation       → single orientation (legacy / per-bord)
+  //   4. (neither)         → broadcast to every registered token
+  let tokens: { token: string; platform: string }[] = [];
+  if (payload.candidate_id) {
+    const { data: follows, error: fErr } = await supabase
+      .from("push_token_follows")
+      .select("token, push_tokens!inner(platform)")
+      .eq("candidate_id", payload.candidate_id);
+    if (fErr) {
+      return Response.json({ error: "follows query: " + fErr.message }, { status: 500 });
+    }
+    tokens = (follows ?? []).map((r: any) => ({
+      token: r.token,
+      platform: r.push_tokens?.platform ?? "android",
+    }));
+  } else if (payload.orientations && payload.orientations.length > 0) {
+    const { data, error: oErr } = await supabase.rpc(
+      "tokens_for_press_orientations",
+      { orients: payload.orientations },
+    );
+    if (oErr) {
+      return Response.json({ error: "orientations rpc: " + oErr.message }, { status: 500 });
+    }
+    tokens = (data ?? []) as { token: string; platform: string }[];
+  } else if (payload.orientation) {
+    const { data, error: oErr } = await supabase.rpc(
+      "tokens_for_press_orientation",
+      { orient: payload.orientation },
+    );
+    if (oErr) {
+      return Response.json({ error: "orientation rpc: " + oErr.message }, { status: 500 });
+    }
+    tokens = (data ?? []) as { token: string; platform: string }[];
+  } else {
+    const { data } = await supabase.from("push_tokens").select("token, platform");
+    tokens = (data ?? []) as { token: string; platform: string }[];
+  }
 
   let sent = 0, failed = 0;
   const errors: string[] = [];
-  for (const t of (tokens ?? []) as { token: string; platform: string }[]) {
+  for (const t of tokens) {
+    // FCM `data` is sent alongside the notification block. Capacitor
+    // exposes it on the pushNotificationReceived event so the client
+    // can decide what to invalidate.
+    const fcmData: Record<string, string> = {};
+    if (payload.url) fcmData.url = payload.url;
+    if (payload.type) fcmData.type = payload.type;
+    if (payload.candidate_id) fcmData.candidate_id = payload.candidate_id;
     const message = {
       message: {
         token: t.token,
         notification: { title, body },
-        data: payload.url ? { url: payload.url } : undefined,
+        data: Object.keys(fcmData).length > 0 ? fcmData : undefined,
         android: {
           priority: "HIGH",
           notification: {
@@ -207,7 +267,10 @@ Deno.serve(async (req) => {
   return Response.json({
     sent,
     failed,
-    totalTokens: tokens?.length ?? 0,
+    totalTokens: tokens.length,
+    candidate_id: payload.candidate_id ?? null,
+    orientation: payload.orientation ?? null,
+    orientations: payload.orientations ?? null,
     sample_errors: errors,
   });
 });

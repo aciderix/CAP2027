@@ -5,6 +5,13 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Article card marker class kept for future targeting (skeletons,
+   intersection-observer-driven optimisations, etc.). We tried
+   content-visibility: auto here for off-screen paint culling but the
+   Android WebView showed 1-2 s blank gaps on fast scroll, so we let
+   the browser render every row. KeepMounted (App.tsx) is what gives
+   the tab-switch fluidity. */
+
 /* Markdown content rendered inside .prose-program (candidate programmes) */
 .prose-program { color: #334155; font-size: 0.95rem; line-height: 1.65; }
 .prose-program > * + * { margin-top: 0.85rem; }

@@ -362,6 +362,70 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["themes"]["Insert"]>
         Relationships: []
       }
+      push_tokens: {
+        Row: {
+          token: string
+          platform: string
+          app_version: string | null
+          last_seen_at: string
+          created_at: string
+        }
+        Insert: {
+          token: string
+          platform: string
+          app_version?: string | null
+          last_seen_at?: string
+          created_at?: string
+        }
+        Update: Partial<Database["public"]["Tables"]["push_tokens"]["Insert"]>
+        Relationships: []
+      }
+      push_token_follows: {
+        Row: {
+          token: string
+          candidate_id: string
+          created_at: string
+        }
+        Insert: {
+          token: string
+          candidate_id: string
+          created_at?: string
+        }
+        Update: Partial<Database["public"]["Tables"]["push_token_follows"]["Insert"]>
+        Relationships: []
+      }
+      push_token_orientations: {
+        Row: {
+          token: string
+          orientation: string
+          created_at: string
+        }
+        Insert: {
+          token: string
+          orientation: string
+          created_at?: string
+        }
+        Update: Partial<Database["public"]["Tables"]["push_token_orientations"]["Insert"]>
+        Relationships: []
+      }
+      election_reminders_sent: {
+        Row: {
+          milestone_key: string
+          sent_at: string
+        }
+        Insert: {
+          milestone_key: string
+          sent_at?: string
+        }
+        Update: Partial<Database["public"]["Tables"]["election_reminders_sent"]["Insert"]>
+        Relationships: []
+      }
+      app_config: {
+        Row: { key: string; value: Json; updated_at: string }
+        Insert: { key: string; value: Json; updated_at?: string }
+        Update: Partial<Database["public"]["Tables"]["app_config"]["Insert"]>
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
