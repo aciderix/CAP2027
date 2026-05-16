@@ -209,6 +209,20 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
                 queryClient.invalidateQueries({ queryKey: ['appConfig'] }),
               ]);
               break;
+            case 'election_results_published':
+              // Round 1 or round 2 results just landed. Invalidate the
+              // results queries, the app_config (controls visibility),
+              // and the candidate lists (eliminated candidates were
+              // auto-unpublished server-side by publish_round_results).
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['electionResults'] }),
+                queryClient.invalidateQueries({ queryKey: ['appConfig'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
+                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
+                queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
+              ]);
+              break;
             case 'article_press':
             case 'article_social':
               await Promise.all([

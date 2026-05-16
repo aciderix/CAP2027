@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, BookOpen, Scale, BadgeCheck, ArrowLeft, Stamp } from 'lucide-react';
+import { User, BookOpen, Scale, BadgeCheck, ArrowLeft, Stamp, BarChart3 } from 'lucide-react';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { VoterToolkit } from './components/VoterToolkit';
@@ -20,9 +20,12 @@ import { MyFeed } from './components/MyFeed';
 import { MoreMenu } from './components/MoreMenu';
 import { ParrainagesCard } from './components/ParrainagesCard';
 import { ParrainagesList } from './components/ParrainagesList';
+import { ResultsCard } from './components/ResultsCard';
+import { ResultsList } from './components/ResultsList';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
 import { VideoModal } from './components/VideoModal';
+import { useAppConfig } from './lib/appConfig';
 import {
   useResumeNotificationsHook,
   maybeAskFirstLaunchPermission,
@@ -44,6 +47,8 @@ function KeepMounted({ visible, children }: { visible: boolean; children: React.
 export default function App() {
   const [activeTab, setActiveTab] = useState('accueil');
   const [explorerView, setExplorerView] = useState('main');
+  const { data: appCfg } = useAppConfig();
+  const round1Published = appCfg?.['election.results']?.round1_published === true;
 
   const [showSplash, setShowSplash] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -202,6 +207,16 @@ export default function App() {
           {activeTab === 'explorer' && explorerView === 'main' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20 pt-2 lg:pt-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 w-full">
+                 {round1Published && (
+                   <div onClick={() => setExplorerView('results')} className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 flex flex-col justify-center min-h-[120px] hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden group">
+                      <div className="relative z-10 pr-6 sm:pr-10">
+                        <h3 className="text-[18px] sm:text-xl font-bold text-[#102a5c] mb-1 sm:mb-2 group-hover:text-[#1a56db] transition-colors">Résultats</h3>
+                        <p className="text-[13px] sm:text-[14px] text-slate-600 leading-relaxed max-w-[90%] sm:max-w-none">Scores officiels du scrutin, qualifiés du 1er tour et président·e élu·e à l'issue du 2nd tour.</p>
+                      </div>
+                      <BarChart3 className="absolute right-[-10px] sm:right-2 top-1/2 -translate-y-1/2 w-[100px] h-[100px] sm:w-[130px] sm:h-[130px] text-blue-50 pointer-events-none transition-transform group-hover:scale-105" strokeWidth={2.5} />
+                   </div>
+                 )}
+
                  <div onClick={() => setExplorerView('candidats')} className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 flex flex-col justify-center min-h-[120px] hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden group">
                     <div className="relative z-10 pr-6 sm:pr-10">
                       <h3 className="text-[18px] sm:text-xl font-bold text-[#102a5c] mb-1 sm:mb-2 group-hover:text-[#1a56db] transition-colors">Candidats</h3>
@@ -281,7 +296,16 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && explorerView !== 'comparateur' && explorerView !== 'factchecking' && explorerView !== 'parrainages' && (
+          {activeTab === 'explorer' && explorerView === 'results' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+               <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
+                 <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
+               </button>
+               <ResultsList />
+            </div>
+          )}
+
+          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && explorerView !== 'comparateur' && explorerView !== 'factchecking' && explorerView !== 'parrainages' && explorerView !== 'results' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
                <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
                  <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
@@ -297,6 +321,11 @@ export default function App() {
           {activeTab === 'accueil' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full">
               <VoterToolkit />
+              {round1Published && (
+                <ResultsCard
+                  onSeeAll={() => { setActiveTab('explorer'); setExplorerView('results'); }}
+                />
+              )}
               <ExplorerSection onNavigate={(view) => { setActiveTab('explorer'); setExplorerView(view); }} />
               <PoliticalMatchCard />
               <FeaturedArticleCard

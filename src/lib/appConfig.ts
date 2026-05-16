@@ -21,10 +21,16 @@ export interface ParrainagesSource {
   note?: string;
 }
 
+export interface ElectionResultsConfig {
+  round1_published: boolean;
+  round2_published: boolean;
+}
+
 interface AppConfigShape {
   'election.round1'?: ElectionRound;
   'election.round2'?: ElectionRound;
   'parrainages.source'?: ParrainagesSource;
+  'election.results'?: ElectionResultsConfig;
 }
 
 const CACHE_KEY = 'cap2027.appConfig.cache';
