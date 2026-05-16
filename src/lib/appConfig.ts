@@ -65,7 +65,11 @@ export function useAppConfig() {
   return useQuery({
     queryKey: ['appConfig'],
     initialData: cached ?? undefined,
-    staleTime: 60 * 60 * 1000, // 1 h: dates change rarely
+    // 5 min: this query gates major UI features (Results card, parrainages
+    // banner, election dates, election results visibility flag). Short
+    // enough that opening the app via launcher after an admin flip
+    // refreshes the gate without needing a push notif tap.
+    staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<AppConfigShape> => {
       const { data, error } = await supabase.from('app_config').select('key, value');
       if (error) throw error;

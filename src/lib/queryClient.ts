@@ -11,12 +11,18 @@ export const QUERY_CACHE_BUSTER = 'v2';
 //
 // Refresh policy used by the app (override per query as needed):
 //
-//   STABLE_STALE_MS (24 h)
+//   STABLE_STALE_MS (1 h)
 //     Reference data that only changes when an admin edits something:
 //     candidates, parties, themes, programs, news sources, comparateur
-//     propositions. Refetch on focus stays enabled so an in-session
-//     admin edit still propagates within seconds, but background polling
-//     stops.
+//     propositions. Combined with refetchOnWindowFocus this means: on
+//     every app focus / open, queries refresh if data is older than 1 h.
+//     A user who opens the app the next morning gets fresh content
+//     without waiting on a push notif. Push-triggered invalidation
+//     (push.ts switch on data.type) still kicks in instantly when the
+//     app is in foreground OR when the user taps a system-tray notif.
+//
+//     Was 24 h originally — too conservative for an active campaign
+//     where admins push frequent fiche/programme/results updates.
 //
 //   ARTICLE_STALE_MS (30 min)
 //     Article-bearing queries (news feed, my feed, hero carousel). The
@@ -26,7 +32,7 @@ export const QUERY_CACHE_BUSTER = 'v2';
 //
 //   useUnseenArticles keeps its own 5 min staleTime (small query that
 //   drives the bell badge; we want it snappier than the rest).
-export const STABLE_STALE_MS = 24 * 60 * 60 * 1000;
+export const STABLE_STALE_MS = 60 * 60 * 1000;
 export const ARTICLE_STALE_MS = 30 * 60 * 1000;
 
 export const queryClient = new QueryClient({
