@@ -1,22 +1,11 @@
--- Election results: vote counts per candidate per round, entered manually
--- by an admin from the Admin Console.
+-- Election results table + RLS + helpers.
 --
--- Workflow:
---   1. Admin creates rows in election_results for each candidate (percentage,
---      votes, is_qualified for round 1, is_winner for round 2).
---   2. Admin clicks "Publier les résultats du Xer tour" which calls
---      publish_round_results(X). That RPC flips the app_config flag AND
---      auto-unpublishes candidates that didn't qualify (round 1) / didn't
---      win (round 2). They disappear from every public list via the
---      existing is_published=true RLS filter — zero changes to query sites.
---   3. The election_results_full view bypasses candidates RLS so the
---      results card / list still shows scores for unpublished candidates.
---   4. notify_election_results_published broadcasts a push when the
---      flag flips false→true.
---
--- Reversible: republish_round_candidates(X) re-publishes every candidate
--- that has a row in election_results for that round (safety net for an
--- accidental publish).
+-- The view election_results_full created here was later replaced by
+-- the get_election_results_for_round() function (see migration
+-- 20260516131000_election_results_replace_view_with_rpc.sql) — the
+-- Supabase linter flags SECURITY DEFINER views as an ERROR while it
+-- only WARNs on SECURITY DEFINER functions, and the function form is
+-- consistent with the other helpers in the project.
 
 create table public.election_results (
   round int not null check (round in (1, 2)),
@@ -50,48 +39,20 @@ create policy "election_results_admin_write"
   using (public.is_admin(auth.uid()))
   with check (public.is_admin(auth.uid()));
 
--- RPC returning candidate display info joined to results. SECURITY DEFINER
--- so it bypasses the candidates is_published filter — eliminated candidates
--- still surface in the results card/list even after publish_round_results
--- flips their is_published to false.
-create or replace function public.get_election_results_for_round(p_round int)
-returns table (
-  round int,
-  candidate_id uuid,
-  percentage numeric(5,2),
-  votes bigint,
-  is_qualified boolean,
-  is_winner boolean,
-  rank int,
-  first_name text,
-  last_name text,
-  photo_url text,
-  slug text,
-  gender bpchar,
-  party_name text,
-  party_abbreviation text,
-  party_color text
-)
-language sql
-stable
-security definer
-set search_path = ''
-as $$
-  select
-    r.round, r.candidate_id, r.percentage, r.votes,
-    r.is_qualified, r.is_winner, r.rank,
-    c.first_name, c.last_name, c.photo_url, c.slug, c.gender,
-    p.name as party_name, p.abbreviation as party_abbreviation, p.color as party_color
-  from public.election_results r
-  join public.candidates c on c.id = r.candidate_id
-  left join public.parties p on p.id = c.party_id
-  where r.round = p_round
-  order by r.percentage desc nulls last, r.rank asc nulls last;
-$$;
+create or replace view public.election_results_full
+with (security_invoker = false)
+as
+select
+  r.round, r.candidate_id, r.percentage, r.votes,
+  r.is_qualified, r.is_winner, r.rank,
+  c.first_name, c.last_name, c.photo_url, c.slug, c.gender,
+  p.name as party_name, p.abbreviation as party_abbreviation, p.color as party_color
+from public.election_results r
+join public.candidates c on c.id = r.candidate_id
+left join public.parties p on p.id = c.party_id;
 
-grant execute on function public.get_election_results_for_round(int) to anon, authenticated;
+grant select on public.election_results_full to anon, authenticated;
 
--- Feature flag: controls when the results card/page becomes visible
 insert into public.app_config (key, value)
 values ('election.results', jsonb_build_object(
   'round1_published', false,
@@ -99,9 +60,6 @@ values ('election.results', jsonb_build_object(
 ))
 on conflict (key) do nothing;
 
--- Atomic publish: flip the flag + auto-unpublish losers.
--- Round 1: candidates with is_qualified=false get is_published=false.
--- Round 2: candidates with is_winner=false get is_published=false.
 create or replace function public.publish_round_results(p_round int)
 returns void
 language plpgsql
@@ -118,7 +76,6 @@ begin
   if p_round not in (1, 2) then
     raise exception 'Invalid round: %', p_round;
   end if;
-
   flag_key := case p_round when 1 then 'round1_published' else 'round2_published' end;
 
   select value into cur from public.app_config where key = 'election.results';
@@ -152,9 +109,6 @@ $$;
 
 grant execute on function public.publish_round_results(int) to authenticated;
 
--- Safety net: re-publish every candidate with a row in election_results
--- for the given round. Also flips the round flag back to false so the
--- public stops seeing the results until admin re-publishes.
 create or replace function public.unpublish_round_results(p_round int)
 returns void
 language plpgsql
@@ -171,7 +125,6 @@ begin
   if p_round not in (1, 2) then
     raise exception 'Invalid round: %', p_round;
   end if;
-
   flag_key := case p_round when 1 then 'round1_published' else 'round2_published' end;
 
   select value into cur from public.app_config where key = 'election.results';
@@ -192,7 +145,6 @@ $$;
 
 grant execute on function public.unpublish_round_results(int) to authenticated;
 
--- Push notification when results are published.
 create or replace function public.notify_election_results_published()
 returns trigger
 language plpgsql
