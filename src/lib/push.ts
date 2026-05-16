@@ -179,6 +179,9 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
                 queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
               ]);
               break;
+            case 'match_proposition_change':
+              await queryClient.invalidateQueries({ queryKey: ['matchPropositions'] });
+              break;
             case 'candidate_updated':
               // Emitted by notify_candidate_content_change on changes to
               // short_bio, candidate_bio_sections, candidate_proposals,
@@ -268,6 +271,9 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
                 queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
                 queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
               ]);
+              break;
+            case 'match_proposition_change':
+              await queryClient.invalidateQueries({ queryKey: ['matchPropositions'] });
               break;
             case 'candidate_updated':
               await Promise.all([
