@@ -252,8 +252,29 @@ export function useResumeNotificationsHook() {
 
     let cancelled = false;
 
+    // Caches pilotées par l'admin (date du scrutin, parrainages dispo,
+    // résultats publiés, candidats publiés/dépubliés…). Invalidées sur
+    // chaque app resume — couvre le cas "user reçoit une notif puis
+    // ouvre l'app via le launcher (pas en tapant la notif)" où ni
+    // pushNotificationReceived ni pushNotificationActionPerformed ne
+    // firent. Marquage stale seulement : le refetch effectif n'a lieu
+    // que quand le composant correspondant remount.
+    const invalidateAdminDrivenCaches = () => {
+      qc.invalidateQueries({ queryKey: ['appConfig'] });
+      qc.invalidateQueries({ queryKey: ['electionResults'] });
+      qc.invalidateQueries({ queryKey: ['parrainagesLatest'] });
+      qc.invalidateQueries({ queryKey: ['parrainagesAll'] });
+      qc.invalidateQueries({ queryKey: ['parrainagesForCandidate'] });
+      qc.invalidateQueries({ queryKey: ['candidatesList'] });
+      qc.invalidateQueries({ queryKey: ['comparateurCandidates'] });
+      qc.invalidateQueries({ queryKey: ['candidatesByIds'] });
+      qc.invalidateQueries({ queryKey: ['candidateDetail'] });
+      qc.invalidateQueries({ queryKey: ['matchPropositions'] });
+    };
+
     const checkAndNotify = async () => {
       if (cancelled) return;
+      invalidateAdminDrivenCaches();
       // Throttle: 5 min between any resume/background notifs
       if (Date.now() - getLastFiredAt() < 5 * 60 * 1000) return;
       try {
