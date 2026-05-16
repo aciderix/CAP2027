@@ -14,6 +14,7 @@ interface Candidate {
   party_id: string | null;
   photo_url: string | null;
   short_bio: string | null;
+  website_url: string | null;
   is_published: boolean;
   order_index: number;
   gender: 'M' | 'F' | null;
@@ -136,7 +137,7 @@ function CandidateEditor({
   const [tab, setTab] = useState<Tab>('profile');
   const [form, setForm] = useState<Candidate>(() => candidate ?? {
     id: '', slug: '', first_name: '', last_name: '', party_id: null,
-    photo_url: null, short_bio: '', is_published: false, order_index: 100, gender: null,
+    photo_url: null, short_bio: '', website_url: null, is_published: false, order_index: 100, gender: null,
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -177,6 +178,7 @@ function CandidateEditor({
         party_id: form.party_id || null,
         photo_url: form.photo_url || null,
         short_bio: form.short_bio || null,
+        website_url: form.website_url?.trim() || null,
         is_published: form.is_published,
         order_index: form.order_index,
         gender: form.gender,
@@ -323,6 +325,17 @@ function CandidateEditor({
               <label className="flex flex-col gap-1 col-span-2">
                 <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Bio courte (1-2 phrases)</span>
                 <textarea rows={2} value={form.short_bio ?? ''} onChange={(e) => set('short_bio', e.target.value)} className="input" />
+              </label>
+              <label className="flex flex-col gap-1 col-span-2">
+                <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Site web (optionnel)</span>
+                <input
+                  type="url"
+                  value={form.website_url ?? ''}
+                  onChange={(e) => set('website_url', e.target.value || null)}
+                  placeholder="https://actionpopulaire.fr/agenda/national/"
+                  className="input font-mono text-sm"
+                />
+                <span className="text-[10px] text-slate-400">Affiché sur la fiche après le parti. Idéalement vers l'agenda des meetings.</span>
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Ordre</span>

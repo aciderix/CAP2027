@@ -182,6 +182,7 @@ export type Database = {
           sponsorships_target: number
           status: Database["public"]["Enums"]["candidate_status"]
           updated_at: string
+          website_url: string | null
         }
         Insert: {
           birth_date?: string | null
@@ -202,6 +203,7 @@ export type Database = {
           sponsorships_target?: number
           status?: Database["public"]["Enums"]["candidate_status"]
           updated_at?: string
+          website_url?: string | null
         }
         Update: Partial<Database["public"]["Tables"]["candidates"]["Insert"]>
         Relationships: []

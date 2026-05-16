@@ -265,6 +265,21 @@ export function CandidatesList() {
                   <div className="flex flex-col">
                      <h3 className="text-lg sm:text-2xl font-bold text-[#102a5c] leading-tight mb-0.5">{fullName(selectedCandidate)}</h3>
                      <span className="text-xs sm:text-sm font-medium text-slate-500">{selectedCandidate.parties?.name || '—'}</span>
+                     {selectedCandidate.website_url && (() => {
+                       const u = selectedCandidate.website_url!;
+                       let host: string;
+                       try { host = new URL(u).hostname.replace(/^www\./, ''); }
+                       catch { host = u; }
+                       return (
+                         <a
+                           href={u}
+                           onClick={(e) => { e.preventDefault(); void openLink(u); }}
+                           className="text-xs text-[#1a56db] inline-flex items-center gap-1 mt-0.5 hover:underline w-fit"
+                         >
+                           {host} <ExternalLink className="w-3 h-3" />
+                         </a>
+                       );
+                     })()}
 
                      <div className="hidden">
                         {/* Legacy parrainages preview removed: now sourced from
