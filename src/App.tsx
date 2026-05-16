@@ -26,6 +26,7 @@ import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
 import { VideoModal } from './components/VideoModal';
 import { useAppConfig } from './lib/appConfig';
+import { useAdminChangeSync } from './lib/adminChangeSync';
 import {
   useResumeNotificationsHook,
   maybeAskFirstLaunchPermission,
@@ -55,6 +56,12 @@ export default function App() {
 
   // Local OS notif when the app comes back to foreground.
   useResumeNotificationsHook();
+
+  // Detect server-side admin changes on cold launch / resume and
+  // invalidate admin-driven caches when the counter has bumped. Picks
+  // up the case "notif arrived while the app was closed, user opened
+  // it via launcher without tapping the notif".
+  useAdminChangeSync();
 
   // Splash + onboarding routing.
   useEffect(() => {

@@ -26,11 +26,17 @@ export interface ElectionResultsConfig {
   round2_published: boolean;
 }
 
-interface AppConfigShape {
+export interface AdminLastChange {
+  counter: number;
+  at?: string;
+}
+
+export interface AppConfigShape {
   'election.round1'?: ElectionRound;
   'election.round2'?: ElectionRound;
   'parrainages.source'?: ParrainagesSource;
   'election.results'?: ElectionResultsConfig;
+  'admin.last_change'?: AdminLastChange;
 }
 
 const CACHE_KEY = 'cap2027.appConfig.cache';
@@ -65,6 +71,12 @@ export function useAppConfig() {
   return useQuery({
     queryKey: ['appConfig'],
     initialData: cached ?? undefined,
+    // initialDataUpdatedAt: 0 marks the cached value as immediately stale
+    // so the query refetches on mount (cold launch). Without this,
+    // TanStack treats initialData as "just fetched" and skips the refetch
+    // until staleTime elapses — which would defeat useAdminChangeSync's
+    // ability to detect new content on cold launch.
+    initialDataUpdatedAt: 0,
     // 5 min: this query gates major UI features (Results card, parrainages
     // banner, election dates, election results visibility flag). Short
     // enough that opening the app via launcher after an admin flip
