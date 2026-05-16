@@ -27,7 +27,7 @@ import {
   useResumeNotificationsHook,
   maybeAskFirstLaunchPermission,
 } from './lib/notifications';
-import { registerPushNotifications } from './lib/push';
+import { registerPushNotifications, installAppStateInvalidator } from './lib/push';
 
 // Wrapper that mounts its children once and only flips visibility via
 // CSS afterwards. Used for the heavy tabs (Actualités, Mon fil,
@@ -50,6 +50,14 @@ export default function App() {
 
   // Local OS notif when the app comes back to foreground.
   useResumeNotificationsHook();
+
+  // Refetch every TanStack Query when the app resumes from background.
+  // Independent of push notif opt-in: even users who declined push
+  // need fresh data after backgrounding (refetchOnWindowFocus is
+  // unreliable on Android WebView cold-resume).
+  useEffect(() => {
+    installAppStateInvalidator();
+  }, []);
 
   // Splash + onboarding routing.
   useEffect(() => {

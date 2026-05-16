@@ -22,6 +22,7 @@
 
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
+import { App as CapApp } from '@capacitor/app';
 import { supabase } from './supabase';
 import { getNotificationsEnabled } from './notifications';
 import { queryClient } from './queryClient';
@@ -84,6 +85,84 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
  * Returns { ok, error } so the caller can surface the failure mode in
  * UI without throwing.
  */
+// Maps a notification payload `type` to the TanStack Query keys that
+// should be invalidated. Called from both `pushNotificationReceived`
+// (foreground delivery) and `pushNotificationActionPerformed` (user tap,
+// including cold start from a killed app). Without the second
+// entry point the in-app data lagged a full staleTime cycle behind
+// the notification.
+async function invalidateForNotificationType(t: string | undefined): Promise<void> {
+  try {
+    switch (t) {
+      case 'candidate_published':
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
+          queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+          queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
+          queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
+        ]);
+        break;
+      case 'new_programme':
+        await queryClient.invalidateQueries({ queryKey: ['candidateDetail'] });
+        break;
+      case 'date_official':
+        await queryClient.invalidateQueries({ queryKey: ['appConfig'] });
+        break;
+      case 'parrainages_update':
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['parrainagesLatest'] }),
+          queryClient.invalidateQueries({ queryKey: ['parrainagesAll'] }),
+          queryClient.invalidateQueries({ queryKey: ['parrainagesForCandidate'] }),
+          queryClient.invalidateQueries({ queryKey: ['appConfig'] }),
+        ]);
+        break;
+      case 'article_press':
+      case 'article_social':
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['articles'] }),
+          queryClient.invalidateQueries({ queryKey: ['myFeedArticles'] }),
+          queryClient.invalidateQueries({ queryKey: ['featuredHero'] }),
+          queryClient.invalidateQueries({ queryKey: ['unseenArticles'] }),
+        ]);
+        break;
+      case 'election_milestone':
+      default:
+        break;
+    }
+  } catch {
+    // best-effort — invalidate failures don't affect the notif itself
+  }
+}
+
+let appStateListenerInstalled = false;
+let lastInactiveAt: number | null = null;
+const RESUME_INVALIDATE_THRESHOLD_MS = 30 * 1000; // ignore <30s blur/focus flicker
+
+// Installs a single Capacitor App.appStateChange listener that
+// invalidates every TanStack Query when the app becomes active again
+// after being backgrounded for more than 30 s. Covers the gap left by
+// push listeners (which only fire while the OS still has the JS thread
+// alive) and by refetchOnWindowFocus (unreliable on Android WebView
+// cold-resume from the launcher or a notification tap).
+export function installAppStateInvalidator() {
+  if (appStateListenerInstalled) return;
+  appStateListenerInstalled = true;
+  void CapApp.addListener('appStateChange', ({ isActive }) => {
+    if (!isActive) {
+      lastInactiveAt = Date.now();
+      return;
+    }
+    const wasBackgroundedFor = lastInactiveAt ? Date.now() - lastInactiveAt : Infinity;
+    lastInactiveAt = null;
+    if (wasBackgroundedFor < RESUME_INVALIDATE_THRESHOLD_MS) return;
+    writeDiag({ resumeInvalidateAt: new Date().toISOString(), bgMs: wasBackgroundedFor });
+    // Invalidate everything — mounted observers refetch immediately,
+    // unmounted ones refetch on next mount. Cheap because most queries
+    // already have appropriate staleTime defaults.
+    queryClient.invalidateQueries();
+  });
+}
+
 export async function registerPushNotifications(): Promise<{ ok: boolean; error?: string }> {
   writeDiag({ step: 'entered', lastError: undefined });
 
@@ -163,65 +242,24 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
 
       PushNotifications.addListener('pushNotificationReceived', async (notif) => {
         writeDiag({ lastNotifAt: new Date().toISOString() });
-        // Invalidate the right TanStack Query caches so the app shows
-        // fresh content as soon as the user opens it. Without this,
-        // the 24 h staleTime on reference data (candidates, programmes,
-        // app_config) makes the in-app view lag a full day behind the
-        // notification.
-        try {
-          const t = (notif?.data as { type?: string } | undefined)?.type;
-          switch (t) {
-            case 'candidate_published':
-              await Promise.all([
-                queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
-                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
-                queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
-                queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
-              ]);
-              break;
-            case 'new_programme':
-              // Programmes are loaded via a useEffect in ProgrammesList /
-              // ProgrammeDetail (no TanStack key). They re-fetch on
-              // remount; nothing else to invalidate here. The fiche
-              // candidate detail cache covers proposals separately.
-              await queryClient.invalidateQueries({ queryKey: ['candidateDetail'] });
-              break;
-            case 'date_official':
-              await queryClient.invalidateQueries({ queryKey: ['appConfig'] });
-              break;
-            case 'parrainages_update':
-              await Promise.all([
-                queryClient.invalidateQueries({ queryKey: ['parrainagesLatest'] }),
-                queryClient.invalidateQueries({ queryKey: ['parrainagesAll'] }),
-                queryClient.invalidateQueries({ queryKey: ['parrainagesForCandidate'] }),
-                queryClient.invalidateQueries({ queryKey: ['appConfig'] }),
-              ]);
-              break;
-            case 'article_press':
-            case 'article_social':
-              await Promise.all([
-                queryClient.invalidateQueries({ queryKey: ['articles'] }),
-                queryClient.invalidateQueries({ queryKey: ['myFeedArticles'] }),
-                queryClient.invalidateQueries({ queryKey: ['featuredHero'] }),
-                queryClient.invalidateQueries({ queryKey: ['unseenArticles'] }),
-              ]);
-              break;
-            case 'election_milestone':
-            default:
-              // Election milestone notifs (eve/day/results/proc/etc.)
-              // carry no in-app data change beyond appConfig timing,
-              // which is already covered by the date_official path
-              // when the date flips. No invalidation needed.
-              break;
-          }
-        } catch {
-          // best-effort — invalidate failures don't affect the notif itself
-        }
+        await invalidateForNotificationType((notif?.data as { type?: string } | undefined)?.type);
       });
 
-      PushNotifications.addListener('pushNotificationActionPerformed', () => {
-        /* noop — opening the app is enough */
+      PushNotifications.addListener('pushNotificationActionPerformed', async (action) => {
+        // Fires when the user taps a system notification — including cold
+        // start cases where pushNotificationReceived never fired (app
+        // killed/backgrounded). Without this, the in-app data stays
+        // stale even though the notification was acted on.
+        writeDiag({ lastTapAt: new Date().toISOString() });
+        const t = (action?.notification?.data as { type?: string } | undefined)?.type;
+        await invalidateForNotificationType(t);
       });
+
+      // Catch-all for cases the push listeners miss: app resumed from
+      // background after a notif was handled entirely by the system,
+      // or after a long sleep. WebView focus events on Android Capacitor
+      // are unreliable, so refetchOnWindowFocus alone isn't enough.
+      installAppStateInvalidator();
     }
 
     writeDiag({ registerCalledAt: new Date().toISOString(), step: 'register' });
