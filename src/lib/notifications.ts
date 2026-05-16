@@ -254,6 +254,12 @@ export function useResumeNotificationsHook() {
 
     const checkAndNotify = async () => {
       if (cancelled) return;
+      // appConfig drives useAdminChangeSync — refresh it on every resume
+      // so the counter check sees the latest server value, even if the
+      // 5 min staleTime would otherwise skip the refetch. Cheap query
+      // (3-4 rows). Fire-and-forget; useAdminChangeSync's useEffect
+      // re-runs automatically when its data changes.
+      void qc.refetchQueries({ queryKey: ['appConfig'] });
       // Throttle: 5 min between any resume/background notifs
       if (Date.now() - getLastFiredAt() < 5 * 60 * 1000) return;
       try {

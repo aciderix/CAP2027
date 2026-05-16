@@ -71,11 +71,14 @@ export function useAppConfig() {
   return useQuery({
     queryKey: ['appConfig'],
     initialData: cached ?? undefined,
-    // initialDataUpdatedAt: 0 marks the cached value as immediately stale
-    // so the query refetches on mount (cold launch). Without this,
-    // TanStack treats initialData as "just fetched" and skips the refetch
-    // until staleTime elapses — which would defeat useAdminChangeSync's
-    // ability to detect new content on cold launch.
+    // Force a fresh fetch on every component mount (cold launch) so
+    // useAdminChangeSync sees the up-to-date counter even when the
+    // TanStack persister has rehydrated the query with a recent
+    // dataUpdatedAt (which would otherwise make it look fresh per
+    // staleTime). The persister's rehydration overrides
+    // initialDataUpdatedAt, so we need the explicit refetchOnMount
+    // hook here instead.
+    refetchOnMount: 'always',
     initialDataUpdatedAt: 0,
     // 5 min: this query gates major UI features (Results card, parrainages
     // banner, election dates, election results visibility flag). Short
