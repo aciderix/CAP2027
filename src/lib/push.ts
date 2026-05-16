@@ -179,6 +179,18 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
                 queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
               ]);
               break;
+            case 'candidate_updated':
+              // Emitted by notify_candidate_content_change on changes to
+              // short_bio, candidate_bio_sections, candidate_proposals,
+              // candidate_affairs. Invalidate every cache that surfaces
+              // those fields so the user sees fresh content on open.
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidateDetail'] }),
+                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
+              ]);
+              break;
             case 'new_programme':
               // Programmes are loaded via a useEffect in ProgrammesList /
               // ProgrammeDetail (no TanStack key). They re-fetch on
