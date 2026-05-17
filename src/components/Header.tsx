@@ -1,4 +1,4 @@
-import { Settings, Home, Compass, Rss, Newspaper } from 'lucide-react';
+import { Settings, Home, Compass, Rss, Newspaper, MoreHorizontal } from 'lucide-react';
 import { CountdownBanner } from './CountdownBanner';
 import { useState } from 'react';
 import { SettingsModal } from './SettingsModal';
@@ -76,11 +76,17 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
             >
               <Rss className="w-[18px] h-[18px] xl:w-5 xl:h-5" strokeWidth={activeTab === 'fil' ? 2.5 : 1.5}/> Mon fil
             </button>
-            <button 
+            <button
               onClick={() => setActiveTab('actualites')}
               className={`flex items-center gap-2 font-medium text-sm xl:text-base transition-colors ${activeTab === 'actualites' ? 'text-[#102a5c] font-bold' : 'text-slate-500 hover:text-[#102a5c]'}`}
             >
               <Newspaper className="w-[18px] h-[18px] xl:w-5 xl:h-5" strokeWidth={activeTab === 'actualites' ? 2.5 : 1.5}/> Actualités
+            </button>
+            <button
+              onClick={() => setActiveTab('plus')}
+              className={`flex items-center gap-2 font-medium text-sm xl:text-base transition-colors ${activeTab === 'plus' ? 'text-[#102a5c] font-bold' : 'text-slate-500 hover:text-[#102a5c]'}`}
+            >
+              <MoreHorizontal className="w-[18px] h-[18px] xl:w-5 xl:h-5" strokeWidth={activeTab === 'plus' ? 2.5 : 1.5}/> Plus
             </button>
           </nav>
 
