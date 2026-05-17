@@ -1,5 +1,6 @@
 import { User, Eye, Star, FileText, Scale, Newspaper, Search, ExternalLink, Play } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
@@ -76,6 +77,19 @@ function normaliseSearch(s: string): string {
 
 export function CandidatesList() {
   const [searchQuery, setSearchQuery] = useState('');
+
+  const location = useLocation();
+  const navigate = useNavigate();
+  // Slug derived from /explorer/candidats/:slug. When present we open
+  // the fiche modal for that candidate. URL → state is one-way; the
+  // click handler navigates and the useEffect below picks it up.
+  const slugFromUrl = useMemo(() => {
+    const parts = location.pathname.split('/').filter(Boolean);
+    if (parts[0] === 'explorer' && parts[1] === 'candidats' && parts[2]) {
+      return decodeURIComponent(parts[2]);
+    }
+    return null;
+  }, [location.pathname]);
 
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateWithParty | null>(null);
   const { isFollowed, toggle: toggleFollow } = useFollowedCandidates();
@@ -171,8 +185,30 @@ export function CandidatesList() {
     return Array.from(groups.values());
   }, [detail]);
 
+  // URL → state. When the path slug changes (deep link, back/forward,
+  // closeModal navigate), look up the candidate and open the modal.
+  // candidates may not be loaded yet on first render — re-runs once
+  // they arrive.
+  useEffect(() => {
+    if (!slugFromUrl) {
+      if (selectedCandidate) setSelectedCandidate(null);
+      return;
+    }
+    if (selectedCandidate?.slug === slugFromUrl) return;
+    if (candidates.length === 0) return;
+    const found = candidates.find((c) => c.slug === slugFromUrl);
+    if (found) setSelectedCandidate(found);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slugFromUrl, candidates]);
+
+  const openCandidate = (c: CandidateWithParty) => {
+    setSelectedCandidate(c);
+    navigate(`/explorer/candidats/${encodeURIComponent(c.slug)}`);
+  };
+
   const closeModal = () => {
     setSelectedCandidate(null);
+    if (slugFromUrl) navigate('/explorer/candidats');
     setActiveTab('biographie');
   };
 
@@ -227,7 +263,7 @@ export function CandidatesList() {
               <Button
                   variant="outline"
                   className="w-full mt-2 h-9 text-xs flex items-center justify-center gap-1.5"
-                  onClick={() => setSelectedCandidate(candidate)}
+                  onClick={() => openCandidate(candidate)}
               >
                  <Eye className="w-3.5 h-3.5" /> Voir
               </Button>

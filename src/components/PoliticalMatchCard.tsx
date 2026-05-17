@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Heart, X, Sparkles } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from './ui/Button';
@@ -26,14 +27,24 @@ function readAnsweredIds(): Set<string> {
 
 export function PoliticalMatchCard() {
   const [isOpen, setIsOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // The MoreMenu's "Mes résultats de Boussole" entry navigates here and
-  // then asks us to open the modal via this event.
+  // then asks us to open the modal via this event. App.tsx fires the
+  // same event when /boussole is hit as a deep link.
   useEffect(() => {
     const open = () => setIsOpen(true);
     window.addEventListener('cap2027:open-boussole', open);
     return () => window.removeEventListener('cap2027:open-boussole', open);
   }, []);
+
+  // When the user closes the modal AND we arrived via /boussole, bring
+  // the URL back to / so refresh doesn't re-open it.
+  const closeModal = () => {
+    setIsOpen(false);
+    if (location.pathname === '/boussole') navigate('/');
+  };
 
   // Active match proposition ids. Shared cache with the Comparateur
   // (same queryKey) so opening either screen warms the badge instantly.
@@ -135,10 +146,10 @@ export function PoliticalMatchCard() {
 
       <Modal
         isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
+        onClose={closeModal}
         title=""
       >
-        <PoliticalMatchGame onClose={() => setIsOpen(false)} />
+        <PoliticalMatchGame onClose={closeModal} />
       </Modal>
     </>
   );

@@ -92,11 +92,29 @@ export default function App() {
 
   // state → URL. Fires when any child calls setActiveTab/setExplorerView.
   // Replace=false so the browser back button retraces the user's nav.
+  // Exception : /boussole is a deep-link to the match modal that's
+  // hosted on accueil — we don't want the state→URL effect to rewrite
+  // the URL to /, the user-facing path stays /boussole until the modal
+  // is dismissed (where the modal's onClose handler navigates back).
   useEffect(() => {
+    if (location.pathname === '/boussole') return;
     const target = pathFromState(activeTab, explorerView);
     if (location.pathname !== target) navigate(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, explorerView]);
+
+  // /boussole deep link → switch to accueil + open the match modal.
+  // PoliticalMatchCard listens to this event and opens the modal.
+  useEffect(() => {
+    if (location.pathname !== '/boussole') return;
+    setActiveTab('accueil');
+    setExplorerView('main');
+    const t = setTimeout(() => {
+      try { window.dispatchEvent(new Event('cap2027:open-boussole')); }
+      catch { /* noop */ }
+    }, 60);
+    return () => clearTimeout(t);
+  }, [location.pathname]);
 
   const [showSplash, setShowSplash] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
