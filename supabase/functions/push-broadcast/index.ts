@@ -30,6 +30,13 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
+// Notification types that bypass the quiet-hours window. Reserved for
+// payloads the user MUST receive in real time regardless of the hour:
+// election-day reminders (eve/day/results), inscription/procuration
+// deadlines, official date flips. Everything else (articles, candidate
+// updates, programmes, etc.) is silenced during the nightly window.
+const QUIET_BYPASS_TYPES = new Set(["election_milestone", "date_official"]);
+
 // ---- Google service-account → OAuth bearer token (cached in memory) ----
 
 interface ServiceAccount {
@@ -162,6 +169,48 @@ Deno.serve(async (req) => {
   const title = payload.title?.trim() || "Nouvelle actualité";
   const body = payload.body?.trim() || "Ouvrez CAP 2027 pour la consulter";
 
+  // Quiet hours guard. Silences non-critical pushes during the
+  // configured nightly window (Europe/Paris). election_milestone and
+  // date_official bypass the filter — those carry voter-actionable
+  // info that must reach the user even at night. All other types
+  // (articles, candidate updates, programmes, results, etc.) are
+  // dropped here; the content stays in DB and the user picks it up
+  // via the resume-hook + admin-counter sync next time they open
+  // the app. Configurable via app_config['push.quiet_hours'].
+  if (!QUIET_BYPASS_TYPES.has(payload.type ?? "")) {
+    const { data: qhRow } = await supabase
+      .from("app_config")
+      .select("value")
+      .eq("key", "push.quiet_hours")
+      .maybeSingle();
+    const qh = (qhRow?.value ?? null) as
+      | { enabled?: boolean; start_paris?: number; end_paris?: number }
+      | null;
+    if (qh?.enabled) {
+      const start = typeof qh.start_paris === "number" ? qh.start_paris : 22;
+      const end = typeof qh.end_paris === "number" ? qh.end_paris : 7;
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Europe/Paris",
+        hour: "2-digit",
+        hour12: false,
+      }).formatToParts(new Date());
+      const parisHour =
+        Number(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
+      const inQuietWindow = start > end
+        ? parisHour >= start || parisHour < end // wraps over midnight
+        : parisHour >= start && parisHour < end;
+      if (inQuietWindow) {
+        return Response.json({
+          skipped: true,
+          reason: "quiet_hours",
+          type: payload.type ?? null,
+          paris_hour: parisHour,
+          window: { start_paris: start, end_paris: end },
+        });
+      }
+    }
+  }
+
   let accessToken: string;
   try {
     accessToken = await getAccessToken(sa);
@@ -271,6 +320,7 @@ Deno.serve(async (req) => {
     candidate_id: payload.candidate_id ?? null,
     orientation: payload.orientation ?? null,
     orientations: payload.orientations ?? null,
+    type: payload.type ?? null,
     sample_errors: errors,
   });
 });
