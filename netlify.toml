@@ -1,18 +1,18 @@
-# Netlify config for the CAP 2027 admin console.
-# The mobile app (root project) is published as an Android APK via
-# GitHub Actions and is NOT deployed here. Only /admin is web-hosted.
+# Netlify config for the CAP 2027 main web app (cap2027.fr).
+# Mirrors the APK Vite build: same `dist/` output, same env vars.
+# The admin console has its own netlify.toml inside admin/.
 
 [build]
-  base = "admin"
   command = "npm install && npm run build"
   publish = "dist"
 
 [build.environment]
   NODE_VERSION = "22"
 
-# SPA fallback — the admin uses internal state-based navigation, no
-# router. Any deep link must serve index.html so the React app can
-# decide what to render.
+# SPA fallback — react-router will be added in a later step, but this
+# is already needed today: refreshing on a route other than `/` would
+# otherwise 404. With this redirect Netlify serves index.html so the
+# React bundle takes over and renders the right view.
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -24,6 +24,34 @@
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+# Static images & icons — long cache (they're either logos or photos
+# stamped onto candidates from Supabase Storage and proxied).
+[[headers]]
+  for = "/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/*.ico"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+# PWA manifest — short cache so updates propagate
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "public, max-age=300"
+    Content-Type = "application/manifest+json"
+
+# index.html — no cache, must revalidate
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
 
 [[headers]]
   for = "/index.html"

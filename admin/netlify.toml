@@ -1,0 +1,35 @@
+# Netlify config for the CAP 2027 admin console.
+# The mobile app (root project) is built separately, see /netlify.toml.
+#
+# This file lives in admin/ and is read by the cap2027-admin Netlify
+# site, which has its Site settings → Build & deploy → Base directory
+# set to "admin". From Netlify's POV the working directory IS this
+# folder, hence no `base =` here and `publish = "dist"` resolves to
+# admin/dist.
+
+[build]
+  command = "npm install && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# SPA fallback — the admin uses internal state-based navigation, no
+# router. Any deep link must serve index.html so the React app can
+# decide what to render.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Long-cache the immutable hashed assets emitted by Vite, but never
+# cache the HTML shell so users always get the latest manifest.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
