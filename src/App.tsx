@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, BookOpen, Scale, BadgeCheck, ArrowLeft, Stamp, BarChart3 } from 'lucide-react';
 import { Header } from './components/Header';
@@ -32,6 +33,7 @@ import {
   maybeAskFirstLaunchPermission,
 } from './lib/notifications';
 import { registerPushNotifications } from './lib/push';
+import { registerPushWeb } from './lib/pushWeb';
 
 // Wrapper that mounts its children once and only flips visibility via
 // CSS afterwards. Used for the heavy tabs (Actualités, Mon fil,
@@ -45,11 +47,56 @@ function KeepMounted({ visible, children }: { visible: boolean; children: React.
   );
 }
 
+// URL ↔ tab state sync. Children keep calling setActiveTab/setExplorerView
+// as before — these two helpers translate one direction at a time and the
+// two effects below avoid an infinite loop by guarding on equality.
+function pathFromState(activeTab: string, explorerView: string): string {
+  if (activeTab === 'explorer') {
+    return explorerView === 'main' ? '/explorer' : `/explorer/${explorerView}`;
+  }
+  if (activeTab === 'accueil') return '/';
+  return '/' + activeTab;
+}
+
+function stateFromPath(pathname: string): { activeTab: string; explorerView: string } {
+  const parts = pathname.split('/').filter(Boolean);
+  const first = parts[0] ?? '';
+  if (!first) return { activeTab: 'accueil', explorerView: 'main' };
+  if (first === 'explorer') {
+    const sub = parts[1] ?? 'main';
+    return { activeTab: 'explorer', explorerView: sub };
+  }
+  if (['candidats', 'fil', 'actualites', 'plus'].includes(first)) {
+    return { activeTab: first, explorerView: 'main' };
+  }
+  return { activeTab: 'accueil', explorerView: 'main' };
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('accueil');
-  const [explorerView, setExplorerView] = useState('main');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const initial = stateFromPath(location.pathname);
+  const [activeTab, setActiveTab] = useState(initial.activeTab);
+  const [explorerView, setExplorerView] = useState(initial.explorerView);
   const { data: appCfg } = useAppConfig();
   const round1Published = appCfg?.['election.results']?.round1_published === true;
+
+  // URL → state. Fires on back/forward, direct link or programmatic
+  // navigate. Guarded against feedback loops by the equality check.
+  useEffect(() => {
+    const s = stateFromPath(location.pathname);
+    if (s.activeTab !== activeTab) setActiveTab(s.activeTab);
+    if (s.explorerView !== explorerView) setExplorerView(s.explorerView);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  // state → URL. Fires when any child calls setActiveTab/setExplorerView.
+  // Replace=false so the browser back button retraces the user's nav.
+  useEffect(() => {
+    const target = pathFromState(activeTab, explorerView);
+    if (location.pathname !== target) navigate(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, explorerView]);
 
   const [showSplash, setShowSplash] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -74,7 +121,10 @@ export default function App() {
         // Returning user: ask for notif permission on first launch
         // post-onboarding, then register the FCM token. Both calls
         // are idempotent and silent on web / when already granted.
-        void maybeAskFirstLaunchPermission().then(() => registerPushNotifications());
+        void maybeAskFirstLaunchPermission().then(() => Promise.all([
+        registerPushNotifications(),
+        registerPushWeb(),
+      ]));
       }
     }, 2500);
     return () => clearTimeout(splashTimer);
