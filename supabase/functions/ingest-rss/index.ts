@@ -9,6 +9,29 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
+// Authentication (issue #7). This function is destructive (?retag=true
+// wipes every article tag), so it rejects unauthenticated callers.
+// Authorized when EITHER Authorization: Bearer <service_role_key> OR
+// x-ingest-token: <ingest_secret> (sent by the pg_cron job; the secret
+// lives in Vault, read via public.get_ingest_secret()).
+let cachedSecret: string | null = null;
+async function getExpectedSecret(): Promise<string | null> {
+  if (cachedSecret) return cachedSecret;
+  const { data, error } = await supabase.rpc("get_ingest_secret");
+  if (error) return null;
+  cachedSecret = typeof data === "string" && data.length > 0 ? data : null;
+  return cachedSecret;
+}
+async function isAuthorized(req: Request): Promise<boolean> {
+  const auth = req.headers.get("authorization") ?? "";
+  const bearer = auth.replace(/^Bearer\s+/i, "").trim();
+  if (bearer && bearer === SERVICE_ROLE_KEY) return true;
+  const token = req.headers.get("x-ingest-token");
+  if (!token) return false;
+  const expected = await getExpectedSecret();
+  return !!expected && token === expected;
+}
+
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -492,6 +515,12 @@ async function retagAllArticles(refs: Refs) {
 }
 
 Deno.serve(async (req) => {
+  if (!(await isAuthorized(req))) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401, headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const url = new URL(req.url);
   const onlySlug = url.searchParams.get("source");
   const retag = url.searchParams.get("retag") === "true";

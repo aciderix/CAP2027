@@ -1,19 +1,15 @@
-// Companion to ingest-rss: looks at news_articles inserted in the
-// recent ingest window and dispatches FCM notifications.
+// Companion to ingest-rss: dispatches FCM notifs after each ingest cycle.
+//   1. Per-candidate (twitter_post / youtube_video w/ candidate link) → candidate_id targeting
+//   2. Consolidated press notif (press articles + orphan twitter/youtube) → orientations[] targeting
 //
-// Two notif paths:
-//   1. Per-candidate (targeted): for each candidate with a fresh
-//      twitter_post / youtube_video in the window, post to
-//      push-broadcast?candidate_id=... — only followers of that
-//      candidate receive it.
-//   2. Generic broadcast (all tokens): if any 'article' (press) is
-//      fresh, send a single "N nouvelles actualités" notif to every
-//      device, so users who don't follow a specific candidate still
-//      get told the feed has updated.
+// Each call tags data.type so the client can invalidate the right caches.
 //
-// Per-user filtering for social posts now happens server-side via
-// push_token_follows. Local follows on the device are mirrored to that
-// table whenever the user toggles (see lib/follows.ts).
+// AUTHENTICATION (issue #7): rejects unauthenticated callers (an open
+// ?window_min=N could be abused to replay notifs over the whole history).
+// Authorized when EITHER Authorization: Bearer <service_role_key> OR
+// x-ingest-token: <ingest_secret> (sent by the pg_cron job; the secret
+// lives in Vault, read via public.get_ingest_secret()). window_min is
+// also clamped to [1, 1440] minutes.
 
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -21,6 +17,24 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+
+let cachedSecret: string | null = null;
+async function getExpectedSecret(): Promise<string | null> {
+  if (cachedSecret) return cachedSecret;
+  const { data, error } = await supabase.rpc("get_ingest_secret");
+  if (error) return null;
+  cachedSecret = typeof data === "string" && data.length > 0 ? data : null;
+  return cachedSecret;
+}
+async function isAuthorized(req: Request): Promise<boolean> {
+  const auth = req.headers.get("authorization") ?? "";
+  const bearer = auth.replace(/^Bearer\s+/i, "").trim();
+  if (bearer && bearer === SERVICE_ROLE_KEY) return true;
+  const token = req.headers.get("x-ingest-token");
+  if (!token) return false;
+  const expected = await getExpectedSecret();
+  return !!expected && token === expected;
+}
 
 function stripRetweetPrefix(s: string): string {
   return s.replace(/^RT by @[\w-]+:\s*/, '').replace(/\s*\b(?:Video|Image)\s*$/i, '').trim();
@@ -53,10 +67,7 @@ async function callBroadcast(payload: PostPayload, dryRun: boolean) {
   if (dryRun) return { dry: true, payload };
   const r = await fetch(`${SUPABASE_URL}/functions/v1/push-broadcast`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-    },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
     body: JSON.stringify(payload),
   });
   let result: any = null;
@@ -65,8 +76,15 @@ async function callBroadcast(payload: PostPayload, dryRun: boolean) {
 }
 
 Deno.serve(async (req) => {
+  if (!(await isAuthorized(req))) {
+    return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const url = new URL(req.url);
-  const minutes = Number(url.searchParams.get("window_min") ?? "90");
+  const rawWindow = Number(url.searchParams.get("window_min") ?? "90");
+  // Clamp to [1, 1440] min so a caller can't replay notifs over a huge
+  // history window.
+  const minutes = Number.isFinite(rawWindow) ? Math.min(Math.max(rawWindow, 1), 1440) : 90;
   const dryRun = url.searchParams.get("dry") === "1";
 
   const since = new Date(Date.now() - minutes * 60 * 1000).toISOString();
@@ -85,23 +103,11 @@ Deno.serve(async (req) => {
 
   const articles = (newArticles ?? []) as ArticleRow[];
   const count = articles.length;
-  if (count === 0) {
-    return Response.json({ count: 0, since, skipped: true });
-  }
+  if (count === 0) return Response.json({ count: 0, since, skipped: true });
 
   const dispatched: any[] = [];
 
-  // ---- 1. Per-candidate notifs for fresh social posts ----------------
-  //
-  // Build a map: candidate_id → { candidate, twitter[], youtube[] }.
-  // Press articles are intentionally excluded here — they go through
-  // the generic broadcast path below.
-  const perCandidate = new Map<string, {
-    candidate: Candidate;
-    twitter: ArticleRow[];
-    youtube: ArticleRow[];
-  }>();
-
+  const perCandidate = new Map<string, { candidate: Candidate; twitter: ArticleRow[]; youtube: ArticleRow[] }>();
   for (const a of articles) {
     if (a.kind !== "twitter_post" && a.kind !== "youtube_video") continue;
     for (const link of a.article_candidates ?? []) {
@@ -123,59 +129,35 @@ Deno.serve(async (req) => {
       const a = twitter[0];
       dispatched.push(await callBroadcast({
         title: `Nouveau post de ${name}`,
-        body: stripRetweetPrefix(a.summary || a.title || "").slice(0, 140)
-          || "Ouvrez CAP 2027 pour le consulter",
-        url: a.url,
-        candidate_id: candidate.id,
-        type: "article_social",
+        body: stripRetweetPrefix(a.summary || a.title || "").slice(0, 140) || "Ouvrez CAP 2027 pour le consulter",
+        url: a.url, candidate_id: candidate.id, type: "article_social",
       }, dryRun));
     } else if (youtube.length === 1 && twitter.length === 0) {
       const a = youtube[0];
       dispatched.push(await callBroadcast({
         title: `Nouvelle vidéo de ${name}`,
         body: (a.title || "").slice(0, 140) || "Ouvrez CAP 2027 pour la voir",
-        url: a.url,
-        candidate_id: candidate.id,
-        type: "article_social",
+        url: a.url, candidate_id: candidate.id, type: "article_social",
       }, dryRun));
     } else {
-      // Multiple posts/videos for the same candidate in the same window
-      // — aggregate. The body picks the most recent item's title.
       const total = twitter.length + youtube.length;
       const latest = (twitter[0] ?? youtube[0]);
       let title: string;
-      if (twitter.length > 0 && youtube.length === 0) {
-        title = `${total} nouveaux posts de ${name}`;
-      } else if (youtube.length > 0 && twitter.length === 0) {
-        title = `${total} nouvelles vidéos de ${name}`;
-      } else {
-        title = `${total} nouvelles publications de ${name}`;
-      }
+      if (twitter.length > 0 && youtube.length === 0) title = `${total} nouveaux posts de ${name}`;
+      else if (youtube.length > 0 && twitter.length === 0) title = `${total} nouvelles vidéos de ${name}`;
+      else title = `${total} nouvelles publications de ${name}`;
       dispatched.push(await callBroadcast({
         title,
         body: (latest.title || "").slice(0, 140) || "Ouvrez CAP 2027 pour les consulter",
-        url: latest.url,
-        candidate_id: candidate.id,
-        type: "article_social",
+        url: latest.url, candidate_id: candidate.id, type: "article_social",
       }, dryRun));
     }
   }
 
-  // ---- 2. Consolidated press notif --------------------------------
-  //
-  // Press articles can land from sources of different orientations,
-  // but the user expects ONE notif total — not one per bord. We
-  // collect all orientations represented in the batch and dispatch a
-  // single push-broadcast call with the orientations array; the RPC
-  // tokens_for_press_orientations handles the opt-in restrictif rule
-  // (no rows = lenient default, rows = match at least one orientation).
   const pressArticles = articles.filter((a) => a.kind === "article");
-  // Aussi inclure les twitter_post / youtube_video qui ne sont liés à
-  // aucun candidat (ex: chaîne YouTube de Brut, post X d'un média
-  // généraliste). Ils tombent comme la presse dans le broadcast par
-  // orientation pour que les utilisateurs reçoivent quand même la
-  // notif. Les vidéos / posts liés à un candidat ont déjà été traités
-  // dans la boucle perCandidate ci-dessus.
+  // Inclure aussi les twitter/youtube SANS candidat lié (ex: chaîne
+  // YouTube de Brut, post X d'un média généraliste). Ils tombent comme
+  // la presse dans le broadcast par orientation.
   const orphanMedia = articles.filter((a) => {
     if (a.kind !== "twitter_post" && a.kind !== "youtube_video") return false;
     const linked = (a.article_candidates ?? []).some((l) => !!l.candidate);
@@ -183,15 +165,12 @@ Deno.serve(async (req) => {
   });
   const pressItems = [...pressArticles, ...orphanMedia];
   const pressOrientations = new Set<string>();
-  for (const a of pressItems) {
-    pressOrientations.add(a.source?.orientation ?? "transverse");
-  }
+  for (const a of pressItems) pressOrientations.add(a.source?.orientation ?? "transverse");
   if (pressItems.length > 0) {
     const sample = pressItems[0];
-    const pressTitle =
-      pressItems.length === 1
-        ? "Une nouvelle actualité"
-        : `${pressItems.length} nouvelles actualités`;
+    const pressTitle = pressItems.length === 1
+      ? "Une nouvelle actualité"
+      : `${pressItems.length} nouvelles actualités`;
     dispatched.push(await callBroadcast({
       title: pressTitle,
       body: (sample.title || "").slice(0, 140) || "Ouvrez CAP 2027 pour les consulter",
@@ -202,8 +181,7 @@ Deno.serve(async (req) => {
   }
 
   return Response.json({
-    count,
-    since,
+    count, since,
     per_candidate: perCandidate.size,
     press_articles: pressArticles.length,
     orphan_media: orphanMedia.length,
