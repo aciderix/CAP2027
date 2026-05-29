@@ -1,18 +1,17 @@
-# Netlify config for the CAP 2027 admin console.
-# The mobile app (root project) is published as an Android APK via
-# GitHub Actions and is NOT deployed here. Only /admin is web-hosted.
+# Netlify config for the PUBLIC CAP 2027 web app (cap2027.fr).
+# This builds the root project (the same web app shipped as the Android
+# APK). The admin console is a SEPARATE Netlify site that builds the
+# admin/ directory — see admin/netlify.toml. Set that site's "Base
+# directory" to `admin` in the Netlify UI so it picks up its own config.
 
 [build]
-  base = "admin"
   command = "npm install && npm run build"
   publish = "dist"
 
 [build.environment]
   NODE_VERSION = "22"
 
-# SPA fallback — the admin uses internal state-based navigation, no
-# router. Any deep link must serve index.html so the React app can
-# decide what to render.
+# SPA fallback — the app uses internal state-based navigation, no router.
 [[redirects]]
   from = "/*"
   to = "/index.html"
