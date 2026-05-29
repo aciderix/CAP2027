@@ -33,6 +33,7 @@ interface ArticleRow {
   published_at: string;
   is_factcheck: boolean;
   verdict: string | null;
+  kind: string | null;
   source: SourceLite | null;
   article_themes: { theme: ThemeLite | null }[];
   article_candidates: { candidate: CandidateLite | null }[];
@@ -113,7 +114,7 @@ export function NewsFeed({ mode }: { mode: Mode }) {
       const { data, error } = await supabase
         .from('news_articles')
         .select(`
-          id, url, title, summary, image_url, published_at, is_factcheck, verdict,
+          id, url, title, summary, image_url, published_at, is_factcheck, verdict, kind,
           source:news_sources(slug, name, orientation, color, homepage_url),
           article_themes(theme:themes(id, slug, name, color)),
           article_candidates(candidate:candidates(id, slug, first_name, last_name)),

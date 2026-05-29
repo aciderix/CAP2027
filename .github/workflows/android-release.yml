@@ -82,6 +82,7 @@ jobs:
       - name: Decode signing keystore
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           if [ -z "$KEYSTORE_B64" ]; then
             echo "::error::ANDROID_KEYSTORE_BASE64 secret is not set"
@@ -90,8 +91,10 @@ jobs:
           mkdir -p android/app
           echo "$KEYSTORE_B64" | base64 -d > android/app/release.jks
           # Sanity: confirm it's a valid keystore (will fail loudly otherwise).
+          # Password is passed via env (not ${{ }} interpolation) so it never
+          # appears in the process list or risks leaking into logs.
           keytool -list -keystore android/app/release.jks \
-            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
             > /dev/null
 
       - name: Make gradlew executable
