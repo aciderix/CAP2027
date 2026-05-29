@@ -32,6 +32,20 @@ USER_AGENT = (
 RSS_TIMEOUT_S = 30
 POST_TIMEOUT_S = 120
 PER_SOURCE_DELAY_S = 1.0  # be nice to upstream + edge function
+RSS_MAX_BYTES = 10 * 1024 * 1024  # 10 MB hard cap — reject unexpectedly large bodies
+
+_PRIVATE_IP_PREFIXES = ("127.", "10.", "169.254.", "192.168.", "::1", "fc", "fd")
+
+
+def _validate_rss_url(url: str) -> None:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError(f"RSS URL must use https, got: {parsed.scheme!r}")
+    host = parsed.hostname or ""
+    if any(host.startswith(p) for p in _PRIVATE_IP_PREFIXES):
+        raise ValueError(f"RSS URL targets a private/loopback address: {host!r}")
+    if all(c.isdigit() or c == "." for c in host):
+        raise ValueError(f"RSS URL must use a hostname, not a bare IP: {host!r}")
 
 
 def env(name: str) -> str:
@@ -57,6 +71,7 @@ def list_sources(supabase_url: str, key: str) -> list[dict[str, Any]]:
 
 
 def fetch_rss(rss_url: str) -> bytes:
+    _validate_rss_url(rss_url)
     req = urllib.request.Request(
         rss_url,
         headers={
@@ -66,7 +81,10 @@ def fetch_rss(rss_url: str) -> bytes:
         },
     )
     with urllib.request.urlopen(req, timeout=RSS_TIMEOUT_S) as r:
-        return r.read()
+        data = r.read(RSS_MAX_BYTES + 1)
+    if len(data) > RSS_MAX_BYTES:
+        raise ValueError(f"RSS body exceeds {RSS_MAX_BYTES // 1024 // 1024} MB limit")
+    return data
 
 
 def post_xml(supabase_url: str, slug: str, token: str, xml: bytes) -> tuple[int, dict[str, Any]]:
@@ -110,6 +128,7 @@ def main() -> int:
         print(f"\n=== {slug} ({src.get('name')}) ===")
         print(f"  GET {rss_url}")
         try:
+            _validate_rss_url(rss_url)
             xml = fetch_rss(rss_url)
             print(f"  fetched {len(xml):,} bytes")
         except urllib.error.HTTPError as e:

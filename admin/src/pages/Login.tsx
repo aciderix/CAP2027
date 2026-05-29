@@ -7,26 +7,14 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setInfo(null);
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) setError(error.message);
-  };
-
-  const handleSignUp = async () => {
-    setError(null);
-    setInfo(null);
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({ email, password });
-    setLoading(false);
-    if (error) setError(error.message);
-    else setInfo("Compte créé. Vérifie ta boîte mail si la confirmation est activée, puis demande à être ajouté dans la table public.admins.");
   };
 
   return (
@@ -65,7 +53,6 @@ export function Login() {
         </label>
 
         {error && <div className="text-xs bg-rose-50 text-rose-700 border border-rose-100 rounded-lg p-2">{error}</div>}
-        {info && <div className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg p-2">{info}</div>}
 
         <button
           type="submit"
@@ -74,15 +61,6 @@ export function Login() {
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
           Se connecter
-        </button>
-
-        <button
-          type="button"
-          onClick={handleSignUp}
-          disabled={loading || !email || !password}
-          className="text-xs text-slate-500 hover:text-slate-700 hover:underline disabled:opacity-40"
-        >
-          Premier admin ? Créer un compte (puis ajouter votre user_id à public.admins)
         </button>
       </form>
     </div>

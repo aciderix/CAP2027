@@ -170,9 +170,15 @@ function ParrainagesCard({
 
   const triggerFetch = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const r = await fetch(
         `${(import.meta.env.VITE_SUPABASE_URL ?? 'https://oyvqvfawcxlnvpgloicx.supabase.co')}/functions/v1/fetch-parrainages`,
-        { method: 'POST' },
+        {
+          method: 'POST',
+          headers: session?.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : {},
+        },
       );
       const j = await r.json();
       alert(JSON.stringify(j, null, 2));
@@ -221,13 +227,6 @@ function ParrainagesCard({
       </div>
     </div>
   );
-}
-
-function localFromIso(iso: string): string {
-  // Convert to local-time string suitable for <input type="datetime-local">
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // ---- Paris-locked datetime-local conversions --------------------------

@@ -12,6 +12,8 @@ import { Sidebar, type Page } from './components/Sidebar';
 import { DebugPanel } from './components/DebugPanel';
 import { Loader2 } from 'lucide-react';
 
+const DEBUG = import.meta.env.DEV || import.meta.env.VITE_DEBUG === 'true';
+
 const PAGE_LABELS: Record<Page, string> = {
   dashboard: "Vue d'ensemble",
   candidates: 'Candidats',
@@ -32,7 +34,7 @@ export default function App() {
         <div className="h-full flex items-center justify-center">
           <Loader2 className="w-6 h-6 animate-spin text-ink" />
         </div>
-        <DebugPanel />
+        {DEBUG && <DebugPanel />}
       </>
     );
   }
@@ -41,7 +43,7 @@ export default function App() {
     return (
       <>
         <Login />
-        <DebugPanel />
+        {DEBUG && <DebugPanel />}
       </>
     );
   }
@@ -67,7 +69,7 @@ values ('${auth.user?.id}', '${auth.user?.email}');`}
             Se déconnecter
           </button>
         </div>
-        <DebugPanel />
+        {DEBUG && <DebugPanel />}
       </>
     );
   }
@@ -111,7 +113,7 @@ values ('${auth.user?.id}', '${auth.user?.email}');`}
         </main>
       </div>
 
-      <DebugPanel />
+      {DEBUG && <DebugPanel />}
     </div>
   );
 }

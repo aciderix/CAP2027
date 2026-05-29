@@ -95,19 +95,17 @@ export function useAuth(): AuthState & { signOut: () => Promise<void> } {
   }, []);
 
   const signOut = useCallback(async () => {
-    // Local-only signOut: no POST /auth/v1/logout, so we never hang
-    // on a slow/blocked auth endpoint. The JWT expires server-side
-    // on its own; for an admin console this is acceptable.
+    // Try global signOut (revokes server-side refresh token) with a tight
+    // timeout, then fall back to local-only so the UI never hangs.
     try {
       await withTimeout(
-        supabase.auth.signOut({ scope: 'local' }),
+        supabase.auth.signOut({ scope: 'global' }),
         SIGNOUT_TIMEOUT_MS,
         { error: null } as any,
       );
     } catch {
-      // ignore
+      try { await supabase.auth.signOut({ scope: 'local' }); } catch { /* ignore */ }
     }
-    // Force-clear locally regardless of whether the listener fires.
     setState({ ...EMPTY, loading: false });
   }, []);
 
