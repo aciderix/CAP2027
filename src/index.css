@@ -5,6 +5,17 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Edge-to-edge safe areas. Android 15 (targetSdk 35+) draws the WebView
+   behind the status & navigation bars; without these the header sits
+   under the clock/notch and the bottom nav under the gesture bar.
+   Requires viewport-fit=cover in index.html for env(safe-area-inset-*)
+   to resolve to non-zero values. Defined manually because Tailwind v4
+   ships no built-in safe-area utilities. */
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pl-safe { padding-left: env(safe-area-inset-left); }
+.pr-safe { padding-right: env(safe-area-inset-right); }
+
 /* Article card marker class kept for future targeting (skeletons,
    intersection-observer-driven optimisations, etc.). We tried
    content-visibility: auto here for off-screen paint culling but the

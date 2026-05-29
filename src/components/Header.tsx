@@ -14,7 +14,7 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 py-3 md:px-6">
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 py-3 md:px-6 pt-[calc(0.75rem+env(safe-area-inset-top))]">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           {/* Left side: Logo & Slogan */}
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
