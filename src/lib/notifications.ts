@@ -254,17 +254,34 @@ export function useResumeNotificationsHook() {
 
     const checkAndNotify = async () => {
       if (cancelled) return;
-      // Throttle: 5 min between any resume/background notifs
-      if (Date.now() - getLastFiredAt() < 5 * 60 * 1000) return;
+      // appConfig drives useAdminChangeSync — refresh it on every resume
+      // so the counter check sees the latest server value, even if the
+      // 5 min staleTime would otherwise skip the refetch. Cheap query
+      // (3-4 rows). Fire-and-forget; useAdminChangeSync's useEffect
+      // re-runs automatically when its data changes.
+      void qc.refetchQueries({ queryKey: ['appConfig'] });
       try {
-        // Force a fresh fetch — don't trust stale cache for the
-        // gating decision since this drives an OS notification.
+        // unseenArticles is the source of truth for "did anything new
+        // arrive while the app was closed". Always refetched, regardless
+        // of the OS-notif throttle.
         await qc.refetchQueries({ queryKey: ['unseenArticles'] });
         const data = qc.getQueryData<UnseenArticle[]>(['unseenArticles', getLastSeenAt()]);
         const count = data?.length ?? 0;
         if (count > 0) {
-          setLastFiredAt(Date.now());
-          await fireResumeNotification(count, data?.[0] ?? null);
+          // New articles since the user's last visit. Invalidate the heavy
+          // feed caches so Actualités / Mon fil / Featured refresh next
+          // time the user navigates to them — covers the "user got a push,
+          // swiped the notif, and opened the app via the launcher" path
+          // where pushNotificationReceived / Performed never fire.
+          qc.invalidateQueries({ queryKey: ['articles'] });
+          qc.invalidateQueries({ queryKey: ['myFeedArticles'] });
+          qc.invalidateQueries({ queryKey: ['featuredHero'] });
+          // OS notif is still throttled to once per 5 min so we don't
+          // double-bip with the foreground push or the background runner.
+          if (Date.now() - getLastFiredAt() >= 5 * 60 * 1000) {
+            setLastFiredAt(Date.now());
+            await fireResumeNotification(count, data?.[0] ?? null);
+          }
         }
       } catch {
         // best-effort

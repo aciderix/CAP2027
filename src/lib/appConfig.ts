@@ -21,10 +21,22 @@ export interface ParrainagesSource {
   note?: string;
 }
 
-interface AppConfigShape {
+export interface ElectionResultsConfig {
+  round1_published: boolean;
+  round2_published: boolean;
+}
+
+export interface AdminLastChange {
+  counter: number;
+  at?: string;
+}
+
+export interface AppConfigShape {
   'election.round1'?: ElectionRound;
   'election.round2'?: ElectionRound;
   'parrainages.source'?: ParrainagesSource;
+  'election.results'?: ElectionResultsConfig;
+  'admin.last_change'?: AdminLastChange;
 }
 
 const CACHE_KEY = 'cap2027.appConfig.cache';
@@ -59,7 +71,20 @@ export function useAppConfig() {
   return useQuery({
     queryKey: ['appConfig'],
     initialData: cached ?? undefined,
-    staleTime: 60 * 60 * 1000, // 1 h: dates change rarely
+    // Force a fresh fetch on every component mount (cold launch) so
+    // useAdminChangeSync sees the up-to-date counter even when the
+    // TanStack persister has rehydrated the query with a recent
+    // dataUpdatedAt (which would otherwise make it look fresh per
+    // staleTime). The persister's rehydration overrides
+    // initialDataUpdatedAt, so we need the explicit refetchOnMount
+    // hook here instead.
+    refetchOnMount: 'always',
+    initialDataUpdatedAt: 0,
+    // 5 min: this query gates major UI features (Results card, parrainages
+    // banner, election dates, election results visibility flag). Short
+    // enough that opening the app via launcher after an admin flip
+    // refreshes the gate without needing a push notif tap.
+    staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<AppConfigShape> => {
       const { data, error } = await supabase.from('app_config').select('key, value');
       if (error) throw error;

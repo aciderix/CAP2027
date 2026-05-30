@@ -29,6 +29,7 @@ import {
 } from './lib/notifications';
 import { registerPushNotifications } from './lib/push';
 import { registerPushWeb } from './lib/pushWeb';
+import { useAdminChangeSync } from './lib/adminChangeSync';
 
 // Wrapper that mounts its children once and only flips visibility via
 // CSS afterwards. Used for the heavy tabs (Actualités, Mon fil,
@@ -51,6 +52,12 @@ export default function App() {
 
   // Local OS notif when the app comes back to foreground.
   useResumeNotificationsHook();
+
+  // Detect server-side admin changes on cold launch / resume and
+  // invalidate admin-driven caches when the counter has bumped. Picks
+  // up the case "notif arrived while the app was closed, user opened
+  // it via launcher without tapping the notif".
+  useAdminChangeSync();
 
   // Splash + onboarding routing.
   useEffect(() => {
