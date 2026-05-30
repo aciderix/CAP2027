@@ -107,9 +107,35 @@ export async function registerPushWeb(): Promise<{ ok: boolean; error?: string }
         serviceWorkerRegistration: swReg,
       });
     } catch (e: any) {
-      console.error('[pushWeb] getToken failed', e);
-      writeDiag({ step: 'getToken-failed', error: String(e?.message ?? e), code: e?.code });
-      return { ok: false, error: 'getToken: ' + String(e?.message ?? e) };
+      // Chrome (especially on Xiaomi/MIUI) sometimes keeps a stale
+      // PushSubscription cached at the browser level that's no longer
+      // valid for the push service. The classic symptom is `getToken`
+      // throwing AbortError code 20 "Registration failed - push service
+      // error" with no way to recover other than unsubscribing the old
+      // sub first. We try that once, then retry getToken.
+      console.warn('[pushWeb] getToken first attempt failed, clearing stale subscription and retrying', e);
+      writeDiag({ step: 'getToken-retry', firstError: String(e?.message ?? e), firstCode: e?.code });
+      try {
+        const existing = await swReg.pushManager.getSubscription();
+        if (existing) {
+          await existing.unsubscribe();
+          writeDiag({ step: 'unsubscribed-stale' });
+        } else {
+          writeDiag({ step: 'no-stale-sub-found' });
+        }
+      } catch (uErr: any) {
+        writeDiag({ step: 'unsubscribe-failed', error: String(uErr?.message ?? uErr) });
+      }
+      try {
+        token = await getToken(messaging, {
+          vapidKey: VAPID_KEY,
+          serviceWorkerRegistration: swReg,
+        });
+      } catch (e2: any) {
+        console.error('[pushWeb] getToken failed after retry', e2);
+        writeDiag({ step: 'getToken-failed', error: String(e2?.message ?? e2), code: e2?.code });
+        return { ok: false, error: 'getToken: ' + String(e2?.message ?? e2) };
+      }
     }
     if (!token) { writeDiag({ step: 'getToken-empty' }); return { ok: false, error: 'no-token' }; }
     writeDiag({ step: 'token-acquired', tokenPreview: token.slice(0, 24) });
