@@ -4,8 +4,9 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, BookOpen, Scale, BadgeCheck, ArrowLeft, Stamp } from 'lucide-react';
+import { User, BookOpen, Scale, BadgeCheck, ArrowLeft, Stamp, BarChart3 } from 'lucide-react';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { VoterToolkit } from './components/VoterToolkit';
@@ -20,16 +21,19 @@ import { MyFeed } from './components/MyFeed';
 import { MoreMenu } from './components/MoreMenu';
 import { ParrainagesCard } from './components/ParrainagesCard';
 import { ParrainagesList } from './components/ParrainagesList';
+import { ResultsCard } from './components/ResultsCard';
+import { ResultsList } from './components/ResultsList';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
 import { VideoModal } from './components/VideoModal';
+import { useAppConfig } from './lib/appConfig';
+import { useAdminChangeSync } from './lib/adminChangeSync';
 import {
   useResumeNotificationsHook,
   maybeAskFirstLaunchPermission,
 } from './lib/notifications';
 import { registerPushNotifications } from './lib/push';
 import { registerPushWeb } from './lib/pushWeb';
-import { useAdminChangeSync } from './lib/adminChangeSync';
 
 // Wrapper that mounts its children once and only flips visibility via
 // CSS afterwards. Used for the heavy tabs (Actualités, Mon fil,
@@ -43,9 +47,74 @@ function KeepMounted({ visible, children }: { visible: boolean; children: React.
   );
 }
 
+// URL ↔ tab state sync. Children keep calling setActiveTab/setExplorerView
+// as before — these two helpers translate one direction at a time and the
+// two effects below avoid an infinite loop by guarding on equality.
+function pathFromState(activeTab: string, explorerView: string): string {
+  if (activeTab === 'explorer') {
+    return explorerView === 'main' ? '/explorer' : `/explorer/${explorerView}`;
+  }
+  if (activeTab === 'accueil') return '/';
+  return '/' + activeTab;
+}
+
+function stateFromPath(pathname: string): { activeTab: string; explorerView: string } {
+  const parts = pathname.split('/').filter(Boolean);
+  const first = parts[0] ?? '';
+  if (!first) return { activeTab: 'accueil', explorerView: 'main' };
+  if (first === 'explorer') {
+    const sub = parts[1] ?? 'main';
+    return { activeTab: 'explorer', explorerView: sub };
+  }
+  if (['candidats', 'fil', 'actualites', 'plus'].includes(first)) {
+    return { activeTab: first, explorerView: 'main' };
+  }
+  return { activeTab: 'accueil', explorerView: 'main' };
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('accueil');
-  const [explorerView, setExplorerView] = useState('main');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const initial = stateFromPath(location.pathname);
+  const [activeTab, setActiveTab] = useState(initial.activeTab);
+  const [explorerView, setExplorerView] = useState(initial.explorerView);
+  const { data: appCfg } = useAppConfig();
+  const round1Published = appCfg?.['election.results']?.round1_published === true;
+
+  // URL → state. Fires on back/forward, direct link or programmatic
+  // navigate. Guarded against feedback loops by the equality check.
+  useEffect(() => {
+    const s = stateFromPath(location.pathname);
+    if (s.activeTab !== activeTab) setActiveTab(s.activeTab);
+    if (s.explorerView !== explorerView) setExplorerView(s.explorerView);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  // state → URL. Fires when any child calls setActiveTab/setExplorerView.
+  // Replace=false so the browser back button retraces the user's nav.
+  // Exception : /boussole is a deep-link to the match modal that's
+  // hosted on accueil — we don't want the state→URL effect to rewrite
+  // the URL to /, the user-facing path stays /boussole until the modal
+  // is dismissed (where the modal's onClose handler navigates back).
+  useEffect(() => {
+    if (location.pathname === '/boussole') return;
+    const target = pathFromState(activeTab, explorerView);
+    if (location.pathname !== target) navigate(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, explorerView]);
+
+  // /boussole deep link → switch to accueil + open the match modal.
+  // PoliticalMatchCard listens to this event and opens the modal.
+  useEffect(() => {
+    if (location.pathname !== '/boussole') return;
+    setActiveTab('accueil');
+    setExplorerView('main');
+    const t = setTimeout(() => {
+      try { window.dispatchEvent(new Event('cap2027:open-boussole')); }
+      catch { /* noop */ }
+    }, 60);
+    return () => clearTimeout(t);
+  }, [location.pathname]);
 
   const [showSplash, setShowSplash] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -216,6 +285,16 @@ export default function App() {
           {activeTab === 'explorer' && explorerView === 'main' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20 pt-2 lg:pt-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 w-full">
+                 {round1Published && (
+                   <div onClick={() => setExplorerView('results')} className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 flex flex-col justify-center min-h-[120px] hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden group">
+                      <div className="relative z-10 pr-6 sm:pr-10">
+                        <h3 className="text-[18px] sm:text-xl font-bold text-[#102a5c] mb-1 sm:mb-2 group-hover:text-[#1a56db] transition-colors">Résultats</h3>
+                        <p className="text-[13px] sm:text-[14px] text-slate-600 leading-relaxed max-w-[90%] sm:max-w-none">Scores officiels du scrutin, qualifiés du 1er tour et président·e élu·e à l'issue du 2nd tour.</p>
+                      </div>
+                      <BarChart3 className="absolute right-[-10px] sm:right-2 top-1/2 -translate-y-1/2 w-[100px] h-[100px] sm:w-[130px] sm:h-[130px] text-blue-50 pointer-events-none transition-transform group-hover:scale-105" strokeWidth={2.5} />
+                   </div>
+                 )}
+
                  <div onClick={() => setExplorerView('candidats')} className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 flex flex-col justify-center min-h-[120px] hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden group">
                     <div className="relative z-10 pr-6 sm:pr-10">
                       <h3 className="text-[18px] sm:text-xl font-bold text-[#102a5c] mb-1 sm:mb-2 group-hover:text-[#1a56db] transition-colors">Candidats</h3>
@@ -295,7 +374,16 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && explorerView !== 'comparateur' && explorerView !== 'factchecking' && explorerView !== 'parrainages' && (
+          {activeTab === 'explorer' && explorerView === 'results' && (
+            <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
+               <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
+                 <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
+               </button>
+               <ResultsList />
+            </div>
+          )}
+
+          {activeTab === 'explorer' && explorerView !== 'main' && explorerView !== 'candidats' && explorerView !== 'programmes' && explorerView !== 'comparateur' && explorerView !== 'factchecking' && explorerView !== 'parrainages' && explorerView !== 'results' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full pb-20">
                <button onClick={() => setExplorerView('main')} className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2">
                  <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour à l'exploration
@@ -311,6 +399,11 @@ export default function App() {
           {activeTab === 'accueil' && (
             <div className="flex flex-col gap-4 sm:gap-6 w-full">
               <VoterToolkit />
+              {round1Published && (
+                <ResultsCard
+                  onSeeAll={() => { setActiveTab('explorer'); setExplorerView('results'); }}
+                />
+              )}
               <ExplorerSection onNavigate={(view) => { setActiveTab('explorer'); setExplorerView(view); }} />
               <PoliticalMatchCard />
               <FeaturedArticleCard

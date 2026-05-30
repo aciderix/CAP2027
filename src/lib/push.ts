@@ -181,6 +181,21 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
                 queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
               ]);
               break;
+            case 'match_proposition_change':
+              await queryClient.invalidateQueries({ queryKey: ['matchPropositions'] });
+              break;
+            case 'candidate_updated':
+              // Emitted by notify_candidate_content_change on changes to
+              // short_bio, candidate_bio_sections, candidate_proposals,
+              // candidate_affairs. Invalidate every cache that surfaces
+              // those fields so the user sees fresh content on open.
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidateDetail'] }),
+                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
+              ]);
+              break;
             case 'new_programme':
               // Programmes are loaded via a useEffect in ProgrammesList /
               // ProgrammeDetail (no TanStack key). They re-fetch on
@@ -197,6 +212,20 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
                 queryClient.invalidateQueries({ queryKey: ['parrainagesAll'] }),
                 queryClient.invalidateQueries({ queryKey: ['parrainagesForCandidate'] }),
                 queryClient.invalidateQueries({ queryKey: ['appConfig'] }),
+              ]);
+              break;
+            case 'election_results_published':
+              // Round 1 or round 2 results just landed. Invalidate the
+              // results queries, the app_config (controls visibility),
+              // and the candidate lists (eliminated candidates were
+              // auto-unpublished server-side by publish_round_results).
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['electionResults'] }),
+                queryClient.invalidateQueries({ queryKey: ['appConfig'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
+                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
+                queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
               ]);
               break;
             case 'article_press':
@@ -221,8 +250,81 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
         }
       });
 
-      PushNotifications.addListener('pushNotificationActionPerformed', () => {
-        /* noop — opening the app is enough */
+      PushNotifications.addListener('pushNotificationActionPerformed', async (action) => {
+        // Fired when the user taps a system-tray notification that was
+        // shown while the app was in background or killed (the most
+        // common case on Android). Without this, `pushNotificationReceived`
+        // never fires for those notifs, and the persisted TanStack cache
+        // (24 h staleTime on reference data) keeps showing pre-notif
+        // content until the user manually clears app storage.
+        //
+        // Switch body is intentionally duplicated from the foreground
+        // listener above (rather than extracted into a shared helper)
+        // to keep the change minimal and isolated — a previous attempt
+        // to refactor + add a cold-start `getDeliveredNotifications`
+        // replay caused a white-screen on Android (see commit 06b97b7).
+        try {
+          const t = (action?.notification?.data as { type?: string } | undefined)?.type;
+          switch (t) {
+            case 'candidate_published':
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
+                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
+                queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
+              ]);
+              break;
+            case 'match_proposition_change':
+              await queryClient.invalidateQueries({ queryKey: ['matchPropositions'] });
+              break;
+            case 'candidate_updated':
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidateDetail'] }),
+                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
+              ]);
+              break;
+            case 'new_programme':
+              await queryClient.invalidateQueries({ queryKey: ['candidateDetail'] });
+              break;
+            case 'date_official':
+              await queryClient.invalidateQueries({ queryKey: ['appConfig'] });
+              break;
+            case 'parrainages_update':
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['parrainagesLatest'] }),
+                queryClient.invalidateQueries({ queryKey: ['parrainagesAll'] }),
+                queryClient.invalidateQueries({ queryKey: ['parrainagesForCandidate'] }),
+                queryClient.invalidateQueries({ queryKey: ['appConfig'] }),
+              ]);
+              break;
+            case 'election_results_published':
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['electionResults'] }),
+                queryClient.invalidateQueries({ queryKey: ['appConfig'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
+                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
+                queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
+              ]);
+              break;
+            case 'article_press':
+            case 'article_social':
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['articles'] }),
+                queryClient.invalidateQueries({ queryKey: ['myFeedArticles'] }),
+                queryClient.invalidateQueries({ queryKey: ['featuredHero'] }),
+                queryClient.invalidateQueries({ queryKey: ['unseenArticles'] }),
+              ]);
+              break;
+            case 'election_milestone':
+            default:
+              break;
+          }
+        } catch {
+          // best-effort — same as the foreground listener
+        }
       });
     }
 

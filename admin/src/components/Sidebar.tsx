@@ -1,6 +1,6 @@
-import { LayoutDashboard, Users, Flag, Layers, Rss, Cog, LogOut, X } from 'lucide-react';
+import { LayoutDashboard, Users, Flag, Layers, Rss, Cog, LogOut, X, BarChart3 } from 'lucide-react';
 
-export type Page = 'dashboard' | 'candidates' | 'parties' | 'themes' | 'sources' | 'config';
+export type Page = 'dashboard' | 'candidates' | 'parties' | 'themes' | 'sources' | 'results' | 'config';
 
 const ITEMS: { key: Page; label: string; icon: any }[] = [
   { key: 'dashboard', label: 'Vue d\'ensemble', icon: LayoutDashboard },
@@ -8,6 +8,7 @@ const ITEMS: { key: Page; label: string; icon: any }[] = [
   { key: 'parties', label: 'Partis', icon: Flag },
   { key: 'themes', label: 'Thèmes', icon: Layers },
   { key: 'sources', label: 'Sources RSS', icon: Rss },
+  { key: 'results', label: 'Résultats', icon: BarChart3 },
   { key: 'config', label: 'Config app', icon: Cog },
 ];
 

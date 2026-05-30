@@ -23,3 +23,7 @@ android/local.properties
 .idea/
 *.apk
 *.aab
+
+# TypeScript incremental build artifacts
+tsconfig.tsbuildinfo
+admin/tsconfig.app.tsbuildinfo

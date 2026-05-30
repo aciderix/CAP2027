@@ -8,6 +8,7 @@ import { Parties } from './pages/Parties';
 import { Themes } from './pages/Themes';
 import { Sources } from './pages/Sources';
 import { AppConfig } from './pages/AppConfig';
+import { Results } from './pages/Results';
 import { Sidebar, type Page } from './components/Sidebar';
 import { DebugPanel } from './components/DebugPanel';
 import { Loader2 } from 'lucide-react';
@@ -20,6 +21,7 @@ const PAGE_LABELS: Record<Page, string> = {
   parties: 'Partis',
   themes: 'Thèmes',
   sources: 'Sources RSS',
+  results: 'Résultats',
   config: 'Config app',
 };
 
@@ -109,6 +111,7 @@ values ('${auth.user?.id}', '${auth.user?.email}');`}
           {page === 'parties' && <Parties />}
           {page === 'themes' && <Themes />}
           {page === 'sources' && <Sources />}
+          {page === 'results' && <Results />}
           {page === 'config' && <AppConfig />}
         </main>
       </div>

@@ -1,0 +1,51 @@
+name: Keep-alive (web + DB ping)
+
+# Light smoke test: hits cap2027.fr (Netlify) and a Supabase REST
+# endpoint 3x per week. The hourly external-rss workflow already
+# generates plenty of Supabase activity to prevent the project from
+# being paused — this is belt-and-suspenders + uptime monitoring.
+#
+# A failure (HTTP non-2xx on either probe) makes the workflow fail,
+# which surfaces in the GitHub Actions tab so you notice if the site
+# is down or the Supabase project got paused.
+
+on:
+  schedule:
+    # Mondays / Wednesdays / Fridays at 10:00 UTC (12:00 Paris in summer,
+    # 11:00 in winter). Cheap, infrequent, daytime.
+    - cron: "0 10 * * 1,3,5"
+  workflow_dispatch:
+
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    name: Probe production stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping cap2027.fr (Netlify web)
+        run: |
+          set -e
+          # Follow redirects in case of www → apex or http → https.
+          # Fail on HTTP >= 400. -m 30s timeout.
+          STATUS=$(curl -sIL -o /dev/null -w "%{http_code}" -m 30 \
+                   "https://cap2027.fr/")
+          echo "cap2027.fr → HTTP $STATUS"
+          [ "$STATUS" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
+
+      - name: Ping Supabase REST (DB activity)
+        run: |
+          set -e
+          # Tiny SELECT on app_config — touches the DB without writes.
+          # Publishable key is safe to embed in CI logs (it's the same
+          # one shipped in every APK/web bundle; RLS does the work).
+          R=$(curl -s -o /tmp/sb.json -w "%{http_code}" -m 30 \
+              "https://oyvqvfawcxlnvpgloicx.supabase.co/rest/v1/app_config?select=key&limit=1" \
+              -H "apikey: sb_publishable_nycw__S1NdZYIVyu4LH4SQ_830IdXPA" \
+              -H "Authorization: Bearer sb_publishable_nycw__S1NdZYIVyu4LH4SQ_830IdXPA")
+          echo "Supabase REST → HTTP $R"
+          echo "Body: $(cat /tmp/sb.json)"
+          [ "$R" = "200" ] || { echo "FAIL: expected 200"; exit 1; }

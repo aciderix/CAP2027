@@ -48,8 +48,103 @@ export function AppConfig() {
             value={cfg['parrainages.source']}
             onSaved={() => qc.invalidateQueries({ queryKey: ['admin', 'config'] })}
           />
+          <QuietHoursCard
+            value={cfg['push.quiet_hours']}
+            onSaved={() => qc.invalidateQueries({ queryKey: ['admin', 'config'] })}
+          />
         </>
       )}
+    </div>
+  );
+}
+
+function QuietHoursCard({
+  value, onSaved,
+}: {
+  value: { enabled: boolean; start_paris: number; end_paris: number } | undefined;
+  onSaved: () => void;
+}) {
+  const [enabled, setEnabled] = useState(true);
+  const [startHour, setStartHour] = useState(22);
+  const [endHour, setEndHour] = useState(7);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!value) return;
+    setEnabled(value.enabled);
+    setStartHour(value.start_paris);
+    setEndHour(value.end_paris);
+  }, [value?.enabled, value?.start_paris, value?.end_paris]);
+
+  const save = async () => {
+    setSaving(true); setError(null);
+    try {
+      const payload = {
+        enabled,
+        start_paris: Math.max(0, Math.min(23, startHour)),
+        end_paris: Math.max(0, Math.min(23, endHour)),
+      };
+      const { error } = await supabase.from('app_config')
+        .upsert({ key: 'push.quiet_hours', value: payload }, { onConflict: 'key' });
+      if (error) throw error;
+      onSaved();
+    } catch (e: any) {
+      setError(e.message ?? String(e));
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-3">
+      <header className="flex items-center justify-between">
+        <h3 className="font-bold text-ink">Pause notifications nocturnes</h3>
+        <span className={`text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded ${enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+          {enabled ? 'Activée' : 'Désactivée'}
+        </span>
+      </header>
+
+      <p className="text-xs text-slate-500 leading-relaxed">
+        Bloque les notifs push entre <b>{String(startHour).padStart(2, '0')}h</b> et <b>{String(endHour).padStart(2, '0')}h</b> (heure de Paris). Les rappels électoraux
+        (jour J, résultats, J-1, procuration, inscription) et la confirmation des
+        dates officielles passent quand même. Les autres notifs sont silencées —
+        le contenu reste en base, l'app le récupère à la prochaine ouverture.
+      </p>
+
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Début (heure Paris)</span>
+          <input
+            type="number" min={0} max={23}
+            value={startHour}
+            onChange={(e) => setStartHour(Number(e.target.value))}
+            className="input"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Fin (heure Paris)</span>
+          <input
+            type="number" min={0} max={23}
+            value={endHour}
+            onChange={(e) => setEndHour(Number(e.target.value))}
+            className="input"
+          />
+        </label>
+      </div>
+
+      <label className="inline-flex items-center gap-2">
+        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+        <span className="text-sm font-bold text-slate-700">Activer la pause nocturne</span>
+      </label>
+
+      {error && <div className="text-xs bg-rose-50 text-rose-700 border border-rose-100 rounded-lg p-2">{error}</div>}
+
+      <button
+        onClick={save}
+        disabled={saving}
+        className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-ink text-white font-bold text-sm hover:bg-accent disabled:opacity-50 self-start"
+      >
+        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Enregistrer
+      </button>
     </div>
   );
 }
