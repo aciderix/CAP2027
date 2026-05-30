@@ -1,91 +1,69 @@
-name: Android build (debug APK)
+name: Build Android Debug APK
 
 on:
   push:
     branches:
       - main
       - 'claude/**'
-    paths-ignore:
-      - '**.md'
-  pull_request:
-    branches:
-      - main
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'tsconfig*.json'
+      - 'capacitor.config.ts'
+      - '.github/workflows/android-build.yml'
   workflow_dispatch:
 
-permissions:
-  contents: read
-
-concurrency:
-  group: android-build-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  build-debug-apk:
-    name: Build debug APK
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: '20'
 
-      - name: Set up JDK 21
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Install npm dependencies
+      - name: Install dependencies
         run: npm ci
 
-      - name: Build web app (Vite)
+      - name: Build web assets
         env:
-          # Supabase publishable key — designed to be embedded client-side; RLS guards the data.
-          VITE_SUPABASE_URL: https://oyvqvfawcxlnvpgloicx.supabase.co
-          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nycw__S1NdZYIVyu4LH4SQ_830IdXPA
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
 
-      - name: Capacitor sync (Android)
+      # The android/ native project is gitignored and regenerated on each
+      # run. cap sync requires the platform to exist, so add it first when
+      # it isn't already present.
+      - name: Add Android platform if missing
+        run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+
+      - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Make gradlew executable
-        working-directory: android
-        run: chmod +x ./gradlew
-
       - name: Build debug APK
-        working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: cd android && ./gradlew assembleDebug --no-daemon
 
-      - name: Locate APK
-        id: apk
-        run: |
-          APK_PATH=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -n 1)
-          echo "Found APK: $APK_PATH"
-          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
-
-      - name: Upload debug APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cap2027-debug-${{ github.sha }}
-          path: ${{ steps.apk.outputs.path }}
+          name: cap2027-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 14
