@@ -34,7 +34,24 @@ const FIREBASE_CONFIG = {
 const VAPID_KEY = 'BKMqQ0WoNk3--CAmgZVchbQhI3J-XNvdAmEmL-dpb-Dar0ceFFx1iKSdt3s5QCMZCLAgfH10s2BhacXL7ewbtfc';
 
 const TOKEN_KEY = 'cap2027.pushWeb.token';
+const DIAG_KEY = 'cap2027.pushWeb.diag';
 const VERSION = '1.0.0';
+
+// Diagnostic ring kept in localStorage so users can paste their state
+// from Settings or DevTools when reporting "no notif received".
+function writeDiag(patch: Record<string, unknown>) {
+  if (typeof window === 'undefined') return;
+  try {
+    const prev = JSON.parse(localStorage.getItem(DIAG_KEY) || '{}');
+    localStorage.setItem(DIAG_KEY, JSON.stringify({ ...prev, ...patch, at: new Date().toISOString() }));
+  } catch { /* noop */ }
+}
+
+export function readWebPushDiag(): Record<string, unknown> {
+  if (typeof window === 'undefined') return {};
+  try { return JSON.parse(localStorage.getItem(DIAG_KEY) || '{}'); }
+  catch { return {}; }
+}
 
 export function getWebPushToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -44,12 +61,14 @@ export function getWebPushToken(): string | null {
 let initialized = false;
 
 export async function registerPushWeb(): Promise<{ ok: boolean; error?: string }> {
+  writeDiag({ step: 'entered' });
   if (typeof window === 'undefined') return { ok: false, error: 'no-window' };
-  if (Capacitor.isNativePlatform()) return { ok: false, error: 'native-platform' };
+  if (Capacitor.isNativePlatform()) { writeDiag({ step: 'native-platform-skip' }); return { ok: false, error: 'native-platform' }; }
   if (!('serviceWorker' in navigator) || !('Notification' in window)) {
+    writeDiag({ step: 'browser-unsupported' });
     return { ok: false, error: 'browser-unsupported' };
   }
-  if (!getNotificationsEnabled()) return { ok: false, error: 'opt-in-required' };
+  if (!getNotificationsEnabled()) { writeDiag({ step: 'opt-in-required' }); return { ok: false, error: 'opt-in-required' }; }
   if (initialized) return { ok: true };
 
   try {
@@ -58,27 +77,42 @@ export async function registerPushWeb(): Promise<{ ok: boolean; error?: string }
     // by a user gesture — if it fails silently here, the user can retry
     // via the Settings panel.
     let perm: NotificationPermission = Notification.permission;
+    writeDiag({ step: 'permission-check', permission: perm });
     if (perm === 'default') {
       try { perm = await Notification.requestPermission(); }
-      catch { return { ok: false, error: 'permission-prompt-failed' }; }
+      catch (e) { console.error('[pushWeb] permission prompt failed', e); writeDiag({ step: 'permission-prompt-failed', error: String(e) }); return { ok: false, error: 'permission-prompt-failed' }; }
     }
-    if (perm !== 'granted') return { ok: false, error: 'permission-' + perm };
+    if (perm !== 'granted') { writeDiag({ step: 'permission-denied', permission: perm }); return { ok: false, error: 'permission-' + perm }; }
 
     // Register the SW that handles background pushes.
+    writeDiag({ step: 'sw-registering' });
     const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    writeDiag({ step: 'sw-registered', swScope: swReg.scope });
 
     // Lazy-load firebase only when we actually need it (mobile path
     // never reaches this line so the modules stay unfetched).
+    writeDiag({ step: 'firebase-import' });
     const { initializeApp } = await import('firebase/app');
     const { getMessaging, getToken, onMessage } = await import('firebase/messaging');
 
+    writeDiag({ step: 'firebase-init' });
     const app = initializeApp(FIREBASE_CONFIG);
     const messaging = getMessaging(app);
-    const token = await getToken(messaging, {
-      vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: swReg,
-    });
-    if (!token) return { ok: false, error: 'no-token' };
+
+    writeDiag({ step: 'getToken-start' });
+    let token: string;
+    try {
+      token = await getToken(messaging, {
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: swReg,
+      });
+    } catch (e: any) {
+      console.error('[pushWeb] getToken failed', e);
+      writeDiag({ step: 'getToken-failed', error: String(e?.message ?? e), code: e?.code });
+      return { ok: false, error: 'getToken: ' + String(e?.message ?? e) };
+    }
+    if (!token) { writeDiag({ step: 'getToken-empty' }); return { ok: false, error: 'no-token' }; }
+    writeDiag({ step: 'token-acquired', tokenPreview: token.slice(0, 24) });
 
     try { localStorage.setItem(TOKEN_KEY, token); } catch { /* noop */ }
 
@@ -94,7 +128,8 @@ export async function registerPushWeb(): Promise<{ ok: boolean; error?: string }
       p_platform: 'web',
       p_app_version: VERSION,
     });
-    if (rpcError) return { ok: false, error: rpcError.message };
+    if (rpcError) { console.error('[pushWeb] RPC register_push_token failed', rpcError); writeDiag({ step: 'rpc-failed', error: rpcError.message }); return { ok: false, error: rpcError.message }; }
+    writeDiag({ step: 'rpc-ok' });
     try { window.dispatchEvent(new Event('cap2027:push-token-ready')); }
     catch { /* noop */ }
 
@@ -119,8 +154,11 @@ export async function registerPushWeb(): Promise<{ ok: boolean; error?: string }
     });
 
     initialized = true;
+    writeDiag({ step: 'initialized' });
     return { ok: true };
   } catch (e: any) {
+    console.error('[pushWeb] unexpected error', e);
+    writeDiag({ step: 'unexpected-error', error: String(e?.message ?? e) });
     return { ok: false, error: String(e?.message ?? e) };
   }
 }

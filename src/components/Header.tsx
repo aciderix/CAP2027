@@ -103,7 +103,7 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
           </div>
         </div>
       </header>
-      <div className="fixed top-[64px] md:top-[74px] left-0 w-full flex items-start z-40 pointer-events-none">
+      <div className="fixed top-[calc(64px+env(safe-area-inset-top))] md:top-[calc(74px+env(safe-area-inset-top))] left-0 w-full flex items-start z-40 pointer-events-none">
         <div className="pointer-events-auto scale-90 sm:scale-100 origin-top-left">
           <CountdownBanner />
         </div>
