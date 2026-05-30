@@ -18,8 +18,15 @@ import { useEffect, useState, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from './supabase';
 import { getPushToken } from './push';
+import { getWebPushToken } from './pushWeb';
 
 const KEY = 'cap2027.followedOrientations';
+
+// Native FCM token (Android) when present, otherwise the web FCM token,
+// so orientation follow/unfollow targeting works on both platforms.
+function getActivePushToken(): string | null {
+  return getPushToken() ?? getWebPushToken();
+}
 
 function read(): Set<string> {
   if (typeof window === 'undefined') return new Set();
@@ -44,7 +51,7 @@ async function mirrorToPreferences(arr: string[]): Promise<void> {
 }
 
 async function pushOneOrientationToDb(orientation: string) {
-  const token = getPushToken();
+  const token = getActivePushToken();
   if (!token) return;
   try {
     const { error } = await supabase
@@ -59,7 +66,7 @@ async function pushOneOrientationToDb(orientation: string) {
 }
 
 async function deleteOneOrientationFromDb(orientation: string) {
-  const token = getPushToken();
+  const token = getActivePushToken();
   if (!token) return;
   // SECURITY DEFINER RPC — see follows.ts for the rationale (no
   // SELECT policy means a plain DELETE matches 0 rows under RLS).
@@ -74,7 +81,7 @@ async function deleteOneOrientationFromDb(orientation: string) {
 }
 
 async function syncAllOrientationsToDb() {
-  const token = getPushToken();
+  const token = getActivePushToken();
   if (!token) return;
   const all = [...read()];
   if (all.length === 0) return;
@@ -132,7 +139,7 @@ export function useFollowedOrientations() {
     setFollowed(new Set());
     write(new Set());
     void (async () => {
-      const token = getPushToken();
+      const token = getActivePushToken();
       if (!token) return;
       try {
         await supabase.rpc('clear_orientations', { p_token: token });

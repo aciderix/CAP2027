@@ -2,8 +2,16 @@ import { useEffect, useState, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from './supabase';
 import { getPushToken } from './push';
+import { getWebPushToken } from './pushWeb';
 
 const KEY = 'cap2027.followedCandidates';
+
+// Native FCM token (Android) when present, otherwise the web FCM token.
+// This lets follow/unfollow targeting mirror into push_token_follows on
+// both platforms.
+function getActivePushToken(): string | null {
+  return getPushToken() ?? getWebPushToken();
+}
 
 function read(): Set<string> {
   if (typeof window === 'undefined') return new Set();
@@ -45,7 +53,7 @@ async function mirrorToPreferences(arr: string[]): Promise<void> {
 // key. Plain INSERT only needs INSERT, keeping the table read-only
 // for service_role on the server.
 async function pushOneFollowToDb(candidateId: string) {
-  const token = getPushToken();
+  const token = getActivePushToken();
   if (!token) return;
   try {
     const { error } = await supabase
@@ -62,7 +70,7 @@ async function pushOneFollowToDb(candidateId: string) {
 }
 
 async function deleteOneFollowFromDb(candidateId: string) {
-  const token = getPushToken();
+  const token = getActivePushToken();
   if (!token) return;
   // We route through a SECURITY DEFINER RPC because the table has no
   // SELECT policy for anon (we don't want to leak the follower lists
@@ -80,7 +88,7 @@ async function deleteOneFollowFromDb(candidateId: string) {
 }
 
 async function syncAllFollowsToDb() {
-  const token = getPushToken();
+  const token = getActivePushToken();
   if (!token) return;
   const all = [...read()];
   if (all.length === 0) return;
@@ -149,7 +157,7 @@ export function useFollowedCandidates() {
     // Full re-sync: insert each new follow ignoring duplicates,
     // then drop anything that's no longer in the set.
     void (async () => {
-      const token = getPushToken();
+      const token = getActivePushToken();
       if (!token) return;
       try {
         const stillThere = [...next];

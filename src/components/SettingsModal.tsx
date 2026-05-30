@@ -9,6 +9,7 @@ import {
   setNotificationsEnabled as persistNotifs,
 } from '../lib/notifications';
 import { registerPushNotifications } from '../lib/push';
+import { registerPushWeb } from '../lib/pushWeb';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -69,6 +70,17 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         const res = await registerPushNotifications();
         if (!res.ok && res.error && res.error !== 'opt-in required' && res.error !== 'permission denied') {
           setError((prev) => prev ?? `FCM : ${res.error}`);
+        }
+      } else {
+        // Web: enabling from Settings triggers the browser permission
+        // prompt + FCM web token registration on the spot (the user
+        // gesture is required by Firefox/Safari to open the prompt).
+        const res = await registerPushWeb();
+        if (!res.ok && res.error
+          && res.error !== 'opt-in-required'
+          && res.error !== 'browser-unsupported'
+          && !res.error.startsWith('permission-')) {
+          setError((prev) => prev ?? `Web push : ${res.error}`);
         }
       }
     } catch (e: any) {

@@ -28,6 +28,7 @@ import {
   maybeAskFirstLaunchPermission,
 } from './lib/notifications';
 import { registerPushNotifications } from './lib/push';
+import { registerPushWeb } from './lib/pushWeb';
 
 // Wrapper that mounts its children once and only flips visibility via
 // CSS afterwards. Used for the heavy tabs (Actualités, Mon fil,
@@ -62,7 +63,10 @@ export default function App() {
         // Returning user: ask for notif permission on first launch
         // post-onboarding, then register the FCM token. Both calls
         // are idempotent and silent on web / when already granted.
-        void maybeAskFirstLaunchPermission().then(() => registerPushNotifications());
+        void maybeAskFirstLaunchPermission().then(() => Promise.all([
+          registerPushNotifications(),
+          registerPushWeb(),
+        ]));
       }
     }, 2500);
     return () => clearTimeout(splashTimer);
@@ -82,7 +86,10 @@ export default function App() {
     setShowOnboarding(false);
     // Right after the user closes onboarding, ask for the OS notif
     // permission once, then register with FCM (silent if denied).
-    void maybeAskFirstLaunchPermission().then(() => registerPushNotifications());
+    void maybeAskFirstLaunchPermission().then(() => Promise.all([
+      registerPushNotifications(),
+      registerPushWeb(),
+    ]));
   };
 
   // Tapping a bottom-nav / header tab always returns to that tab's
