@@ -11,7 +11,8 @@
 -- fonctions/triggers de notification). Voir issue #8.
 --
 -- Inventaire : 25 tables · 1 vue · 23 fonctions · 40 policies · 21 triggers
---              · 2 types enum · 4 jobs cron.
+--              · 2 types enum · 4 jobs cron statiques (section 10, restaurables
+--              tels quels) + jobs election_* dynamiques.
 --
 -- ATTENTION : ce fichier reflète l'état AVANT les correctifs de sécurité.
 -- Plusieurs policies/fonctions ci-dessous sont volontairement permissives et
@@ -1169,18 +1170,42 @@ CREATE OR REPLACE VIEW public.parrainages_latest AS
 
 
 -- =============================================================================
--- 10. JOBS CRON (pg_cron) — à recréer via cron.schedule()
+-- 10. JOBS CRON (pg_cron) — commandes réelles, restaurables telles quelles
 -- =============================================================================
--- rss-ingest-hourly          (15 * * * *)  → POST /functions/v1/ingest-rss
--- notify-after-ingest-hourly (16 * * * *)  → POST /functions/v1/notify-after-ingest
--- parrainages-daily          (30 6 * * *)  → POST /functions/v1/fetch-parrainages
--- articles-retention-monthly (0 4 1 * *)   → select * from public.purge_old_articles();
--- + jobs dynamiques election_* créés par reschedule_election_reminders()
---
--- Exemple de recréation :
--- SELECT cron.schedule('rss-ingest-hourly', '15 * * * *',
---   $$select net.http_post(url := 'https://oyvqvfawcxlnvpgloicx.supabase.co/functions/v1/ingest-rss',
---     headers := jsonb_build_object('Content-Type','application/json'), timeout_milliseconds := 240000);$$);
+-- NB: les jobs ingest passent le secret x-ingest-token via la fonction
+-- public.get_ingest_secret() (lue au RUNTIME, jamais stockée en clair dans
+-- cron.job.command — cf. issue #7). Le secret doit exister dans Vault
+-- (ingest_secret) avant que ces jobs n'aboutissent.
+-- En plus de ces 4 jobs statiques, des jobs dynamiques election_* sont créés
+-- au besoin par public.reschedule_election_reminders().
+
+SELECT cron.schedule('rss-ingest-hourly', '15 * * * *', $job$
+  select net.http_post(
+    url := 'https://oyvqvfawcxlnvpgloicx.supabase.co/functions/v1/ingest-rss',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-ingest-token', public.get_ingest_secret()),
+    timeout_milliseconds := 240000
+  ) as request_id;
+$job$);
+
+SELECT cron.schedule('notify-after-ingest-hourly', '16 * * * *', $job$
+  select net.http_post(
+    url := 'https://oyvqvfawcxlnvpgloicx.supabase.co/functions/v1/notify-after-ingest',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-ingest-token', public.get_ingest_secret()),
+    timeout_milliseconds := 60000
+  ) as request_id;
+$job$);
+
+SELECT cron.schedule('parrainages-daily', '30 6 * * *', $job$
+  select net.http_post(
+    url := 'https://oyvqvfawcxlnvpgloicx.supabase.co/functions/v1/fetch-parrainages',
+    headers := jsonb_build_object('Content-Type', 'application/json'),
+    timeout_milliseconds := 60000
+  ) as request_id;
+$job$);
+
+SELECT cron.schedule('articles-retention-monthly', '0 4 1 * *', $job$
+  select * from public.purge_old_articles();
+$job$);
 
 -- =============================================================================
 -- FIN DU SNAPSHOT
