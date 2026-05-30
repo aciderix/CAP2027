@@ -36,10 +36,16 @@ messaging.onBackgroundMessage((payload) => {
   const body = (payload.notification && payload.notification.body)
     || (payload.data && payload.data.body)
     || '';
+  // `tag` is the de-dupe key inside the browser: a second showNotification
+  // with the same tag replaces the existing one instead of stacking. Using
+  // the notif type as tag keeps things tidy when the user gets several
+  // rapid pushes of the same kind (e.g. multiple articles in one ingest).
+  const tag = (payload.data && payload.data.type) || 'cap2027';
   self.registration.showNotification(title, {
     body,
     icon: '/icon-192.png',
     badge: '/favicon-32.png',
+    tag,
     data: payload.data || {},
   });
 });

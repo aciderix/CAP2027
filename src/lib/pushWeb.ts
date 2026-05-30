@@ -139,7 +139,9 @@ export async function registerPushWeb(): Promise<{ ok: boolean; error?: string }
 
       // The browser doesn't render a system notification for foreground
       // FCM messages by default — we do it manually so the user notices
-      // even when buried in another tab inside the same window.
+      // even when buried in another tab inside the same window. Tagged
+      // by type to de-duplicate with the SW's onBackgroundMessage if
+      // both fire (some browsers do, others don't).
       try {
         if (Notification.permission === 'granted') {
           const title = (payload.notification?.title)
@@ -148,7 +150,8 @@ export async function registerPushWeb(): Promise<{ ok: boolean; error?: string }
           const body = (payload.notification?.body)
             || (payload.data?.body as string | undefined)
             || '';
-          new Notification(title, { body, icon: '/icon-192.png' });
+          const tag = (payload.data?.type as string | undefined) || 'cap2027';
+          new Notification(title, { body, icon: '/icon-192.png', tag });
         }
       } catch { /* noop */ }
     });

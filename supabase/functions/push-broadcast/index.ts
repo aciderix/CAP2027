@@ -233,14 +233,42 @@ Deno.serve(async (req) => {
     if (payload.url) fcmData.url = payload.url;
     if (payload.type) fcmData.type = payload.type;
     if (payload.candidate_id) fcmData.candidate_id = payload.candidate_id;
-    const message = {
-      message: {
-        token: t.token,
-        notification: { title, body },
-        data: Object.keys(fcmData).length > 0 ? fcmData : undefined,
-        android: { priority: "HIGH", notification: { channel_id: "default", color: "#102a5c", icon: "ic_stat_cap2027" } },
-      },
-    };
+
+    // Per-platform payload split to dodge FCM Web's notification/data
+    // pitfall. For tokens marked platform='web' we send DATA-ONLY:
+    //   - no `notification` block: Firefox would otherwise render the
+    //     browser-auto notif AND our SW's onBackgroundMessage, causing
+    //     the duplicate notifs the user observed. Chrome Android does
+    //     the opposite — it suppresses our SW handler when a
+    //     `notification` block is present, then silently drops the
+    //     auto-render in installed-PWA mode, so the user gets nothing.
+    //   - title/body get smuggled into `data` so the SW can read them
+    //     in `onBackgroundMessage` and show one (and only one) notif
+    //     with the correct icon.
+    // For native Capacitor Android (platform='android') we keep the
+    // `notification` block since the OS uses it to render the notif
+    // when the app is killed.
+    let message: any;
+    if (t.platform === "web") {
+      const webData: Record<string, string> = { ...fcmData };
+      webData.title = title;
+      webData.body = body;
+      message = {
+        message: {
+          token: t.token,
+          data: webData,
+        },
+      };
+    } else {
+      message = {
+        message: {
+          token: t.token,
+          notification: { title, body },
+          data: Object.keys(fcmData).length > 0 ? fcmData : undefined,
+          android: { priority: "HIGH", notification: { channel_id: "default", color: "#102a5c", icon: "ic_stat_cap2027" } },
+        },
+      };
+    }
     try {
       const r = await fetch(fcmUrl, {
         method: "POST",
