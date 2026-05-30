@@ -131,15 +131,17 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
           localStorage.setItem(TOKEN_KEY, token.value);
         } catch { /* noop */ }
         try {
-          const { error } = await supabase.from('push_tokens').upsert(
-            {
-              token: token.value,
-              platform: Capacitor.getPlatform(),
-              app_version: VERSION,
-              last_seen_at: new Date().toISOString(),
-            },
-            { onConflict: 'token' },
-          );
+          // Upsert via SECURITY DEFINER RPC instead of a direct table
+          // upsert. The push_tokens table has no SELECT policy for anon
+          // (anti-enumeration, issues #6/#10), which would break the
+          // ON CONFLICT DO UPDATE path of a direct upsert. register_push_token
+          // performs the upsert server-side and returns nothing, so no
+          // token list is ever exposed.
+          const { error } = await supabase.rpc('register_push_token', {
+            p_token: token.value,
+            p_platform: Capacitor.getPlatform(),
+            p_app_version: VERSION,
+          });
           if (error) {
             writeDiag({ upsertOk: false, upsertError: error.message });
           } else {

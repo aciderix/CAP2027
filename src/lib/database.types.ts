@@ -428,7 +428,64 @@ export type Database = {
       }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      register_push_token: {
+        Args: { p_token: string; p_platform: string; p_app_version?: string | null }
+        Returns: undefined
+      }
+      unfollow_candidate: {
+        Args: { p_token: string; p_candidate_id: string }
+        Returns: undefined
+      }
+      unfollow_orientation: {
+        Args: { p_token: string; p_orientation: string }
+        Returns: undefined
+      }
+      clear_orientations: {
+        Args: { p_token: string }
+        Returns: undefined
+      }
+      tokens_for_press_orientation: {
+        Args: { orient: string }
+        Returns: { token: string; platform: string }[]
+      }
+      tokens_for_press_orientations: {
+        Args: { orients: string[] }
+        Returns: { token: string; platform: string }[]
+      }
+      get_election_results_for_round: {
+        Args: { p_round: number }
+        Returns: {
+          round: number
+          candidate_id: string
+          percentage: number
+          votes: number | null
+          is_qualified: boolean
+          is_winner: boolean
+          rank: number | null
+          first_name: string
+          last_name: string
+          photo_url: string | null
+          slug: string
+          gender: string | null
+          party_name: string | null
+          party_abbreviation: string | null
+          party_color: string | null
+        }[]
+      }
+      publish_round_results: {
+        Args: { p_round: number }
+        Returns: undefined
+      }
+      unpublish_round_results: {
+        Args: { p_round: number }
+        Returns: undefined
+      }
+      is_admin: {
+        Args: { uid: string }
+        Returns: boolean
+      }
+    }
     Enums: {
       affair_status:
         | "mis_en_examen"
