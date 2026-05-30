@@ -18,6 +18,61 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
+// Authentication (issue #9). This function is destructive (it deletes
+// today's parrainages snapshot before re-inserting). It rejects
+// unauthenticated callers. Authorized when EITHER
+// Authorization: Bearer <service_role_key> OR x-ingest-token:
+// <ingest_secret> (sent by the pg_cron job; the secret lives in Vault,
+// read via public.get_ingest_secret()). Same pattern as ingest-rss.
+let cachedSecret: string | null = null;
+async function getExpectedSecret(): Promise<string | null> {
+  if (cachedSecret) return cachedSecret;
+  const { data, error } = await supabase.rpc("get_ingest_secret");
+  if (error) return null;
+  cachedSecret = typeof data === "string" && data.length > 0 ? data : null;
+  return cachedSecret;
+}
+async function isAuthorized(req: Request): Promise<boolean> {
+  const auth = req.headers.get("authorization") ?? "";
+  const bearer = auth.replace(/^Bearer\s+/i, "").trim();
+  if (bearer && bearer === SERVICE_ROLE_KEY) return true;
+  const token = req.headers.get("x-ingest-token");
+  if (!token) return false;
+  const expected = await getExpectedSecret();
+  return !!expected && token === expected;
+}
+
+// SSRF guard (issue #9). The fetch target comes from
+// app_config['parrainages.source'].url (admin-controlled), but we still
+// validate it: https only, no credentials, and no private / loopback /
+// link-local hosts.
+function isPrivateHost(host: string): boolean {
+  const h = host.toLowerCase();
+  if (h === "localhost" || h.endsWith(".localhost")) return true;
+  if (h === "127.0.0.1" || h.startsWith("127.")) return true;
+  if (h === "0.0.0.0" || h === "::1" || h === "[::1]") return true;
+  if (h === "169.254.169.254") return true; // cloud metadata
+  if (h.startsWith("10.")) return true;
+  if (h.startsWith("192.168.")) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
+  if (h.startsWith("169.254.")) return true; // link-local
+  if (h.startsWith("fc") || h.startsWith("fd")) return true; // unique local IPv6
+  if (h.startsWith("fe80")) return true; // link-local IPv6
+  return false;
+}
+function validateSourceUrl(raw: string): URL | null {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:") return null;
+  if (u.username || u.password) return null;
+  if (isPrivateHost(u.hostname)) return null;
+  return u;
+}
+
 function stripAccents(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
@@ -90,7 +145,11 @@ function matchCandidate(rawName: string, candidates: CandidateRow[]): string | n
   return null;
 }
 
-Deno.serve(async (_req) => {
+Deno.serve(async (req) => {
+  if (!(await isAuthorized(req))) {
+    return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const { data: cfg } = await supabase
     .from("app_config")
     .select("value")
@@ -105,9 +164,17 @@ Deno.serve(async (_req) => {
     return Response.json({ skipped: true, note: "parrainages.source.is_available=false" });
   }
 
+  const safeUrl = validateSourceUrl(String(source.url));
+  if (!safeUrl) {
+    return Response.json(
+      { error: "parrainages.source.url rejected (must be https, public host, no credentials)" },
+      { status: 400 },
+    );
+  }
+
   let payload: any;
   try {
-    const res = await fetch(source.url, {
+    const res = await fetch(safeUrl.toString(), {
       headers: {
         "User-Agent": "CAP2027/1.0 (civic-tech aggregator; +https://cap2027.app)",
         "Accept": "application/json",
