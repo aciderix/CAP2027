@@ -107,35 +107,22 @@ export async function registerPushWeb(): Promise<{ ok: boolean; error?: string }
         serviceWorkerRegistration: swReg,
       });
     } catch (e: any) {
-      // Chrome (especially on Xiaomi/MIUI) sometimes keeps a stale
-      // PushSubscription cached at the browser level that's no longer
-      // valid for the push service. The classic symptom is `getToken`
-      // throwing AbortError code 20 "Registration failed - push service
-      // error" with no way to recover other than unsubscribing the old
-      // sub first. We try that once, then retry getToken.
-      console.warn('[pushWeb] getToken first attempt failed, clearing stale subscription and retrying', e);
-      writeDiag({ step: 'getToken-retry', firstError: String(e?.message ?? e), firstCode: e?.code });
-      try {
-        const existing = await swReg.pushManager.getSubscription();
-        if (existing) {
-          await existing.unsubscribe();
-          writeDiag({ step: 'unsubscribed-stale' });
-        } else {
-          writeDiag({ step: 'no-stale-sub-found' });
-        }
-      } catch (uErr: any) {
-        writeDiag({ step: 'unsubscribe-failed', error: String(uErr?.message ?? uErr) });
+      // On some devices (notably Chrome/Opera on Xiaomi/MIUI), getToken
+      // can fail with code 20 "Registration failed - push service error"
+      // even when a previously-registered PushSubscription is still
+      // valid and receives notifications. In that case we MUST NOT
+      // unsubscribe — doing so would destroy the working subscription.
+      // If we already have a cached token from a prior successful run,
+      // assume it's still good and bail out silently.
+      const cached = (() => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } })();
+      if (cached) {
+        console.warn('[pushWeb] getToken failed but cached token exists — keeping it', e);
+        writeDiag({ step: 'getToken-failed-cached-kept', error: String(e?.message ?? e), code: e?.code, tokenPreview: cached.slice(0, 24) });
+        return { ok: true };
       }
-      try {
-        token = await getToken(messaging, {
-          vapidKey: VAPID_KEY,
-          serviceWorkerRegistration: swReg,
-        });
-      } catch (e2: any) {
-        console.error('[pushWeb] getToken failed after retry', e2);
-        writeDiag({ step: 'getToken-failed', error: String(e2?.message ?? e2), code: e2?.code });
-        return { ok: false, error: 'getToken: ' + String(e2?.message ?? e2) };
-      }
+      console.error('[pushWeb] getToken failed', e);
+      writeDiag({ step: 'getToken-failed', error: String(e?.message ?? e), code: e?.code });
+      return { ok: false, error: 'getToken: ' + String(e?.message ?? e) };
     }
     if (!token) { writeDiag({ step: 'getToken-empty' }); return { ok: false, error: 'no-token' }; }
     writeDiag({ step: 'token-acquired', tokenPreview: token.slice(0, 24) });
