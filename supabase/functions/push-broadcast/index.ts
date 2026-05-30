@@ -234,20 +234,35 @@ Deno.serve(async (req) => {
     if (payload.type) fcmData.type = payload.type;
     if (payload.candidate_id) fcmData.candidate_id = payload.candidate_id;
 
-    // Per-platform payload split.
-    // Web: data-only — confirmed to fix Firefox's double-notif and is
-    // also what Chrome's SW handler reads from data.title/data.body.
-    // Native Android (Capacitor): keep `notification` + `android.notification`
-    // so the OS renders the notif when the app is killed.
+    // Per-platform payload using the FCM v1 platform-specific overrides
+    // (`webpush.notification` / `android.notification`). This is the
+    // clean FCM v1 way: one logical message, each platform picks the
+    // block that fits.
+    // - Web tokens: `webpush.notification` makes FCM emit a standard
+    //   Web Push payload that the browser renders natively. No reliance
+    //   on our SW's onBackgroundMessage, so no double-notif on Firefox
+    //   AND Chrome Android actually gets the push (the previous
+    //   data-only approach caused "push service error / code 20" on
+    //   Chrome Android because the SW push-event path was broken).
+    // - Native Android tokens (Capacitor): keep the legacy `notification`
+    //   block + `android.notification` so the OS renders the notif when
+    //   the app is killed.
+    // deno-lint-ignore no-explicit-any
     let message: any;
     if (t.platform === "web") {
-      const webData: Record<string, string> = { ...fcmData };
-      webData.title = title;
-      webData.body = body;
+      // deno-lint-ignore no-explicit-any
+      const webNotif: any = {
+        title,
+        body,
+        icon: "/icon-192.png",
+        badge: "/favicon-32.png",
+      };
+      if (payload.type) webNotif.tag = payload.type;
       message = {
         message: {
           token: t.token,
-          data: webData,
+          data: Object.keys(fcmData).length > 0 ? fcmData : undefined,
+          webpush: { notification: webNotif },
         },
       };
     } else {
