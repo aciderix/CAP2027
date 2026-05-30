@@ -251,7 +251,9 @@ Deno.serve(async (req) => {
       else {
         failed++;
         const txt = await r.text().catch(() => "");
-        if (errors.length < 5) errors.push(`HTTP ${r.status}: ${txt.slice(0, 200)}`);
+        const errSummary = `HTTP ${r.status} platform=${t.platform} token=${t.token.slice(0, 24)}… body=${txt.slice(0, 300)}`;
+        console.error("[push-broadcast] FCM send failed", errSummary);
+        if (errors.length < 10) errors.push(errSummary);
         if (r.status === 404 || r.status === 400) {
           await supabase.from("push_tokens").delete().eq("token", t.token);
         }
@@ -262,6 +264,7 @@ Deno.serve(async (req) => {
     }
   }
 
+  console.log(`[push-broadcast] type=${payload.type ?? "?"} totalTokens=${tokens.length} sent=${sent} failed=${failed}`);
   return Response.json({
     sent, failed,
     totalTokens: tokens.length,
