@@ -9,7 +9,7 @@ import {
   setNotificationsEnabled as persistNotifs,
 } from '../lib/notifications';
 import { registerPushNotifications } from '../lib/push';
-import { registerPushWeb } from '../lib/pushWeb';
+import { registerPushWeb, readWebPushDiag } from '../lib/pushWeb';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -22,6 +22,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [showDiag, setShowDiag] = useState(false);
+  const [diagText, setDiagText] = useState('');
 
   const refreshPerm = () => {
     if (Capacitor.isNativePlatform()) {
@@ -156,6 +158,25 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <p className="text-xs text-slate-500 bg-white rounded-lg p-2">
               Sur le navigateur, les nouvelles actus s'affichent dans la cloche en haut.
             </p>
+          )}
+          {!Capacitor.isNativePlatform() && (
+            <div className="mt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDiag((v) => !v);
+                  try { setDiagText(JSON.stringify(readWebPushDiag(), null, 2)); } catch { setDiagText('{}'); }
+                }}
+                className="text-[11px] text-slate-400 underline"
+              >
+                {showDiag ? 'Masquer le diagnostic' : 'Diagnostic notifications'}
+              </button>
+              {showDiag && (
+                <pre className="mt-1 text-[10px] leading-tight text-slate-600 bg-white border border-slate-200 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all select-all">
+                  {diagText || '{}'}
+                </pre>
+              )}
+            </div>
           )}
         </div>
 
