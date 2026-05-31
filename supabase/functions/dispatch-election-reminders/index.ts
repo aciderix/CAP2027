@@ -18,6 +18,29 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
+// Authentication. Cette fonction est appelable par les pg_cron jobs
+// election_* (qui passent le secret partagé `ingest_secret` dans
+// `x-ingest-token`) et par un admin qui voudrait force-trigger un
+// milestone avec Authorization: Bearer <service_role_key>. Tout autre
+// caller reçoit 401.
+let cachedSecret: string | null = null;
+async function getExpectedSecret(): Promise<string | null> {
+  if (cachedSecret) return cachedSecret;
+  const { data, error } = await supabase.rpc("get_ingest_secret");
+  if (error) return null;
+  cachedSecret = typeof data === "string" && data.length > 0 ? data : null;
+  return cachedSecret;
+}
+async function isAuthorized(req: Request): Promise<boolean> {
+  const auth = req.headers.get("authorization") ?? "";
+  const bearer = auth.replace(/^Bearer\s+/i, "").trim();
+  if (bearer && bearer === SERVICE_ROLE_KEY) return true;
+  const token = req.headers.get("x-ingest-token");
+  if (!token) return false;
+  const expected = await getExpectedSecret();
+  return !!expected && token === expected;
+}
+
 type Milestone =
   | "eve" | "day" | "results"
   | "inscription"
@@ -77,6 +100,12 @@ const MILESTONES: ReadonlySet<Milestone> = new Set([
 ]);
 
 Deno.serve(async (req) => {
+  if (!(await isAuthorized(req))) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401, headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const url = new URL(req.url);
   const milestone = url.searchParams.get("milestone") as Milestone | null;
   const roundRaw = url.searchParams.get("round");
