@@ -1,0 +1,206 @@
+-- Deuxième vague d'expansion des keywords thématiques (~320 nouveaux),
+-- focalisée sur la précision: termes spécifiques, peu polysémiques,
+-- bien associés à leur thème.
+--
+-- Décisions clés:
+--   - Mélenchon n'est PAS ajouté (déjà dans candidate_aliases)
+--   - Macron, Bardella, Trump, Poutine, Zelensky, Erdogan SONT ajoutés
+--     (absents de candidate_aliases)
+--   - Mots écartés volontairement: eau, nature, loi, droit, peine, appel,
+--     accident (seul), route (seul), train (seul), match (seul),
+--     victoire (seul), équipe (seul), etc.
+--
+-- Migration intégralement idempotente (WHERE NOT EXISTS sur lower(keyword)).
+-- Aucun keyword existant n'est touché.
+--
+-- Backup pris: theme_keywords_backup_20260531b
+
+WITH new_kw(slug, kw) AS (
+  VALUES
+    -- ÉCOLOGIE
+    ('ecologie','agroécologie'),('ecologie','COP30'),
+    ('ecologie','déchets nucléaires'),('ecologie','éco-anxiété'),
+    ('ecologie','énergie verte'),('ecologie','forêt'),
+    ('ecologie','glacier'),('ecologie','littoral'),
+    ('ecologie','réserve naturelle'),('ecologie','parc national'),
+    ('ecologie','espèce menacée'),('ecologie','WWF'),
+    ('ecologie','Greenpeace'),('ecologie','décroissance'),
+    ('ecologie','gaz de schiste'),('ecologie','panneau solaire'),
+    ('ecologie','éolienne'),('ecologie','méga-bassine'),
+    ('ecologie','zone humide'),('ecologie','tri sélectif'),
+    ('ecologie','réchauffement climatique'),
+    -- ÉCONOMIE
+    ('economie','Bercy'),('economie','compétitivité'),
+    ('economie','contribuable'),('economie','crédit immobilier'),
+    ('economie','crédit d''impôt'),('economie','déflation'),
+    ('economie','dépense publique'),('economie','droits de douane'),
+    ('economie','IFI'),('economie','impôt sur le revenu'),
+    ('economie','impôt sur la fortune'),('economie','Insee'),
+    ('economie','intérim'),('economie','libéralisme'),
+    ('economie','libre-échange'),('economie','monopole'),
+    ('economie','nationalisation'),('economie','OCDE'),
+    ('economie','patronat'),('economie','plan de relance'),
+    ('economie','plein emploi'),('economie','prélèvement à la source'),
+    ('economie','privatisation'),('economie','subvention'),
+    ('economie','trésor public'),
+    -- SOCIAL
+    ('social','AAH'),('social','aide alimentaire'),
+    ('social','aide à domicile'),('social','Banques alimentaires'),
+    ('social','congé maternité'),('social','Emmaüs'),
+    ('social','fonction publique'),('social','inégalité salariale'),
+    ('social','ouvrier'),('social','précaires'),
+    ('social','prêt étudiant'),('social','Restos du Coeur'),
+    ('social','revenu universel'),('social','Secours Populaire'),
+    ('social','service public'),('social','temps partiel'),
+    ('social','travailleurs pauvres'),('social','violences conjugales'),
+    -- SANTÉ
+    ('sante','antibiorésistance'),('sante','AP-HP'),
+    ('sante','autisme'),('sante','AVC'),
+    ('sante','COVID long'),('sante','déremboursement'),
+    ('sante','diabète'),('sante','diagnostic'),
+    ('sante','généraliste'),('sante','gynécologue'),
+    ('sante','hospitalisation'),('sante','hypertension'),
+    ('sante','Institut Pasteur'),('sante','maladie chronique'),
+    ('sante','maladie de Lyme'),('sante','mortalité'),
+    ('sante','natalité'),('sante','numerus clausus'),
+    ('sante','patient'),('sante','pédopsychiatrie'),
+    ('sante','pharmacien'),('sante','prévention'),
+    ('sante','psychologue'),('sante','soins palliatifs'),
+    ('sante','VIH'),
+    -- SÉCURITÉ
+    ('securite','antiterroriste'),('securite','bandes organisées'),
+    ('securite','carjacking'),('securite','crime organisé'),
+    ('securite','DGSI'),('securite','DGSE'),
+    ('securite','enlèvement'),('securite','escroquerie'),
+    ('securite','forces de l''ordre'),('securite','guet-apens'),
+    ('securite','jihadiste'),('securite','légitime défense'),
+    ('securite','RAID'),('securite','récidive'),('securite','tireur'),
+    -- ÉDUCATION
+    ('education','AESH'),('education','bourse étudiante'),
+    ('education','brevet'),('education','conseil de classe'),
+    ('education','Crous'),('education','élève'),
+    ('education','élèves'),('education','enseignement privé'),
+    ('education','enseignement public'),('education','éducation nationale'),
+    ('education','école privée'),('education','école publique'),
+    ('education','écolier'),('education','formation continue'),
+    ('education','formation professionnelle'),('education','PISA'),
+    ('education','prépa'),('education','universitaire'),
+    -- EUROPE
+    ('europe','citoyenneté européenne'),('europe','coopération européenne'),
+    ('europe','droit communautaire'),('europe','élections européennes'),
+    ('europe','Eurogroupe'),('europe','Eurostat'),
+    ('europe','fédéraliste'),('europe','présidence européenne'),
+    ('europe','règlement européen'),('europe','traité de Lisbonne'),
+    ('europe','traité de Maastricht'),('europe','Conseil européen'),
+    -- JUSTICE
+    ('justice','audience correctionnelle'),('justice','bâtonnier'),
+    ('justice','complicité'),('justice','complot'),
+    ('justice','contrôle judiciaire'),('justice','expertise judiciaire'),
+    ('justice','expertise psychiatrique'),('justice','juge des enfants'),
+    ('justice','juge d''instruction'),('justice','jugement'),
+    ('justice','juridiction administrative'),('justice','jury d''assises'),
+    ('justice','magistrature'),('justice','non-lieu'),
+    ('justice','parquet général'),('justice','perquisition'),
+    ('justice','préjudice'),('justice','préméditation'),
+    ('justice','pourvoi en cassation'),('justice','prévenu'),
+    ('justice','prison à perpétuité'),('justice','procureur de la République'),
+    -- IMMIGRATION
+    ('immigration','camp de migrants'),('immigration','carte de séjour'),
+    ('immigration','carte de résident'),('immigration','flux migratoire'),
+    ('immigration','immigration choisie'),('immigration','loi immigration'),
+    ('immigration','mineur isolé'),('immigration','mineur non accompagné'),
+    ('immigration','MNA'),('immigration','OFII'),('immigration','OFPRA'),
+    ('immigration','quota migratoire'),('immigration','refoulement'),
+    ('immigration','statut de réfugié'),('immigration','naufrage'),
+    -- INSTITUTIONS & POLITIQUE
+    ('institutions','ANR'),('institutions','Bardella'),
+    ('institutions','campagne présidentielle'),
+    ('institutions','débat présidentiel'),('institutions','débat télévisé'),
+    ('institutions','divers droite'),('institutions','divers gauche'),
+    ('institutions','élection législative'),
+    ('institutions','élection sénatoriale'),
+    ('institutions','élection présidentielle'),
+    ('institutions','élection municipale'),('institutions','élu local'),
+    ('institutions','ENA'),('institutions','Macron'),
+    ('institutions','macronistes'),('institutions','militant politique'),
+    ('institutions','ministre délégué'),('institutions','nomination'),
+    ('institutions','non-cumul'),('institutions','Parti socialiste'),
+    ('institutions','Place publique'),('institutions','rentrée politique'),
+    ('institutions','secrétaire d''État'),('institutions','sondage IFOP'),
+    -- INTERNATIONAL (pays + acteurs)
+    ('international','Afghanistan'),('international','Algérie'),
+    ('international','Allemagne'),('international','Argentine'),
+    ('international','Australie'),('international','Belgique'),
+    ('international','Brésil'),('international','Canada'),
+    ('international','Cuba'),('international','Égypte'),
+    ('international','Espagne'),('international','Inde'),
+    ('international','Indonésie'),('international','Italie'),
+    ('international','Japon'),('international','Jérusalem'),
+    ('international','Liban'),('international','Libye'),
+    ('international','Maghreb'),('international','Maroc'),
+    ('international','mer Rouge'),('international','Mexique'),
+    ('international','Pakistan'),('international','Pays-Bas'),
+    ('international','Pologne'),('international','Portugal'),
+    ('international','Qatar'),('international','Royaume-Uni'),
+    ('international','Sahel'),('international','Suisse'),
+    ('international','Syrie'),('international','Tunisie'),
+    ('international','Turquie'),('international','Vatican'),
+    ('international','Venezuela'),('international','Vietnam'),
+    ('international','Yémen'),('international','Trump'),
+    ('international','Poutine'),('international','Zelensky'),
+    ('international','Erdogan'),
+    -- TECHNOLOGIE & NUMÉRIQUE
+    ('technologie','Apple'),('technologie','ChatGPT'),
+    ('technologie','cloud computing'),('technologie','cybersécurité'),
+    ('technologie','data center'),('technologie','développeur'),
+    ('technologie','Facebook'),('technologie','fibre'),
+    ('technologie','GPT'),('technologie','impression 3D'),
+    ('technologie','iPhone'),('technologie','LinkedIn'),
+    ('technologie','Mistral AI'),('technologie','modèle de langage'),
+    ('technologie','OpenAI'),('technologie','open source'),
+    ('technologie','Samsung'),('technologie','semi-conducteur'),
+    ('technologie','Twitter'),('technologie','ubérisation'),
+    ('technologie','WhatsApp'),('technologie','YouTube'),
+    -- CULTURE & LOISIRS
+    ('culture','Académie française'),('culture','Avignon'),
+    ('culture','best-seller'),('culture','box-office'),
+    ('culture','César'),('culture','compositeur'),
+    ('culture','conservatoire'),('culture','Festival d''Avignon'),
+    ('culture','France Culture'),('culture','Goncourt'),
+    ('culture','influenceur'),('culture','influenceuse'),
+    ('culture','Instagram'),('culture','Netflix'),
+    ('culture','Opéra'),('culture','Oscar'),
+    ('culture','pièce de théâtre'),('culture','prix Goncourt'),
+    ('culture','réalisatrice'),('culture','romancier'),
+    ('culture','salon du livre'),('culture','série télévisée'),
+    -- SPORT
+    ('sport','Ballon d''or'),('sport','biathlon'),('sport','coach'),
+    ('sport','coupe d''Europe'),('sport','coupe de France'),
+    ('sport','demi-finale'),('sport','échecs'),('sport','escrime'),
+    ('sport','équipe nationale'),('sport','foot'),
+    ('sport','gardien de but'),('sport','hockey'),('sport','karaté'),
+    ('sport','marathon'),('sport','médaille de bronze'),
+    ('sport','médaille d''argent'),('sport','Mbappé'),
+    ('sport','Messi'),('sport','MMA'),('sport','natation'),
+    ('sport','OM'),('sport','PSG'),('sport','ski'),
+    ('sport','stade de France'),('sport','transfert'),
+    ('sport','volley'),('sport','VAR'),
+    -- TRANSPORTS & MOBILITÉ
+    ('transports','aéronautique'),('transports','Airbus'),
+    ('transports','aviation civile'),('transports','BlaBlaCar'),
+    ('transports','carburant'),('transports','chauffeur'),
+    ('transports','Eurostar'),('transports','Flixbus'),
+    ('transports','Île-de-France Mobilités'),('transports','moto'),
+    ('transports','parking'),('transports','prix de l''essence'),
+    ('transports','station-service'),('transports','taxi'),
+    ('transports','trottinette électrique'),('transports','tunnel'),
+    ('transports','Uber'),('transports','VTC')
+)
+INSERT INTO theme_keywords (theme_id, keyword)
+SELECT t.id, n.kw
+FROM new_kw n
+JOIN themes t ON t.slug = n.slug
+WHERE NOT EXISTS (
+  SELECT 1 FROM theme_keywords k
+  WHERE k.theme_id = t.id AND lower(k.keyword) = lower(n.kw)
+);
