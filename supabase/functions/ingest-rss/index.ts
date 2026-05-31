@@ -313,10 +313,22 @@ function tagArticle(title: string, summary: string, refs: Refs) {
     if (k.regex.test(summaryAscii)) score += 1;
     if (score > 0) themeScores.set(k.theme_id, (themeScores.get(k.theme_id) ?? 0) + score);
   }
+  // "Variante douce" pour les thèmes: quand plusieurs thèmes ont matché
+  // on ne garde que ceux avec un score >= 2 (au moins un match titre OU
+  // 2+ matches résumé). Cela élimine les parasites typiques d'articles
+  // multi-thèmes (ex: un article "Sécurité" qui matchait aussi Justice,
+  // Économie et Institutions à score=1 chacun). Quand un seul thème a
+  // matché on le garde tel quel pour préserver le rappel sur les articles
+  // peu denses lexicalement.
+  let themesArr = [...themeScores.entries()].map(([id, s]) => ({ id, score: s }));
+  if (themesArr.length > 1) {
+    const strong = themesArr.filter((t) => t.score >= 2);
+    if (strong.length > 0) themesArr = strong;
+  }
   return {
     candidates: [...candidateScores.entries()].map(([id, s]) => ({ id, score: s })),
     parties:    [...partyScores.entries()].map(([id, s])    => ({ id, score: s })),
-    themes:     [...themeScores.entries()].map(([id, s])    => ({ id, score: s })),
+    themes:     themesArr,
   };
 }
 
