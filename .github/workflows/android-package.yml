@@ -90,8 +90,8 @@ jobs:
           fi
           mkdir -p android/app
           echo "$KEYSTORE_B64" | base64 -d > android/app/release.jks
-          # Sanity check: keystore valide ? (le mot de passe passe par env,
-          # jamais par interpolation ${{ }}, pour ne pas fuiter dans les logs.)
+          # Sanity check: keystore valide ? (le mot de passe passe par une
+          # variable d'environnement, jamais en clair, pour ne pas fuiter.)
           keytool -list -keystore android/app/release.jks \
             -storepass "$ANDROID_KEYSTORE_PASSWORD" \
             > /dev/null
