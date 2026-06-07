@@ -155,6 +155,30 @@ export async function maybeAskFirstLaunchPermission(): Promise<void> {
   }
 }
 
+/**
+ * Returns true if the OS/browser notification permission is currently
+ * granted (ignores the in-app master pref). Used to decide whether to
+ * show the first-launch channel-selection screen — no point showing it
+ * if the user just denied permission.
+ */
+export async function notificationPermissionGranted(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const perm = await LocalNotifications.checkPermissions();
+      return perm.display === 'granted';
+    } catch {
+      return false;
+    }
+  }
+  // Web
+  try {
+    return typeof Notification !== 'undefined' && Notification.permission === 'granted';
+  } catch {
+    return false;
+  }
+}
+
 /** Returns true if both the user pref AND the OS permission are granted. */
 export async function notificationsActive(): Promise<boolean> {
   if (!getNotificationsEnabled()) return false;

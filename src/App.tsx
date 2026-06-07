@@ -25,12 +25,14 @@ import { ResultsCard } from './components/ResultsCard';
 import { ResultsList } from './components/ResultsList';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
+import { ChannelSelection } from './components/ChannelSelection';
 import { VideoModal } from './components/VideoModal';
 import { useAppConfig } from './lib/appConfig';
 import { useAdminChangeSync } from './lib/adminChangeSync';
 import {
   useResumeNotificationsHook,
   maybeAskFirstLaunchPermission,
+  notificationPermissionGranted,
 } from './lib/notifications';
 import { registerPushNotifications } from './lib/push';
 import { registerPushWeb } from './lib/pushWeb';
@@ -118,6 +120,7 @@ export default function App() {
 
   const [showSplash, setShowSplash] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showChannelSelection, setShowChannelSelection] = useState(false);
 
   // Local OS notif when the app comes back to foreground.
   useResumeNotificationsHook();
@@ -161,11 +164,25 @@ export default function App() {
     localStorage.setItem('hasSeenOnboarding', 'true');
     setShowOnboarding(false);
     // Right after the user closes onboarding, ask for the OS notif
-    // permission once, then register with FCM (silent if denied).
-    void maybeAskFirstLaunchPermission().then(() => Promise.all([
-      registerPushNotifications(),
-      registerPushWeb(),
-    ]));
+    // permission once, then register with FCM (silent if denied). If the
+    // permission ends up granted and the user hasn't seen it yet, surface
+    // the channel-selection screen so they can tune what they receive.
+    void maybeAskFirstLaunchPermission()
+      .then(() => Promise.all([
+        registerPushNotifications(),
+        registerPushWeb(),
+      ]))
+      .then(() => notificationPermissionGranted())
+      .then((granted) => {
+        if (granted && localStorage.getItem('hasSeenChannelSelection') !== 'true') {
+          setShowChannelSelection(true);
+        }
+      });
+  };
+
+  const handleChannelSelectionComplete = () => {
+    localStorage.setItem('hasSeenChannelSelection', 'true');
+    setShowChannelSelection(false);
   };
 
   // Tapping a bottom-nav / header tab always returns to that tab's
@@ -223,6 +240,9 @@ export default function App() {
       <AnimatePresence>
         {showSplash && <SplashScreen key="splash" />}
         {showOnboarding && <Onboarding key="onboarding" onComplete={handleOnboardingComplete} />}
+        {showChannelSelection && (
+          <ChannelSelection key="channel-selection" onComplete={handleChannelSelectionComplete} />
+        )}
       </AnimatePresence>
       <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
         <Header activeTab={activeTab} setActiveTab={handleTabChange} />
