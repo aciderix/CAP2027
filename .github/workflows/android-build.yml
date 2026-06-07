@@ -1,15 +1,10 @@
 name: Android build (debug APK)
 
+# Déclenchement MANUEL uniquement (workflow_dispatch). L'auto-build sur
+# push/PR a été retiré pour ne pas consommer de minutes GitHub Actions à
+# chaque commit. Pratique pour un APK debug rapide (aucun secret requis).
+# Pour un APK + AAB signés, voir android-package.yml.
 on:
-  push:
-    branches:
-      - main
-      - 'claude/**'
-    paths-ignore:
-      - '**.md'
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
