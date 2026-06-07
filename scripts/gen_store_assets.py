@@ -1,449 +1,370 @@
 #!/usr/bin/env python3
-# Génère les visuels de la fiche Play Store pour CAP 2027.
-# Captures "marketing" neutres avec placeholders (Candidat·e 1, silhouettes
-# bleue/rouge de l'app, contenus factices) reflétant chaque fonctionnalité.
-#
-# Sortie: store/assets/*.png
+# Visuels Play Store CAP 2027 — style premium : mockups de téléphone
+# encadrés, ombres douces, fond bleu clair dégradé, tuiles d'icônes.
+# Contenu = placeholders NEUTRES (Candidat·e 1, silhouettes de l'app).
+# Le logo n'est PAS recréé : on réutilise public/logo1.png (wordmark).
 import os
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PUB = os.path.join(ROOT, "public")
 OUT = os.path.join(ROOT, "store", "assets")
 os.makedirs(OUT, exist_ok=True)
-
 FB = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+S = 2
 
-S = 2  # supersampling pour un rendu net
+# palette
+NAVY=(16,42,92); NAVY2=(28,58,120); BLUE=(26,86,219); RED=(214,55,60)
+WHITE=(255,255,255); S50=(248,250,252); S100=(241,245,249); S200=(226,232,240)
+S300=(203,213,225); S400=(148,163,184); S500=(100,116,139); S600=(71,85,105)
+GOLD=(245,184,30)
+THEME={"Écologie":(22,163,74),"Économie":(245,158,11),"Social":(236,72,153),
+ "Société":(124,58,237),"Sécurité":(30,64,175),"Europe":(14,165,233)}
+ORI={"Gauche":(225,72,61),"Centre":(100,116,139),"C.-droit":(37,99,235),"Droite":(30,58,138)}
 
-# ---- palette ----
-NAVY = (16, 42, 92)
-NAVY2 = (28, 58, 120)
-BLUE = (26, 86, 219)
-RED = (210, 53, 58)
-WHITE = (255, 255, 255)
-S50 = (248, 250, 252)
-S100 = (241, 245, 249)
-S200 = (226, 232, 240)
-S300 = (203, 213, 225)
-S400 = (148, 163, 184)
-S500 = (100, 116, 139)
-S600 = (71, 85, 105)
-INK = (16, 42, 92)
-
-THEME = {
-    "Écologie": (22, 163, 74), "Économie": (245, 158, 11), "Social": (236, 72, 153),
-    "Santé": (239, 68, 68), "Sécurité": (30, 64, 175), "Éducation": (124, 58, 237),
-    "Europe": (14, 165, 233), "Justice": (15, 118, 110), "Immigration": (147, 51, 234),
-    "International": (185, 28, 28), "Institutions": (71, 85, 105), "Sport": (234, 179, 8),
-    "Culture": (217, 70, 239), "Transports": (51, 65, 85),
-}
-ORIENT = {
-    "Gauche": (225, 72, 61), "Centre": (100, 116, 139), "Centre-droit": (37, 99, 235),
-    "Droite": (30, 58, 138), "Fact-check": (22, 163, 74),
-}
-
-def F(sz, bold=True):
-    return ImageFont.truetype(FB if bold else FR, sz * S)
-
-def rr(d, box, r, fill=None, outline=None, width=1):
-    d.rounded_rectangle([box[0]*S, box[1]*S, box[2]*S, box[3]*S], radius=r*S,
-                        fill=fill, outline=outline, width=width*S)
-
-def text(d, xy, s, font, fill, anchor=None, spacing=4):
-    d.text((xy[0]*S, xy[1]*S), s, font=font, fill=fill, anchor=anchor, spacing=spacing*S)
-
-# ---- mini icônes vectorielles (coords logiques) ----
-def L(d, pts, col, w):
-    d.line([(x*S, y*S) for x, y in pts], fill=col, width=max(1, int(w*S)), joint="curve")
-def E(d, box, fill=None, outline=None, w=1):
-    d.ellipse([box[0]*S, box[1]*S, box[2]*S, box[3]*S], fill=fill, outline=outline, width=max(1, int(w*S)))
-
-def ic_news(d, cx, cy, r, col):
-    rr(d, (cx-r, cy-r*0.8, cx+r, cy+r*0.8), 5, outline=col, width=3)
-    for i, yy in enumerate([cy-r*0.4, cy, cy+r*0.4]):
-        L(d, [(cx-r*0.6, yy), (cx+r*0.6 if i else cx+r*0.1, yy)], col, 3)
-
-def ic_user(d, cx, cy, r, col):
-    E(d, (cx-r*0.42, cy-r*0.9, cx+r*0.42, cy-r*0.06), outline=col, w=3)
-    d.arc([(cx-r*0.75)*S, (cy+0.05*r)*S, (cx+r*0.75)*S, (cy+r*1.3)*S], 180, 360, fill=col, width=3*S)
-
-def ic_mega(d, cx, cy, r, col):
-    d.polygon([((cx-r*0.8)*S,(cy-r*0.35)*S), ((cx+r*0.2)*S,(cy-r*0.7)*S),
-               ((cx+r*0.2)*S,(cy+r*0.7)*S), ((cx-r*0.8)*S,(cy+r*0.35)*S)],
-              outline=col, width=3*S)
-    L(d, [(cx+r*0.45, cy-r*0.3),(cx+r*0.45, cy+r*0.3)], col, 3)
-
-def ic_vote(d, cx, cy, r, col):
-    rr(d, (cx-r*0.8, cy-r*0.2, cx+r*0.8, cy+r*0.8), 5, outline=col, width=3)
-    L(d, [(cx-r*0.3, cy-r*0.2),(cx-r*0.3, cy-r*0.55),(cx+r*0.5, cy-r*0.55),(cx+r*0.5, cy-r*0.2)], col, 3)
-    L(d, [(cx-r*0.25, cy+r*0.35),(cx-r*0.05, cy+r*0.55),(cx+r*0.35, cy+r*0.12)], col, 4)
-
-def ic_lock(d, cx, cy, r, col):
-    rr(d, (cx-r*0.7, cy-r*0.05, cx+r*0.7, cy+r*0.85), 6, fill=col)
-    d.arc([(cx-r*0.45)*S, (cy-r*0.75)*S, (cx+r*0.45)*S, (cy+r*0.35)*S], 180, 360, fill=col, width=4*S)
-
-def ic_link(d, cx, cy, r, col):
-    d.arc([(cx-r)*S,(cy-r*0.45)*S,(cx)*S,(cy+r*0.45)*S], 40, 250, fill=col, width=3*S)
-    d.arc([(cx)*S,(cy-r*0.45)*S,(cx+r)*S,(cy+r*0.45)*S], 220, 70, fill=col, width=3*S)
-
-def tw(d, s, font):
-    return d.textlength(s, font=font) / S
-
-def wrap(d, s, font, maxw):
-    words = s.split()
-    lines, cur = [], ""
-    for w in words:
-        t = (cur + " " + w).strip()
-        if tw(d, t, font) <= maxw:
-            cur = t
+def f(sz,bold=True): return ImageFont.truetype(FB if bold else FR, int(sz*S))
+def RR(d,b,r,fill=None,outline=None,w=1):
+    d.rounded_rectangle([b[0]*S,b[1]*S,b[2]*S,b[3]*S],radius=r*S,fill=fill,outline=outline,width=max(1,int(w*S)))
+def T(d,xy,s,font,fill,anchor=None,sp=4):
+    d.text((xy[0]*S,xy[1]*S),s,font=font,fill=fill,anchor=anchor,spacing=sp*S)
+def TW(d,s,font): return d.textlength(s,font=font)/S
+def wrap(d,s,font,mw):
+    out,cur=[],""
+    for w in s.split():
+        t=(cur+" "+w).strip()
+        if TW(d,t,font)<=mw: cur=t
         else:
-            if cur:
-                lines.append(cur)
-            cur = w
-    if cur:
-        lines.append(cur)
-    return lines
+            if cur: out.append(cur)
+            cur=w
+    if cur: out.append(cur)
+    return out
+def L(d,pts,col,w): d.line([(x*S,y*S) for x,y in pts],fill=col,width=max(1,int(w*S)),joint="curve")
+def E(d,b,fill=None,outline=None,w=1): d.ellipse([b[0]*S,b[1]*S,b[2]*S,b[3]*S],fill=fill,outline=outline,width=max(1,int(w*S)))
 
-def vgrad(w, h, top, bot):
-    img = Image.new("RGB", (w, h), top)
-    px = img.load()
-    for y in range(h):
-        t = y / max(1, h - 1)
-        c = tuple(int(top[i] + (bot[i]-top[i])*t) for i in range(3))
-        for x in range(w):
-            px[x, y] = c
-    return img
+def load(path,w=None,h=None):
+    im=Image.open(path).convert("RGBA")
+    if w and not h: h=int(im.height*w/im.width)
+    if w: im=im.resize((int(w*S),int(h*S)),Image.LANCZOS)
+    return im
+def fade(im,a):
+    r,g,b,al=im.split(); al=al.point(lambda p:int(p*a)); return Image.merge("RGBA",(r,g,b,al))
 
-# ---------- canvas screenshot avec bandeau caption ----------
-# 1080x2160 = ratio 2:1 exact (le Play Store exige max 2:1 pour les
-# captures téléphone — au-delà, l'upload est refusé).
-W, H = 1080, 2160          # logique (avant supersampling)
-CAP_H = 430                # hauteur bandeau marketing
+# ---- icônes ----
+def i_news(d,cx,cy,r,col):
+    RR(d,(cx-r,cy-r*.8,cx+r,cy+r*.8),5,outline=col,w=3)
+    for i,yy in enumerate([cy-r*.4,cy,cy+r*.4]): L(d,[(cx-r*.6,yy),(cx+(r*.6 if i else r*.1),yy)],col,3)
+def i_heart(d,cx,cy,r,col):
+    E(d,(cx-r*.5,cy-r*.85,cx+r*.1,cy-r*.2),outline=col,w=3)  # tête
+    d.arc([(cx-r*.8)*S,(cy-r*.1)*S,(cx+r*.4)*S,(cy+r*1.1)*S],180,360,fill=col,width=3*S)
+    # petit cœur
+    hx,hy=cx+r*.45,cy-r*.1
+    E(d,(hx-r*.32,hy-r*.18,hx,hy+r*.05),fill=col); E(d,(hx,hy-r*.18,hx+r*.32,hy+r*.05),fill=col)
+    d.polygon([((hx-r*.3)*S,(hy)*S),((hx+r*.3)*S,(hy)*S),(hx*S,(hy+r*.45)*S)],fill=col)
+def i_scale(d,cx,cy,r,col):
+    L(d,[(cx,cy-r*.8),(cx,cy+r*.7)],col,3); L(d,[(cx-r*.7,cy-r*.5),(cx+r*.7,cy-r*.5)],col,3)
+    for sx in (cx-r*.7,cx+r*.7):
+        d.arc([(sx-r*.35)*S,(cy-r*.5)*S,(sx+r*.35)*S,(cy+r*.2)*S],0,180,fill=col,width=3*S)
+    L(d,[(cx-r*.4,cy+r*.7),(cx+r*.4,cy+r*.7)],col,3)
+def i_check(d,cx,cy,r,col):
+    E(d,(cx-r*.85,cy-r*.85,cx+r*.85,cy+r*.85),outline=col,w=3)
+    L(d,[(cx-r*.4,cy),(cx-r*.1,cy+r*.35),(cx+r*.45,cy-r*.35)],col,4)
+def i_bell(d,cx,cy,r,col):
+    d.arc([(cx-r*.6)*S,(cy-r*.7)*S,(cx+r*.6)*S,(cy+r*.5)*S],180,360,fill=col,width=3*S)
+    L(d,[(cx-r*.6,cy-r*.1),(cx-r*.6,cy+r*.3)],col,3); L(d,[(cx+r*.6,cy-r*.1),(cx+r*.6,cy+r*.3)],col,3)
+    L(d,[(cx-r*.75,cy+r*.3),(cx+r*.75,cy+r*.3)],col,3); E(d,(cx-r*.12,cy+r*.4,cx+r*.12,cy+r*.62),fill=col)
+def i_gear(d,cx,cy,r,col):
+    E(d,(cx-r*.7,cy-r*.7,cx+r*.7,cy+r*.7),outline=col,w=3); E(d,(cx-r*.25,cy-r*.25,cx+r*.25,cy+r*.25),fill=col)
+def star(d,cx,cy,r,col):
+    import math
+    pts=[]
+    for k in range(10):
+        ang=-math.pi/2+k*math.pi/5; rr=r if k%2==0 else r*.45
+        pts.append(((cx+rr*math.cos(ang))*S,(cy+rr*math.sin(ang))*S))
+    d.polygon(pts,fill=col)
 
-def new_shot(headline, subline):
-    img = Image.new("RGB", (W*S, H*S), WHITE)
-    # bandeau navy en dégradé
-    band = vgrad(W*S, CAP_H*S, NAVY, NAVY2)
-    img.paste(band, (0, 0))
-    d = ImageDraw.Draw(img)
-    # petite barre tricolore
-    rr(d, (60, 70, 96, 82), 6, fill=BLUE)
-    rr(d, (100, 70, 136, 82), 6, fill=WHITE)
-    rr(d, (140, 70, 176, 82), 6, fill=RED)
-    text(d, (60, 96), "CAP 2027", F(30), (180, 200, 235))
-    # headline (wrap)
-    hf = F(58)
-    lines = wrap(d, headline, hf, W-120)
-    y = 150
-    for ln in lines:
-        text(d, (60, y), ln, hf, WHITE)
-        y += 70
-    sf = F(30, bold=False)
-    for ln in wrap(d, subline, sf, W-120):
-        text(d, (60, y+8), ln, sf, (188, 205, 235))
-        y += 42
-    return img, d
+# ---- device frame + shadow ----
+def frame(screen,tilt=0):
+    bez=int(16*S); rs=int(46*S); rb=int(60*S)
+    sw,sh=screen.size; bw,bh=sw+2*bez,sh+2*bez
+    body=Image.new("RGBA",(bw,bh),(0,0,0,0)); bd=ImageDraw.Draw(body)
+    bd.rounded_rectangle([0,0,bw,bh],radius=rb,fill=(15,21,38,255))
+    mask=Image.new("L",(sw,sh),0); ImageDraw.Draw(mask).rounded_rectangle([0,0,sw,sh],radius=rs,fill=255)
+    body.paste(screen,(bez,bez),mask)
+    nw,nh=int(150*S),int(30*S)
+    bd.rounded_rectangle([(bw-nw)//2,bez+int(10*S),(bw+nw)//2,bez+int(10*S)+nh],radius=nh//2,fill=(15,21,38,255))
+    if tilt: body=body.rotate(tilt,expand=True,resample=Image.BICUBIC)
+    return body
+def shadow(canvas,obj,x,y,blur=34,alpha=95,dy=22):
+    sh=Image.new("RGBA",canvas.size,(0,0,0,0))
+    col=Image.new("RGBA",obj.size,(18,38,78,alpha))
+    sil=Image.composite(col,Image.new("RGBA",obj.size,(0,0,0,0)),obj.split()[3])
+    sh.paste(sil,(x,y+int(dy*S)),sil); sh=sh.filter(ImageFilter.GaussianBlur(blur))
+    canvas.alpha_composite(sh)
 
-def finish(img, name):
-    out = img.resize((W, H), Image.LANCZOS)
-    out.save(os.path.join(OUT, name))
-    print("wrote", name)
+# ---- backgrounds ----
+def grad(w,h,top,bot):
+    im=Image.new("RGB",(w,h),top); px=im.load()
+    for yy in range(h):
+        t=yy/max(1,h-1); c=tuple(int(top[i]+(bot[i]-top[i])*t) for i in range(3))
+        for xx in range(w): px[xx,yy]=c
+    return im.convert("RGBA")
 
-# zone "écran app" sous le bandeau
-SX0, SY0 = 0, CAP_H
-def card_img(path, box):
-    im = Image.open(path).convert("RGBA")
-    tw_, th_ = (box[2]-box[0])*S, (box[3]-box[1])*S
-    im = im.resize((tw_, th_), Image.LANCZOS)
+# ===================== APP SCREEN RENDERERS =====================
+SW,SH=720,1560
+def screen_base(countdown=True):
+    im=Image.new("RGBA",(SW*S,SH*S),(255,255,255,255)); d=ImageDraw.Draw(im)
+    # app bar
+    lg=load(os.path.join(PUB,"logo1.png"),w=120); im.alpha_composite(lg,(int(28*S),int(34*S)))
+    i_bell(d,SW-92,62,16,NAVY); i_gear(d,SW-44,62,16,NAVY)
+    if countdown:
+        RR(d,(28,104,SW-28,150),12,fill=S100)
+        T(d,(46,116),"⏱",f(20),NAVY)  # may box; replaced by clock icon
+        d.ellipse([(44)*S,(118)*S,(60)*S,(134)*S],outline=NAVY,width=2*S); L(d,[(52,121),(52,126),(56,128)],NAVY,2)
+        T(d,(74,116),"-9 mois avant le 1er tour",f(22,False),S600)
+    return im,d
+def nav(d,active=0):
+    ny=SH-104; RR(d,(0,ny,SW,SH),0,fill=WHITE); d.line([(0,ny*S),(SW*S,ny*S)],fill=S200,width=2*S)
+    tabs=[("Accueil",i_check),("Explorer",i_gear),("Mon fil",i_news),("Actus",i_news),("Plus",None)]
+    labels=["Accueil","Explorer","Mon fil","Actus","Plus"]; n=5
+    for i,lab in enumerate(labels):
+        cx=(i+.5)*(SW/n); col=BLUE if i==active else S400
+        if i==active:
+            E(d,(cx-26,ny+18,cx+26,ny+70),fill=BLUE)
+        # simple glyph
+        gcol=WHITE if i==active else col
+        if i==2: i_news(d,cx,ny+44,13,gcol)
+        else: E(d,(cx-11,ny+33,cx+11,ny+55),outline=gcol,w=3)
+        T(d,(cx,ny+84),lab,f(16,i==active),NAVY if i==active else S400,anchor="mm")
+
+def s_actus():
+    im,d=screen_base();
+    # hero card bleu
+    RR(d,(28,168,SW-28,360),20,fill=NAVY)
+    T(d,(52,190),"FIL D'ACTUALITÉ",f(18),(150,178,228))
+    T(d,(52,220),"Toute l'actualité présidentielle",f(30),WHITE)
+    for i,ln in enumerate(["200 articles agrégés des principaux","titres de la presse française."]):
+        T(d,(52,266+i*30),ln,f(21,False),(196,212,240))
+    # search
+    RR(d,(28,384,SW-28,440),14,outline=S300,w=2); E(d,(50,402,74,426),outline=S400,w=3)
+    T(d,(92,400),"Rechercher dans le fil...",f(21,False),S400)
+    # chips orientations
+    T(d,(30,462),"ORIENTATIONS SUIVIES",f(16),S400)
+    x=28
+    for k,(lab,_) in enumerate([("Toutes",0)]+list(ORI.items())):
+        active=lab=="Toutes"; w=TW(d,lab,f(19))+30
+        if active: RR(d,(x,490,x+w,530),20,fill=NAVY); T(d,(x+w/2,510),lab,f(19),WHITE,anchor="mm")
+        else: RR(d,(x,490,x+w,530),20,outline=S300,w=2); T(d,(x+w/2,510),lab,f(19,False),S600,anchor="mm")
+        x+=w+12
+    T(d,(30,548),"THÈMES",f(16),S400)
+    x=28
+    for k,lab in enumerate(["Tous","Écologie","Économie","Social","Société"]):
+        active=lab=="Tous"; w=TW(d,lab,f(19))+30
+        col=THEME.get(lab,NAVY)
+        if active: RR(d,(x,576,x+w,616),20,fill=NAVY); T(d,(x+w/2,596),lab,f(19),WHITE,anchor="mm")
+        else: RR(d,(x,576,x+w,616),20,outline=S300,w=2); T(d,(x+w/2,596),lab,f(19,False),S600,anchor="mm")
+        x+=w+12
+    # article card
+    ay=648; RR(d,(28,ay,SW-28,ay+760),20,fill=WHITE,outline=S200,w=2)
+    img=grad(int((SW-56)*S),int(420*S),(210,222,240),(150,170,205))
+    m=Image.new("L",img.size,0); ImageDraw.Draw(m).rounded_rectangle([0,0,img.size[0],img.size[1]],radius=int(18*S),fill=255)
+    im.paste(img,(int(28*S),int(ay*S)),m)
+    E(d,(SW/2-26,ay+184,SW/2+26,ay+236),fill=(255,255,255)); d.polygon([((SW/2-8)*S,(ay+196)*S),((SW/2-8)*S,(ay+224)*S),((SW/2+14)*S,(ay+210)*S)],fill=NAVY)
+    # tag orientation
+    RR(d,(52,ay+44,52+TW(d,"GAUCHE",f(17))+28,ay+82),8,fill=ORI["Gauche"]); T(d,(66,ay+52),"GAUCHE",f(17),WHITE)
+    ty=ay+470
+    for ln in wrap(d,"Présidentielle 2027 : temps fort de campagne attendu ce week-end",f(28),SW-110):
+        T(d,(52,ty),ln,f(28),NAVY); ty+=38
+    T(d,(52,ay+700),"il y a 1 h",f(20,False),S400)
+    nav(d,active=2)
+    return im
+def s_match():
+    im,d=screen_base(countdown=False)
+    # tabs
+    x=28
+    for lab in ["Candidats","Programmes","Boussole"]:
+        active=lab=="Boussole"; w=TW(d,lab,f(21))+36
+        if active: RR(d,(x,168,x+w,220),26,fill=NAVY); T(d,(x+w/2,194),lab,f(21),WHITE,anchor="mm")
+        else: RR(d,(x,168,x+w,220),26,fill=S100); T(d,(x+w/2,194),lab,f(21,False),S600,anchor="mm")
+        x+=w+14
+    RR(d,(28,252,SW-28,560),22,fill=S50,outline=S200,w=2)
+    T(d,(52,280),"Match politique",f(32),NAVY)
+    for i,ln in enumerate(["Répondez à des propositions anonymes","et découvrez avec quels candidats","vous êtes le plus compatible."]):
+        T(d,(52,326+i*32),ln,f(21,False),S600)
+    RR(d,(52,440,260,500),16,fill=BLUE); T(d,(156,470),"Lancer le test",f(22),WHITE,anchor="mm")
+    # jauge
+    gx,gy=SW-160,406
+    E(d,(gx-86,gy-86,gx+86,gy+86),outline=S200,w=12)
+    d.arc([(gx-86)*S,(gy-86)*S,(gx+86)*S,(gy+86)*S],-90,-90+int(360*.78),fill=THEME["Écologie"],width=int(12*S))
+    T(d,(gx,gy-8),"78%",f(34),NAVY,anchor="mm"); T(d,(gx,gy+28),"compatible",f(16,False),S500,anchor="mm")
+    # à la une
+    T(d,(30,600),"À LA UNE",f(18),S400)
+    RR(d,(28,628,SW-28,800),18,fill=WHITE,outline=S200,w=2)
+    sil=load(os.path.join(PUB,"card_blue.png"),w=110,h=150); im.alpha_composite(sil,(int(50*S),int(648*S)))
+    for i,ln in enumerate(["Quel avenir pour","l'école publique ?"]):
+        T(d,(190,664+i*40),ln,f(26),NAVY)
+    T(d,(190,748),"Débat entre les candidats",f(20,False),S500)
+    nav(d,active=1)
+    return im
+def s_fiche():
+    im,d=screen_base(countdown=False)
+    d.line([(0,150*S),(SW*S,150*S)],fill=S100,width=2*S)
+    sil=load(os.path.join(PUB,"card_red.png"),w=120,h=165); im.alpha_composite(sil,(int(40*S),int(180*S)))
+    T(d,(190,196),"Candidate 1",f(34),NAVY)
+    T(d,(190,246),"Parti A",f(22,False),S500)
+    RR(d,(SW-188,188,SW-40,232),22,fill=(255,247,224)); star(d,SW-168,210,12,GOLD); T(d,(SW-150,198),"Suivi",f(20),(180,120,20))
+    T(d,(190,286),"candidate1.fr",f(20,False),BLUE)
+    # tabs
+    x=28
+    for lab,active in [("Bio",True),("Prog.",False),("Affaires",False),("Actus",False)]:
+        w=TW(d,lab,f(20))+34
+        if active: RR(d,(x,372,x+w,424),26,fill=NAVY); T(d,(x+w/2,398),lab,f(20),WHITE,anchor="mm")
+        else: RR(d,(x,372,x+w,424),26,fill=S100); T(d,(x+w/2,398),lab,f(20,False),S600,anchor="mm")
+        x+=w+12
+    body=("Personnalité politique française, figure de son courant. A officiellement "
+          "annoncé sa candidature à l'élection présidentielle de 2027. Engagée de longue "
+          "date sur les questions sociales et écologiques.")
+    yy=458
+    for ln in wrap(d,body,f(22,False),SW-90): T(d,(45,yy),ln,f(22,False),S600); yy+=34
+    T(d,(45,yy+20),"Parcours",f(26),NAVY); yy+=64
+    body2=("Née en 1970, elle débute sa carrière dans la vie associative avant de "
+           "s'engager en politique. Élue locale puis parlementaire, elle s'impose comme "
+           "une voix de sa famille politique.")
+    for ln in wrap(d,body2,f(22,False),SW-90): T(d,(45,yy),ln,f(22,False),S600); yy+=34
     return im
 
-# helper: badge pill
-def pill(d, x, y, label, color, fg=WHITE, padx=16, h=40, font=None):
-    font = font or F(22)
-    w = tw(d, label, font) + padx*2
-    rr(d, (x, y, x+w, y+h), h/2, fill=color)
-    text(d, (x+w/2, y+h/2), label, font, fg, anchor="mm")
-    return w
-
-# bottom nav bar commun
-def bottom_nav(d, active=0):
-    ny = H - 120
-    rr(d, (0, ny, W, H), 0, fill=WHITE)
-    d.line([(0, ny*S), (W*S, ny*S)], fill=S200, width=2*S)
-    tabs = ["Accueil", "Explorer", "Mon fil", "Actus", "Candidats"]
-    n = len(tabs)
-    for i, t in enumerate(tabs):
-        cx = (i+0.5) * (W/n)
-        col = NAVY if i == active else S400
-        # pastille icône
-        rr(d, (cx-16, ny+26, cx+16, ny+58), 9, fill=(col if i==active else None),
-           outline=(None if i==active else col), width=3)
-        text(d, (cx, ny+86), t, F(18, bold=i==active), col, anchor="mm")
-
-# ============ ÉCRAN 1 : ACTUALITÉS ============
-def shot_actus():
-    img, d = new_shot("Toute l'actu politique,\ntous les bords réunis",
-                      "Agrégateur neutre : presse de gauche, centre, droite et fact-checking.")
-    y = SY0 + 40
-    text(d, (60, y), "Actualités", F(44), INK)
-    y += 86
-    # chips filtres orientation
-    x = 60
-    for lab, col in [("Tous", NAVY)] + list(ORIENT.items()):
-        active = lab == "Tous"
-        if active:
-            x += pill(d, x, y, lab, NAVY) + 14
-        else:
-            w = tw(d, lab, F(22)) + 32
-            rr(d, (x, y, x+w, y+40), 20, outline=S300, width=2)
-            text(d, (x+w/2, y+20), lab, F(22, bold=False), S600, anchor="mm")
-            x += w + 14
-        if x > W-160:
-            break
-    y += 78
-    # cartes articles
-    samples = [
-        ("Gauche", "Réforme des retraites : ce que prévoit la nouvelle proposition", "Il y a 2 h"),
-        ("Centre", "Budget 2027 : les arbitrages attendus cette semaine", "Il y a 3 h"),
-        ("Droite", "Sécurité : le débat relancé après les annonces", "Il y a 5 h"),
-        ("Fact-check", "Vérifié : non, ce chiffre sur l'emploi est trompeur", "Hier"),
-    ]
-    for orient, title, when in samples:
-        rr(d, (40, y, W-40, y+220), 24, fill=WHITE, outline=S200, width=2)
-        # vignette
-        rr(d, (64, y+28, 244, y+192), 16, fill=S100)
-        text(d, (154, y+110), "IMG", F(24, bold=False), S400, anchor="mm")
-        col = ORIENT[orient]
-        pill(d, 272, y+28, orient, col)
-        text(d, (272+tw(d,orient,F(22))+60, y+48), when, F(20, bold=False), S400, anchor="lm")
-        tf = F(28)
-        ty = y+86
-        for ln in wrap(d, title, tf, W-340)[:3]:
-            text(d, (272, ty), ln, tf, INK)
-            ty += 40
-        y += 244
-    bottom_nav(d, active=3)
-    finish(img, "screenshot-1-actus.png")
-
-# ============ ÉCRAN 2 : BOUSSOLE ============
-def shot_boussole():
-    img, d = new_shot("Trouvez les candidats\nqui vous ressemblent",
-                      "Positionnez-vous sur les grandes questions, obtenez votre affinité.")
-    cx = W/2
-    y = SY0 + 70
-    text(d, (cx, y), "Boussole", F(44), INK, anchor="mm")
-    text(d, (cx, y+58), "Question 7 / 20", F(24, bold=False), S500, anchor="mm")
-    # barre progression
-    rr(d, (120, y+96, W-120, y+112), 8, fill=S200)
-    rr(d, (120, y+96, 120+(W-240)*0.35, y+112), 8, fill=BLUE)
-    # cartes empilées (effet pile) derrière
-    cy = y+170
-    rr(d, (140, cy-26, W-140, cy+10), 32, fill=S100)
-    rr(d, (115, cy-14, W-115, cy+20), 32, fill=S200)
-    # carte proposition principale
-    CH = 900
-    rr(d, (90, cy, W-90, cy+CH), 32, fill=WHITE, outline=S200, width=2)
-    pill(d, 130, cy+44, "Écologie", THEME["Écologie"])
-    qf = F(44)
-    qy = cy+150
-    quote = "« Investir massivement dans les transports en commun, même au prix d'une hausse d'impôts. »"
-    for ln in wrap(d, quote, qf, W-260):
-        text(d, (130, qy), ln, qf, INK)
-        qy += 62
-    # silhouette candidat (placeholder)
-    sil = card_img(os.path.join(PUB, "card_blue.png"), (0,0, 220, 300))
-    img.paste(sil, (int((cx-110)*S), int((cy+440)*S)), sil)
-    text(d, (cx, cy+770), "Candidat·e 1", F(28, bold=False), S500, anchor="mm")
-    text(d, (cx, cy+820), "Glissez la carte ou choisissez ci-dessous", F(22, bold=False), S400, anchor="mm")
-    # boutons d'accord / pas d'accord
-    by = cy+CH+50
-    rr(d, (90, by, cx-20, by+110), 26, fill=S100)
-    text(d, ((90+cx-20)/2, by+55), "Pas d'accord", F(30), S600, anchor="mm")
-    rr(d, (cx+20, by, W-90, by+110), 26, fill=BLUE)
-    text(d, ((cx+20+W-90)/2, by+55), "D'accord", F(30), WHITE, anchor="mm")
-    finish(img, "screenshot-2-boussole.png")
-
-# ============ ÉCRAN 3 : CANDIDATS ============
-def shot_candidats():
-    img, d = new_shot("Tous les candidats,\nà égalité",
-                      "Fiches neutres, mêmes informations pour chacun. Aucun parti pris.")
-    y = SY0 + 40
-    text(d, (60, y), "Candidats", F(44), INK)
-    y += 90
-    cards = [("Candidat 1","Parti A","blue"),("Candidate 2","Parti B","red"),
-             ("Candidat 3","Parti C","blue"),("Candidate 4","Parti D","red"),
-             ("Candidate 5","Parti E","red"),("Candidat 6","Parti F","blue")]
-    cw = (W-40*2-30)/2
-    ch = 420
+def s_candidats():
+    im,d=screen_base(countdown=False)
+    T(d,(28,176),"Candidats",f(34),NAVY)
+    cards=[("Candidat 1","Parti A","blue"),("Candidate 2","Parti B","red"),
+           ("Candidat 3","Parti C","blue"),("Candidate 4","Parti D","red"),
+           ("Candidate 5","Parti E","red"),("Candidat 6","Parti F","blue")]
+    cw=(SW-28*2-24)/2; ch=400; y0=236
     for i,(name,party,kind) in enumerate(cards):
-        col = i % 2
-        row = i // 2
-        x0 = 40 + col*(cw+30)
-        y0 = y + row*(ch+30)
-        rr(d, (x0, y0, x0+cw, y0+ch), 24, fill=WHITE, outline=S200, width=2)
-        path = os.path.join(PUB, "card_blue.png" if kind=="blue" else "card_red.png")
-        ph = card_img(path, (0,0, int(cw-48), 250))
-        img.paste(ph, (int((x0+24)*S), int((y0+24)*S)), ph)
-        text(d, (x0+cw/2, y0+300), name, F(28), INK, anchor="mm")
-        pill(d, x0+cw/2 - (tw(d,party,F(20))+32)/2, y0+330, party, S100, fg=S600)
-    bottom_nav(d, active=4)
-    finish(img, "screenshot-3-candidats.png")
-
-# ============ ÉCRAN 4 : FICHE / PROGRAMME ============
-def shot_programme():
-    img, d = new_shot("Programmes détaillés,\nsources vérifiables",
-                      "Le programme thème par thème, avec les sources d'origine.")
-    y = SY0 + 30
-    # header candidat
-    rr(d, (40, y, W-40, y+250), 24, fill=S50, outline=S200, width=2)
-    ph = card_img(os.path.join(PUB, "card_red.png"), (0,0, 150, 210))
-    img.paste(ph, (int(70*S), int((y+20)*S)), ph)
-    text(d, (250, y+50), "Candidate 2", F(40), INK)
-    pill(d, 250, y+110, "Parti B", S100, fg=S600)
-    text(d, (250, y+180), "Déclarée · 142 parrainages", F(24, bold=False), S500)
-    y += 290
-    # onglets thèmes
-    x = 50
-    for lab in ["Économie","Écologie","Social","Santé"]:
-        active = lab=="Écologie"
-        col = THEME[lab]
-        w = tw(d, lab, F(24)) + 36
-        if active:
-            rr(d, (x, y, x+w, y+50), 25, fill=col)
-            text(d, (x+w/2, y+25), lab, F(24), WHITE, anchor="mm")
-        else:
-            rr(d, (x, y, x+w, y+50), 25, outline=S300, width=2)
-            text(d, (x+w/2, y+25), lab, F(24, bold=False), S600, anchor="mm")
-        x += w + 16
-    y += 80
-    # blocs programme
-    blocks = [
-        ("Transition énergétique", "Objectif neutralité carbone : plan d'investissement, rénovation thermique et sortie progressive des énergies fossiles."),
-        ("Biodiversité", "Protection des espaces naturels, réduction des pesticides et création de nouvelles aires protégées."),
-        ("Mobilités durables", "Développement du ferroviaire et des transports en commun, soutien au vélo et aux véhicules propres."),
-    ]
-    for title, body in blocks:
-        rr(d, (40, y, W-40, y+300), 24, fill=WHITE, outline=S200, width=2)
-        rr(d, (64, y+30, 76, y+90), 6, fill=THEME["Écologie"])
-        text(d, (96, y+34), title, F(30), INK)
-        by = y+96
-        for ln in wrap(d, body, F(25, bold=False), W-160)[:4]:
-            text(d, (96, by), ln, F(25, bold=False), S600)
-            by += 38
-        # lien source
-        ic_link(d, 108, y+262, 18, BLUE)
-        text(d, (140, y+250), "Source : programme officiel", F(22, bold=False), BLUE)
-        y += 324
-    finish(img, "screenshot-4-programme.png")
-
-# ============ ÉCRAN 5 : COMPARATEUR ============
-def shot_comparateur():
-    img, d = new_shot("Comparez les programmes\ncôte à côte",
-                      "Deux candidats, thème par thème, d'un coup d'œil.")
-    y = SY0 + 40
-    text(d, (W/2, y), "Comparateur", F(44), INK, anchor="mm")
-    y += 80
-    # deux têtes
-    colw = (W-40*2-30)/2
-    for i,(name,kind) in enumerate([("Candidat 1","blue"),("Candidate 2","red")]):
-        x0 = 40 + i*(colw+30)
-        rr(d, (x0, y, x0+colw, y+230), 24, fill=S50, outline=S200, width=2)
-        ph = card_img(os.path.join(PUB, "card_blue.png" if kind=="blue" else "card_red.png"), (0,0,120,168))
-        img.paste(ph, (int((x0+colw/2-60)*S), int((y+20)*S)), ph)
-        text(d, (x0+colw/2, y+205), name, F(26), INK, anchor="mm")
-    y += 270
-    rows = [("Économie", "Baisse des impôts", "Hausse ISF"),
-            ("Écologie", "Nucléaire", "Renouvelables"),
-            ("Social", "Retraite 64 ans", "Retraite 60 ans"),
-            ("Sécurité", "+ d'effectifs", "Prévention"),
-            ("Europe", "Souveraineté", "Fédéralisme")]
-    for theme, a, b in rows:
-        rr(d, (40, y, W-40, y+150), 20, fill=WHITE, outline=S200, width=2)
-        col = THEME[theme]
-        pill(d, 64, y+22, theme, col)
-        text(d, (64+colw/2, y+105), a, F(24, bold=False), S600, anchor="mm")
-        d.line([((W/2)*S, (y+20)*S), ((W/2)*S,(y+130)*S)], fill=S200, width=2*S)
-        text(d, (W/2+colw/2, y+105), b, F(24, bold=False), S600, anchor="mm")
-        y += 170
-    bottom_nav(d, active=1)
-    finish(img, "screenshot-5-comparateur.png")
-
-# ============ ÉCRAN 6 : NOTIFS / NEUTRALITÉ ============
-def shot_notifs():
-    img, d = new_shot("Vous choisissez\nce que vous recevez",
-                      "Notifications par catégorie. Rappels civiques pour ne rien manquer.")
-    y = SY0 + 50
-    text(d, (60, y), "Notifications", F(44), INK)
-    y += 100
-    rows = [("Actualités presse", "Nouveaux articles des médias", True, ic_news),
-            ("Candidats suivis", "Publications des candidats", True, ic_user),
-            ("Mises à jour candidats", "Programmes, propositions", False, ic_mega),
-            ("Rappels électoraux", "Inscription, procuration, vote", None, ic_vote)]
-    for title, desc, state, icfn in rows:
-        rr(d, (40, y, W-40, y+150), 24, fill=WHITE, outline=S200, width=2)
-        rr(d, (66, y+38, 140, y+112), 18, fill=S100)
-        icfn(d, 103, y+75, 26, NAVY)
-        text(d, (170, y+44), title, F(30), INK)
-        text(d, (170, y+92), desc, F(23, bold=False), S500)
-        # toggle
-        tx0 = W-180
+        c=i%2; r=i//2; x=28+c*(cw+24); yy=y0+r*(ch+24)
+        RR(d,(x,yy,x+cw,yy+ch),20,fill=WHITE,outline=S200,w=2)
+        ph=load(os.path.join(PUB,"card_blue.png" if kind=="blue" else "card_red.png"),w=cw-44,h=240)
+        im.alpha_composite(ph,(int((x+22)*S),int((yy+22)*S)))
+        T(d,(x+cw/2,yy+292),name,f(26),NAVY,anchor="mm")
+        pw=TW(d,party,f(18))+28; RR(d,(x+cw/2-pw/2,yy+322,x+cw/2+pw/2,yy+360),19,fill=S100)
+        T(d,(x+cw/2,yy+341),party,f(18,False),S600,anchor="mm")
+    nav(d,active=0)
+    return im
+def s_notifs():
+    im,d=screen_base(countdown=False)
+    T(d,(28,176),"Notifications",f(34),NAVY)
+    rows=[("Actualités presse","Nouveaux articles",i_news,True),
+          ("Candidats suivis","Publications",i_heart,True),
+          ("Mises à jour candidats","Programmes",i_news,False),
+          ("Rappels électoraux","Inscription, vote",i_check,None)]
+    y=252
+    for title,desc,icfn,state in rows:
+        RR(d,(28,y,SW-28,y+138),20,fill=WHITE,outline=S200,w=2)
+        RR(d,(50,y+34,118,y+102),16,fill=S100); icfn(d,84,y+68,22,NAVY)
+        T(d,(140,y+38),title,f(26),NAVY); T(d,(140,y+82),desc,f(20,False),S500)
+        tx=SW-160
         if state is None:
-            pill(d, tx0-20, y+58, "Toujours", S100, fg=S500, font=F(20))
+            pw=TW(d,"Toujours",f(18))+24; RR(d,(SW-40-pw,y+50,SW-40,y+88),19,fill=S100); T(d,(SW-40-pw/2,y+69),"Toujours",f(18,False),S500,anchor="mm")
         else:
-            col = NAVY if state else S300
-            rr(d, (tx0, y+58, tx0+96, y+106), 24, fill=col)
-            knob = tx0+58 if state else tx0+10
-            d.ellipse([knob*S, (y+64)*S, (knob+36)*S, (y+100)*S], fill=WHITE)
-        y += 174
-    # bandeau neutralité
-    rr(d, (40, y+10, W-40, y+180), 24, fill=(240,247,255), outline=(199,222,255), width=2)
-    ic_lock(d, 80, y+52, 22, NAVY)
-    text(d, (116, y+38), "100 % neutre & sans compte", F(28), NAVY)
-    for i, ln in enumerate(["Aucune inscription, aucun tracking publicitaire.",
-                            "Tous les candidats traités à égalité."]):
-        text(d, (72, y+96+i*38), ln, F(23, bold=False), S600)
-    finish(img, "screenshot-6-notifs.png")
+            col=NAVY if state else S300; RR(d,(tx,y+50,tx+90,y+94),22,fill=col)
+            kx=tx+54 if state else tx+10; E(d,(kx,y+54,kx+34,y+88),fill=WHITE)
+        y+=158
+    RR(d,(28,y+8,SW-28,y+150),20,fill=(240,247,255),outline=(199,222,255),w=2)
+    i_check(d,64,y+48,18,NAVY); T(d,(98,y+34),"100 % neutre & sans compte",f(24),NAVY)
+    for i,ln in enumerate(["Aucune inscription, aucun tracking.","Tous les candidats à égalité."]):
+        T(d,(60,y+82+i*32),ln,f(20,False),S600)
+    return im
 
-# ============ FEATURE GRAPHIC 1024x500 ============
+# ===================== COMPOSITIONS =====================
+def compose_shot(screen,headline,sub,name,tilt=-3,scale=0.62):
+    W,H=1080,2160
+    bg=grad(W*S,H*S,(244,249,255),(214,230,250)); d=ImageDraw.Draw(bg)
+    # caption
+    hf=f(58); y=110
+    for ln in wrap(d,headline,hf,W-130): T(d,(64,y),ln,hf,NAVY); y+=70
+    sf=f(30,False)
+    for ln in wrap(d,sub,sf,W-150): T(d,(64,y+8),ln,sf,S600); y+=42
+    ph=frame(screen,tilt=tilt)
+    pw=int(W*scale*S); ph=ph.resize((pw,int(pw*ph.height/ph.width)),Image.LANCZOS)
+    px=(W*S-ph.width)//2; py=int((y+70)*S)
+    shadow(bg,ph,px,py); bg.alpha_composite(ph,(px,py))
+    bg.convert("RGB").save(os.path.join(OUT,name)); print("wrote",name)
+
+def poster():
+    W,H=1200,1800
+    bg=grad(W*S,H*S,(247,251,255),(206,225,248)); d=ImageDraw.Draw(bg)
+    # silhouettes faibles derrière le haut
+    sb=fade(load(os.path.join(PUB,"card_blue.png"),w=300,h=410),0.45)
+    sr=fade(load(os.path.join(PUB,"card_red.png"),w=300,h=410),0.45)
+    bg.alpha_composite(sb,(int(330*S),int(40*S))); bg.alpha_composite(sr,(int(520*S),int(40*S)))
+    # logo wordmark
+    lg=load(os.path.join(PUB,"logo1.png"),w=300); bg.alpha_composite(lg,(int(60*S),int(70*S)))
+    # tagline
+    T(d,(64,250),"S'informer.",f(64),NAVY); T(d,(64,326),"Comparer.",f(64),NAVY); T(d,(64,402),"Choisir.",f(64),NAVY)
+    T(d,(66,498),"Votre guide pour",f(30,False),S600); T(d,(66,538),"l'élection présidentielle 2027",f(30,False),S600)
+    # feature tiles
+    feats=[((219,234,254),BLUE,i_news,"Toute l'actualité","Suivez les infos clés en un clin d'œil"),
+           ((254,226,226),RED,i_heart,"Suivi personnalisé","Vos candidats et sujets préférés"),
+           ((220,242,228),THEME["Écologie"],i_scale,"Comparez","Programmes, idées et positions"),
+           ((237,228,255),(124,58,237),i_check,"Testez-vous","Trouvez les candidats qui vous ressemblent")]
+    fy=620
+    for bgc,acc,icfn,title,subt in feats:
+        RR(d,(64,fy,148,fy+84),22,fill=bgc); icfn(d,106,fy+42,22,acc)
+        T(d,(176,fy+6),title,f(30),NAVY)
+        for ln in wrap(d,subt,f(22,False),360): T(d,(176,fy+48),ln,f(22,False),S600); break
+        # subtitle may wrap two lines
+        lines=wrap(d,subt,f(22,False),360)
+        for j,ln in enumerate(lines[:2]): T(d,(176,fy+48+j*30),ln,f(22,False),S600)
+        fy+=128
+    # rating card
+    RR(d,(64,fy+10,560,fy+210),26,fill=WHITE,outline=S200,w=2)
+    for k in range(5): star(d,150+k*64,fy+78,26,GOLD)
+    T(d,(150,fy+118),"4,8",f(48),NAVY); T(d,(250,fy+132),"/ 5",f(30,False),S500)
+    T(d,(96,fy+178),"Rejoignez des milliers d'utilisateurs engagés !",f(21,False),S600)
+    # phones (droite + bas) — tenus à droite pour ne pas couvrir le texte de gauche
+    big=frame(s_actus(),tilt=-4); big=big.resize((int(540*S),int(540*S*big.height/big.width)),Image.LANCZOS)
+    bx,by=int(660*S),int(70*S); shadow(bg,big,bx,by); bg.alpha_composite(big,(bx,by))
+    p2=frame(s_fiche(),tilt=2); p2=p2.resize((int(350*S),int(350*S*p2.height/p2.width)),Image.LANCZOS)
+    p3=frame(s_match(),tilt=4); p3=p3.resize((int(360*S),int(360*S*p3.height/p3.width)),Image.LANCZOS)
+    shadow(bg,p3,int(840*S),int(940*S)); bg.alpha_composite(p3,(int(840*S),int(940*S)))
+    shadow(bg,p2,int(600*S),int(900*S)); bg.alpha_composite(p2,(int(600*S),int(900*S)))
+    # footer band
+    fyb=H-150; RR(d,(0,fyb,W,H),0,fill=NAVY)
+    ic=load(os.path.join(PUB,"logo-cap2027.png"),w=92); bg.alpha_composite(ic,(int(60*S),int((fyb+30)*S)))
+    T(d,(180,fyb+38),"CAP2027",f(36),WHITE); T(d,(182,fyb+86),"S'informer. Comparer. Choisir.",f(22,False),(190,208,238))
+    RR(d,(W-360,fyb+34,W-60,fyb+116),14,fill=(0,0,0))
+    d.polygon([((W-330)*S,(fyb+54)*S),((W-330)*S,(fyb+96)*S),((W-300)*S,(fyb+75)*S)],fill=(80,200,255))
+    T(d,(W-288,fyb+46),"DISPONIBLE SUR",f(15,False),(200,210,225)); T(d,(W-288,fyb+66),"Google Play",f(28),WHITE)
+    bg.convert("RGB").save(os.path.join(OUT,"poster.png")); print("wrote poster.png")
+
 def feature_graphic():
-    w, h = 1024, 500
-    img = vgrad(w*S, h*S, NAVY, (24, 54, 110))
-    d = ImageDraw.Draw(img)
-    # logo app
-    logo = Image.open(os.path.join(PUB, "logo-cap2027.png")).convert("RGBA").resize((150*S,150*S), Image.LANCZOS)
-    img.paste(logo, (70*S, 80*S), logo)
-    # tricolore
-    d.rounded_rectangle([250*S,110*S,290*S,128*S], radius=6*S, fill=BLUE)
-    d.rounded_rectangle([298*S,110*S,338*S,128*S], radius=6*S, fill=WHITE)
-    d.rounded_rectangle([346*S,110*S,386*S,128*S], radius=6*S, fill=RED)
-    d.text((250*S,150*S), "CAP 2027", font=F(72), fill=WHITE)
-    d.text((252*S,240*S), "Présidentielle 2027 — informez-vous,", font=F(34, bold=False), fill=(190,208,238))
-    d.text((252*S,288*S), "comparez, trouvez votre boussole.", font=F(34, bold=False), fill=(190,208,238))
-    # puces
-    feats = ["Actualités tous bords", "Boussole politique", "Programmes & comparateur"]
-    yy = 366
-    for fz in feats:
-        d.ellipse([252*S, (yy+8)*S, (252+16)*S, (yy+24)*S], fill=BLUE)
-        d.text((282*S, yy*S), fz, font=F(28), fill=WHITE)
-        yy += 44
-    out = img.resize((w, h), Image.LANCZOS)
-    out.save(os.path.join(OUT, "feature-graphic.png"))
-    print("wrote feature-graphic.png")
+    W,H=1024,500
+    bg=grad(W*S,H*S,(247,251,255),(214,230,250)); d=ImageDraw.Draw(bg)
+    lg=load(os.path.join(PUB,"logo1.png"),w=210); bg.alpha_composite(lg,(int(56*S),int(54*S)))
+    T(d,(60,188),"S'informer. Comparer. Choisir.",f(33),NAVY)
+    T(d,(62,238),"Votre guide neutre pour 2027.",f(24,False),S600)
+    feats=[(BLUE,i_news,"Actualités tous bords"),(RED,i_heart,"Suivi personnalisé"),
+           (THEME["Écologie"],i_scale,"Comparateur & boussole")]
+    yy=300
+    for acc,icfn,lab in feats:
+        icfn(d,80,yy+14,15,acc); T(d,(110,yy),lab,f(25),NAVY); yy+=48
+    # phones tenus à droite (x>=600) pour ne pas mordre sur le texte
+    p2=frame(s_match(),tilt=4); p2=p2.resize((int(250*S),int(250*S*p2.height/p2.width)),Image.LANCZOS)
+    shadow(bg,p2,int(600*S),int(150*S),blur=26,alpha=70); bg.alpha_composite(p2,(int(600*S),int(150*S)))
+    big=frame(s_actus(),tilt=-5); big=big.resize((int(300*S),int(300*S*big.height/big.width)),Image.LANCZOS)
+    bx,by=int(740*S),int(64*S); shadow(bg,big,bx,by,blur=30,alpha=80); bg.alpha_composite(big,(bx,by))
+    bg.convert("RGB").save(os.path.join(OUT,"feature-graphic.png")); print("wrote feature-graphic.png")
 
-# icône 512 (copie)
 def icon():
-    Image.open(os.path.join(PUB, "icon-512.png")).convert("RGBA").save(os.path.join(OUT, "icon-512.png"))
-    print("wrote icon-512.png")
+    Image.open(os.path.join(PUB,"icon-512.png")).convert("RGBA").save(os.path.join(OUT,"icon-512.png")); print("wrote icon-512.png")
 
-if __name__ == "__main__":
-    shot_actus()
-    shot_boussole()
-    shot_candidats()
-    shot_programme()
-    shot_comparateur()
-    shot_notifs()
+if __name__=="__main__":
+    compose_shot(s_actus(),"Toute l'actu présidentielle, tous les bords","Un fil agrégé : gauche, centre, droite et fact-checking.","screenshot-1-actus.png")
+    compose_shot(s_match(),"Trouvez les candidats qui vous ressemblent","Une boussole anonyme sur les idées, pas sur les noms.","screenshot-2-boussole.png")
+    compose_shot(s_fiche(),"Des fiches candidats à égalité","Mêmes informations pour chacun. Sources vérifiables.","screenshot-3-fiche.png")
+    compose_shot(s_candidats(),"Tous les candidats, à égalité","Aucune hiérarchie, aucun parti pris.","screenshot-4-candidats.png")
+    compose_shot(s_notifs(),"Vous choisissez ce que vous recevez","Notifications par catégorie. Rappels civiques inclus.","screenshot-5-notifs.png")
+    poster()
     feature_graphic()
     icon()
-    print("done ->", OUT)
+    print("done ->",OUT)
