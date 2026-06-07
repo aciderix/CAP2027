@@ -240,6 +240,21 @@ Deno.serve(async (req) => {
     tokens = (data ?? []) as { token: string; platform: string }[];
   }
 
+  // Toggle maître: exclure les tokens dont l'utilisateur a coupé toutes
+  // les notifs (push_tokens.enabled = false). S'applique à TOUS les types,
+  // rappels électoraux compris — couper le maître = opt-out total. Lenient:
+  // en cas d'erreur, on n'exclut personne.
+  if (tokens.length > 0) {
+    const { data: disabled, error: dErr } = await supabase
+      .from("push_tokens")
+      .select("token")
+      .eq("enabled", false);
+    if (!dErr && disabled && disabled.length > 0) {
+      const disabledSet = new Set(disabled.map((r: any) => r.token));
+      tokens = tokens.filter((t) => !disabledSet.has(t.token));
+    }
+  }
+
   // Filtre par canal: si ce type de notif correspond à un canal mutable,
   // on retire les tokens qui ont coupé ce canal. Lenient: en cas
   // d'erreur de lecture, on n'exclut personne (aucune notif perdue).

@@ -8,9 +8,24 @@ import {
   getNotificationsEnabled,
   setNotificationsEnabled as persistNotifs,
 } from '../lib/notifications';
-import { registerPushNotifications } from '../lib/push';
-import { registerPushWeb } from '../lib/pushWeb';
+import { registerPushNotifications, getPushToken } from '../lib/push';
+import { registerPushWeb, getWebPushToken } from '../lib/pushWeb';
 import { useMutedChannels, type NotifChannel } from '../lib/notificationChannels';
+import { supabase } from '../lib/supabase';
+
+// Reflète l'état du toggle maître côté serveur (push_tokens.enabled) pour
+// que push-broadcast cesse réellement d'envoyer quand l'utilisateur coupe
+// tout. best-effort: si le token n'est pas encore prêt, le prochain
+// register le réalignera.
+async function setServerTokenEnabled(enabled: boolean) {
+  const token = getPushToken() ?? getWebPushToken();
+  if (!token) return;
+  try {
+    await supabase.rpc('set_token_enabled', { p_token: token, p_enabled: enabled });
+  } catch {
+    // best-effort
+  }
+}
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -53,6 +68,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       // the user must revoke at OS level).
       persistNotifs(false);
       setNotifEnabled(false);
+      // Couper réellement côté serveur (opt-out total, rappels compris).
+      void setServerTokenEnabled(false);
       return;
     }
     // Enabling: persist first so the background runner sees it ON
@@ -85,6 +102,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           setError((prev) => prev ?? `Web push : ${res.error}`);
         }
       }
+      // Réactiver l'envoi serveur (le token vient d'être (ré)enregistré).
+      await setServerTokenEnabled(true);
     } catch (e: any) {
       setError(String(e?.message ?? e));
     } finally {
