@@ -45,6 +45,20 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 // updates, programmes, etc.) is silenced during the nightly window.
 const QUIET_BYPASS_TYPES = new Set(["election_milestone", "date_official"]);
 
+// Mapping notif type -> canal mutable par l'utilisateur (table
+// push_token_muted_channels). Un type absent de ce mapping (notamment
+// les rappels électoraux: election_milestone, date_official,
+// election_results_published, parrainages_update) n'est jamais filtré —
+// il passe à tous les destinataires ciblés.
+const TYPE_TO_CHANNEL: Record<string, string> = {
+  article_press: "news_press",
+  article_social: "candidates_followed",
+  candidate_updated: "candidates_updates",
+  new_programme: "candidates_updates",
+  candidate_published: "candidates_updates",
+  match_proposition_change: "candidates_updates",
+};
+
 // Shared secret expected in the x-push-token header, read from Vault via
 // the get_push_broadcast_secret() RPC and cached for the lifetime of the
 // (warm) function instance.
@@ -224,6 +238,21 @@ Deno.serve(async (req) => {
   } else {
     const { data } = await supabase.from("push_tokens").select("token, platform");
     tokens = (data ?? []) as { token: string; platform: string }[];
+  }
+
+  // Filtre par canal: si ce type de notif correspond à un canal mutable,
+  // on retire les tokens qui ont coupé ce canal. Lenient: en cas
+  // d'erreur de lecture, on n'exclut personne (aucune notif perdue).
+  const channel = payload.type ? TYPE_TO_CHANNEL[payload.type] : undefined;
+  if (channel && tokens.length > 0) {
+    const { data: muted, error: mErr } = await supabase
+      .from("push_token_muted_channels")
+      .select("token")
+      .eq("channel", channel);
+    if (!mErr && muted) {
+      const mutedSet = new Set(muted.map((r: any) => r.token));
+      if (mutedSet.size > 0) tokens = tokens.filter((t) => !mutedSet.has(t.token));
+    }
   }
 
   let sent = 0, failed = 0;

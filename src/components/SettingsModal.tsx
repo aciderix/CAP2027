@@ -1,4 +1,4 @@
-import { Bell, Trash2, Shield, AlertTriangle } from 'lucide-react';
+import { Bell, Trash2, Shield, AlertTriangle, Newspaper, UserCheck, Megaphone, Vote } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -10,6 +10,7 @@ import {
 } from '../lib/notifications';
 import { registerPushNotifications } from '../lib/push';
 import { registerPushWeb } from '../lib/pushWeb';
+import { useMutedChannels, type NotifChannel } from '../lib/notificationChannels';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const { isEnabled: channelEnabled, toggle: toggleChannel } = useMutedChannels();
 
   const refreshPerm = () => {
     if (Capacitor.isNativePlatform()) {
@@ -159,6 +161,56 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           )}
         </div>
 
+        {/* Notification channels — only meaningful when notifs are on */}
+        {notifEnabled && (
+          <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex flex-col gap-1 mt-2">
+            <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 px-1 pb-1">
+              Types de notifications
+            </p>
+            <ChannelRow
+              icon={<Newspaper className="w-4 h-4" />}
+              title="Actualités presse"
+              desc="Nouveaux articles des médias suivis."
+              channel="news_press"
+              enabled={channelEnabled('news_press')}
+              onToggle={toggleChannel}
+            />
+            <ChannelRow
+              icon={<UserCheck className="w-4 h-4" />}
+              title="Candidats suivis"
+              desc="Publications et vidéos des candidats que vous suivez."
+              channel="candidates_followed"
+              enabled={channelEnabled('candidates_followed')}
+              onToggle={toggleChannel}
+            />
+            <ChannelRow
+              icon={<Megaphone className="w-4 h-4" />}
+              title="Mises à jour candidats"
+              desc="Programmes, propositions et fiches mis à jour."
+              channel="candidates_updates"
+              enabled={channelEnabled('candidates_updates')}
+              onToggle={toggleChannel}
+            />
+            {/* Election reminders: always on, not mutable (civic deadlines) */}
+            <div className="flex items-center justify-between gap-3 py-2 px-1">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-full bg-white shadow-sm flex items-center justify-center text-[#102a5c] shrink-0">
+                  <Vote className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-[#102a5c] text-sm">Rappels électoraux</p>
+                  <p className="text-xs text-slate-500 leading-snug">
+                    Inscription, procuration, jour de vote, résultats. Toujours actifs.
+                  </p>
+                </div>
+              </div>
+              <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-slate-400 bg-white border border-slate-200 rounded-full px-2 py-1">
+                Toujours
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Quick info */}
         <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex items-start gap-3 mt-2">
           <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-emerald-600 shrink-0">
@@ -203,5 +255,41 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </p>
       </div>
     </Modal>
+  );
+}
+
+function ChannelRow({
+  icon, title, desc, channel, enabled, onToggle,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  channel: NotifChannel;
+  enabled: boolean;
+  onToggle: (c: NotifChannel) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2 px-1">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-9 h-9 rounded-full bg-white shadow-sm flex items-center justify-center text-[#102a5c] shrink-0">
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <p className="font-bold text-[#102a5c] text-sm">{title}</p>
+          <p className="text-xs text-slate-500 leading-snug">{desc}</p>
+        </div>
+      </div>
+      <button
+        onClick={() => onToggle(channel)}
+        aria-label={`Activer ${title}`}
+        className={`shrink-0 w-12 h-6 rounded-full transition-colors relative ${
+          enabled ? 'bg-[#102a5c]' : 'bg-slate-300'
+        }`}
+      >
+        <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all shadow-sm ${
+          enabled ? 'left-[26px]' : 'left-0.5'
+        }`} />
+      </button>
+    </div>
   );
 }
