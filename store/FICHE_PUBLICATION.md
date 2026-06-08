@@ -103,10 +103,15 @@ election, neutrally. No account, no ads, no tracking.
   you position yourself on ideas, not on people.
 • Candidate profiles, presented equally — biography, party, programme,
   proposals, with the same layout for everyone.
+• Follow your favourite candidates — add them to your watchlist and get their
+  latest news, posts and videos in a personalised feed, with optional alerts.
 • Programmes by topic, with original sources to verify every claim.
 • Side-by-side comparison of two candidates.
-• Notifications you control, plus civic reminders (electoral registration,
-  proxy voting, election day).
+• The voter toolkit — check your electoral registration, set up or receive a
+  proxy vote, and get ready for election day, with civic reminders for every
+  key deadline (registration, proxy, eve and day of the vote, results).
+• Notifications you control by category, plus civic reminders so you never
+  miss a key date.
 
 Our commitments: strict neutrality, privacy (no account, no ad cookies, no
 personal data shared), independence (not affiliated with any party, candidate

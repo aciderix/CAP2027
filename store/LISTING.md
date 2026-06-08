@@ -50,14 +50,20 @@ Répondez à une série de questions sur les grands sujets (économie, écologie
 👥 DÉCOUVRIR LES CANDIDATS, À ÉGALITÉ
 Des fiches présentées de manière strictement identique pour chaque candidat : biographie, parti, programme, propositions. Aucun parti pris, aucune hiérarchie.
 
+⭐ SUIVRE VOS CANDIDATS FAVORIS
+Ajoutez vos candidats préférés à votre suivi et retrouvez dans un fil personnalisé leurs dernières actualités, prises de parole, posts et vidéos. Recevez une notification dès qu'ils publient quelque chose de nouveau (si vous l'activez).
+
 📋 EXPLORER LES PROGRAMMES PAR THÈME
 Le programme de chaque candidat, organisé thème par thème, avec les sources d'origine pour vérifier chaque information.
 
 ⚖️ COMPARER CÔTE À CÔTE
 Mettez deux candidats face à face et comparez leurs positions, sujet par sujet, d'un seul coup d'œil.
 
+🗳️ LA BOÎTE À OUTILS DU VOTANT
+Tout ce qu'il faut pour voter sans rien oublier : vérifiez votre inscription sur les listes électorales, faites ou recevez une procuration, et préparez le jour du scrutin. Des rappels civiques vous préviennent des échéances clés — clôture des inscriptions, délais de procuration, veille et jour de vote, publication des résultats.
+
 🔔 DES NOTIFICATIONS QUE VOUS MAÎTRISEZ
-Choisissez précisément ce que vous voulez recevoir : actualités, mises à jour des candidats, ou rappels civiques. Des rappels pour les échéances importantes (inscription sur les listes électorales, procuration, jour de vote) vous évitent de manquer une date clé.
+Choisissez précisément ce que vous voulez recevoir : actualités, candidats suivis, mises à jour des candidats. Chaque catégorie s'active ou se coupe indépendamment, et les rappels électoraux veillent à ce que vous ne manquiez aucune date clé.
 
 📊 SUIVRE LES PARRAINAGES ET LES RÉSULTATS
 Suivez la collecte des parrainages des candidats, et consultez les résultats le soir du scrutin.
