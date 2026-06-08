@@ -129,7 +129,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     <Modal isOpen={isOpen} onClose={onClose} title="Réglages">
       <div className="flex flex-col gap-2 py-2">
         <p className="text-sm text-slate-500">
-          Vos préférences restent sur votre téléphone. Aucun compte, aucun envoi serveur.
+          Vos préférences restent sur votre téléphone. Aucun compte. Si vous activez les
+          notifications, un identifiant anonyme est envoyé au serveur pour les acheminer.
         </p>
 
         {/* Single notif toggle */}
@@ -270,7 +271,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         <p className="text-[10px] text-slate-400 text-center mt-2">
-          CAP 2027 — App indépendante · 100 % locale
+          CAP 2027 — App indépendante · Sans compte · Sans publicité
         </p>
       </div>
     </Modal>
