@@ -153,7 +153,8 @@ function AboutModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
         </p>
         <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-3">
           Le projet est non-commercial, financé par ses auteurs. Aucun lien avec un parti, un
-          mouvement ou un média.
+          mouvement, un média ni une administration. <b>Ce n'est pas une application officielle&nbsp;:</b>
+          pour vos démarches, référez-vous aux sites officiels de l'État.
         </p>
       </div>
     </Modal>
@@ -264,7 +265,10 @@ function LegalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
         <h4 className="font-bold text-[#102a5c]">Éditeur</h4>
         <p>
           CAP 2027 est un projet non-commercial édité à titre personnel. Il n'est affilié à
-          aucun parti, mouvement politique ni média.
+          aucun parti, mouvement politique, média, <b>ni à aucune administration ou entité
+          gouvernementale</b>. Ce n'est pas une application officielle&nbsp;: pour toute démarche,
+          référez-vous aux sites officiels de l'État (service-public.fr, maprocuration.gouv.fr,
+          elections.interieur.gouv.fr).
         </p>
 
         <h4 className="font-bold text-[#102a5c] mt-2">Données personnelles</h4>

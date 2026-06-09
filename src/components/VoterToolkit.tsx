@@ -18,6 +18,12 @@ export function VoterToolkit() {
         <h2 className="text-[18px] sm:text-[28px] font-bold text-[#102a5c]">
           Boîte à outils du votant
         </h2>
+        <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-snug bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-2">
+          CAP 2027 est une application <strong>indépendante</strong>, sans aucun lien avec une
+          administration ou une entité gouvernementale. Pour vos démarches, l'application renvoie
+          aux <strong>sites officiels de l'État</strong> (service-public.fr, maprocuration.gouv.fr,
+          elections.interieur.gouv.fr).
+        </p>
       </div>
       
       <div className="relative">

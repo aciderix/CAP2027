@@ -95,6 +95,11 @@ Follow France's 2027 election: balanced news, candidates, political compass.
 CAP 2027 is the independent civic app to follow the 2027 French presidential
 election, neutrally. No account, no ads, no tracking.
 
+DISCLAIMER — CAP 2027 is an INDEPENDENT app. It is not affiliated with, nor
+endorsed by, any government or public authority. This is not an official app.
+For any procedure, the app links to the official French government websites
+(service-public.fr, maprocuration.gouv.fr, elections.interieur.gouv.fr).
+
 • Balanced news feed — articles aggregated from media across the political
   spectrum (left, centre, right) plus fact-checking sources, each labelled by
   the orientation of its source.
@@ -108,14 +113,16 @@ election, neutrally. No account, no ads, no tracking.
 • Programmes by topic, with original sources to verify every claim.
 • Side-by-side comparison of two candidates.
 • The voter toolkit — check your electoral registration, set up or receive a
-  proxy vote, and get ready for election day, with civic reminders for every
-  key deadline (registration, proxy, eve and day of the vote, results).
+  proxy vote, and get ready for election day. All procedures link to the
+  official government websites (service-public.fr, maprocuration.gouv.fr,
+  elections.interieur.gouv.fr), with civic reminders for every key deadline.
 • Notifications you control by category, plus civic reminders so you never
   miss a key date.
 
 Our commitments: strict neutrality, privacy (no account, no ad cookies, no
-personal data shared), independence (not affiliated with any party, candidate
-or media), and 100% free.
+personal data shared), independence (not affiliated with any party, candidate,
+media, or government / public authority — this is not an official app), and
+100% free.
 ```
 
 ---

@@ -37,6 +37,8 @@ CAP 2027 est l'application civique indépendante pour suivre l'élection présid
 
 Pas de compte, pas de publicité, pas de tracking. Vos choix restent sur votre téléphone.
 
+⚠️ APPLICATION INDÉPENDANTE — CAP 2027 n'est ni affiliée à, ni approuvée par une administration ou une entité gouvernementale. Ce n'est pas une application officielle. Pour les démarches, l'application renvoie vers les sites officiels de l'État : service-public.fr (inscription sur les listes électorales), maprocuration.gouv.fr (procuration), elections.interieur.gouv.fr (déroulé du vote).
+
 ━━━━━━━━━━━━━━━━━━━━
 CE QUE VOUS POUVEZ FAIRE
 ━━━━━━━━━━━━━━━━━━━━
@@ -60,7 +62,7 @@ Le programme de chaque candidat, organisé thème par thème, avec les sources d
 Mettez deux candidats face à face et comparez leurs positions, sujet par sujet, d'un seul coup d'œil.
 
 🗳️ LA BOÎTE À OUTILS DU VOTANT
-Tout ce qu'il faut pour voter sans rien oublier : vérifiez votre inscription sur les listes électorales, faites ou recevez une procuration, et préparez le jour du scrutin. Des rappels civiques vous préviennent des échéances clés — clôture des inscriptions, délais de procuration, veille et jour de vote, publication des résultats.
+Tout ce qu'il faut pour voter sans rien oublier : vérifiez votre inscription sur les listes électorales, faites ou recevez une procuration, et préparez le jour du scrutin. Les démarches renvoient vers les sites officiels de l'État (service-public.fr, maprocuration.gouv.fr, elections.interieur.gouv.fr). Des rappels civiques vous préviennent des échéances clés — clôture des inscriptions, délais de procuration, veille et jour de vote, publication des résultats.
 
 🔔 DES NOTIFICATIONS QUE VOUS MAÎTRISEZ
 Choisissez précisément ce que vous voulez recevoir : actualités, candidats suivis, mises à jour des candidats. Chaque catégorie s'active ou se coupe indépendamment, et les rappels électoraux veillent à ce que vous ne manquiez aucune date clé.
@@ -76,7 +78,7 @@ NOS ENGAGEMENTS
 
 ✓ VIE PRIVÉE — Aucune inscription, aucun compte, aucun cookie publicitaire, aucune donnée personnelle partagée. L'application fonctionne sans collecter votre identité.
 
-✓ INDÉPENDANCE — CAP 2027 n'est affiliée à aucun parti, aucun candidat, aucun média.
+✓ INDÉPENDANCE — CAP 2027 n'est affiliée à aucun parti, aucun candidat, aucun média, ni à aucune administration ou entité gouvernementale. Ce n'est pas une application officielle.
 
 ✓ GRATUIT — Entièrement gratuit, sans achat intégré.
 
