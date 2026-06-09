@@ -7,8 +7,8 @@ const slides = [
     subtitle: "La boîte à outils civique 100% indépendante pour la présidentielle."
   },
   {
-    title: "Aucun compte, aucune donnée",
-    subtitle: "Pas d'inscription, pas de tracking. Vos choix restent sur votre téléphone."
+    title: "Sans compte, sans publicité",
+    subtitle: "Pas d'inscription, pas de tracking publicitaire. Vos choix restent sur votre téléphone."
   },
   {
     title: "Neutre et factuel",

@@ -115,7 +115,7 @@ export function MoreMenu({ onGoToCandidates }: MoreMenuProps) {
       <div className="text-center mt-6 flex flex-col items-center gap-1">
         <img decoding="async" src="/logo-cap2027-sm.png" alt="" className="w-10 h-10 rounded-xl opacity-90 mb-1" />
         <p className="text-xs text-slate-400 font-medium tracking-wide">CAP 2027 • App indépendante</p>
-        <p className="text-[10px] text-slate-300">Aucun compte · 100% local · Sans publicité</p>
+        <p className="text-[10px] text-slate-300">Aucun compte · Sans tracking · Sans publicité</p>
       </div>
 
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
@@ -273,10 +273,16 @@ function LegalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
 
         <h4 className="font-bold text-[#102a5c] mt-2">Données personnelles</h4>
         <p>
-          L'application <b>ne collecte aucune donnée personnelle</b>. Aucune inscription, aucun
-          identifiant unique, aucun cookie tiers. Vos choix (candidats suivis, résultats de
-          Boussole, préférences) sont stockés <b>uniquement sur votre appareil</b> et peuvent
-          être effacés à tout moment depuis Réglages.
+          L'application <b>ne demande aucune inscription</b> et ne collecte <b>aucune donnée
+          personnelle identifiante</b> (pas de nom, d'e-mail, de localisation), aucun cookie
+          tiers ni pixel publicitaire. Vos choix (candidats suivis, résultats de Boussole,
+          préférences) sont stockés sur votre appareil et peuvent être effacés depuis Réglages.
+        </p>
+        <p>
+          Si vous activez les notifications, un <b>identifiant de notification anonyme</b> est
+          enregistré sur notre serveur (UE) afin de vous envoyer uniquement les alertes que vous
+          avez choisies. Il n'est lié à aucune identité et est supprimé lorsque vous désactivez
+          les notifications ou désinstallez l'application.
         </p>
 
         <h4 className="font-bold text-[#102a5c] mt-2">Contenu tiers</h4>

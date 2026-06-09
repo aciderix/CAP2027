@@ -20,7 +20,7 @@ export function SplashScreen() {
 
         <div className="text-center w-full">
             <p className="text-[#102a5c] font-bold text-[15px] mb-1">Application indépendante</p>
-            <p className="text-slate-400 text-[14px]">Aucune donnée collectée</p>
+            <p className="text-slate-400 text-[14px]">Sans compte ni publicité</p>
         </div>
     </motion.div>
   );
