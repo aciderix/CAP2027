@@ -24,5 +24,13 @@
     "noEmit": true,
     "strict": true,
     "noFallthroughCasesInSwitch": true
-  }
+  },
+  "exclude": [
+    "**/node_modules",
+    "supabase",
+    "dist",
+    "dist-apk",
+    "android",
+    "admin"
+  ]
 }

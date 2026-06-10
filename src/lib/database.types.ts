@@ -7,11 +7,151 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
+      admins: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      app_config: {
+        Row: {
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
+      article_candidates: {
+        Row: {
+          article_id: string
+          candidate_id: string
+          score: number
+        }
+        Insert: {
+          article_id: string
+          candidate_id: string
+          score?: number
+        }
+        Update: {
+          article_id?: string
+          candidate_id?: string
+          score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_candidates_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "news_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_candidates_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_parties: {
+        Row: {
+          article_id: string
+          party_id: string
+          score: number
+        }
+        Insert: {
+          article_id: string
+          party_id: string
+          score?: number
+        }
+        Update: {
+          article_id?: string
+          party_id?: string
+          score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_parties_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "news_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_parties_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_themes: {
+        Row: {
+          article_id: string
+          score: number
+          theme_id: string
+        }
+        Insert: {
+          article_id: string
+          score?: number
+          theme_id: string
+        }
+        Update: {
+          article_id?: string
+          score?: number
+          theme_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_themes_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "news_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_themes_theme_id_fkey"
+            columns: ["theme_id"]
+            isOneToOne: false
+            referencedRelation: "themes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       candidate_affairs: {
         Row: {
           candidate_id: string
@@ -37,8 +177,56 @@ export type Database = {
           title: string
           updated_at?: string
         }
-        Update: Partial<Database["public"]["Tables"]["candidate_affairs"]["Insert"]>
-        Relationships: []
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          date?: string | null
+          description?: string | null
+          id?: string
+          order_index?: number
+          source_urls?: string[]
+          status?: Database["public"]["Enums"]["affair_status"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidate_affairs_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      candidate_aliases: {
+        Row: {
+          alias: string
+          candidate_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          alias: string
+          candidate_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          alias?: string
+          candidate_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidate_aliases_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       candidate_bio_sections: {
         Row: {
@@ -59,8 +247,72 @@ export type Database = {
           title: string
           updated_at?: string
         }
-        Update: Partial<Database["public"]["Tables"]["candidate_bio_sections"]["Insert"]>
-        Relationships: []
+        Update: {
+          candidate_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          order_index?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidate_bio_sections_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      candidate_match_propositions: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          order_index: number
+          text: string
+          theme_id: string
+          updated_at: string
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          order_index?: number
+          text: string
+          theme_id: string
+          updated_at?: string
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          order_index?: number
+          text?: string
+          theme_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidate_match_propositions_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_match_propositions_theme_id_fkey"
+            columns: ["theme_id"]
+            isOneToOne: false
+            referencedRelation: "themes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       candidate_news: {
         Row: {
@@ -85,32 +337,26 @@ export type Database = {
           title: string
           url: string
         }
-        Update: Partial<Database["public"]["Tables"]["candidate_news"]["Insert"]>
-        Relationships: []
-      }
-      candidate_match_propositions: {
-        Row: {
-          candidate_id: string
-          created_at: string
-          id: string
-          is_active: boolean
-          order_index: number
-          text: string
-          theme_id: string
-          updated_at: string
-        }
-        Insert: {
-          candidate_id: string
+        Update: {
+          candidate_id?: string | null
           created_at?: string
           id?: string
-          is_active?: boolean
-          order_index?: number
-          text: string
-          theme_id: string
-          updated_at?: string
+          is_featured?: boolean
+          published_at?: string
+          source_name?: string | null
+          summary?: string | null
+          title?: string
+          url?: string
         }
-        Update: Partial<Database["public"]["Tables"]["candidate_match_propositions"]["Insert"]>
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "candidate_news_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       candidate_programs: {
         Row: {
@@ -133,8 +379,32 @@ export type Database = {
           theme_id: string
           updated_at?: string
         }
-        Update: Partial<Database["public"]["Tables"]["candidate_programs"]["Insert"]>
-        Relationships: []
+        Update: {
+          candidate_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          intro?: string | null
+          order_index?: number
+          theme_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidate_programs_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_programs_theme_id_fkey"
+            columns: ["theme_id"]
+            isOneToOne: false
+            referencedRelation: "themes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       candidate_proposals: {
         Row: {
@@ -159,8 +429,33 @@ export type Database = {
           title: string
           updated_at?: string
         }
-        Update: Partial<Database["public"]["Tables"]["candidate_proposals"]["Insert"]>
-        Relationships: []
+        Update: {
+          candidate_id?: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          order_index?: number
+          source_url?: string | null
+          theme_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidate_proposals_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_proposals_theme_id_fkey"
+            columns: ["theme_id"]
+            isOneToOne: false
+            referencedRelation: "themes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       candidates: {
         Row: {
@@ -205,8 +500,251 @@ export type Database = {
           updated_at?: string
           website_url?: string | null
         }
-        Update: Partial<Database["public"]["Tables"]["candidates"]["Insert"]>
+        Update: {
+          birth_date?: string | null
+          birth_place?: string | null
+          created_at?: string
+          declared_at?: string | null
+          first_name?: string
+          gender?: string | null
+          id?: string
+          is_published?: boolean
+          last_name?: string
+          order_index?: number
+          party_id?: string | null
+          photo_url?: string | null
+          short_bio?: string | null
+          slug?: string
+          sponsorships_count?: number
+          sponsorships_target?: number
+          status?: Database["public"]["Enums"]["candidate_status"]
+          updated_at?: string
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidates_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      election_reminders_sent: {
+        Row: {
+          milestone_key: string
+          sent_at: string
+        }
+        Insert: {
+          milestone_key: string
+          sent_at?: string
+        }
+        Update: {
+          milestone_key?: string
+          sent_at?: string
+        }
         Relationships: []
+      }
+      election_results: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          is_qualified: boolean
+          is_winner: boolean
+          percentage: number
+          rank: number | null
+          round: number
+          updated_at: string
+          votes: number | null
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          is_qualified?: boolean
+          is_winner?: boolean
+          percentage: number
+          rank?: number | null
+          round: number
+          updated_at?: string
+          votes?: number | null
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          is_qualified?: boolean
+          is_winner?: boolean
+          percentage?: number
+          rank?: number | null
+          round?: number
+          updated_at?: string
+          votes?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "election_results_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      news_articles: {
+        Row: {
+          author: string | null
+          fetched_at: string
+          guid: string
+          id: string
+          image_url: string | null
+          is_factcheck: boolean
+          kind: string
+          published_at: string
+          source_id: string
+          summary: string | null
+          title: string
+          url: string
+          verdict: string | null
+        }
+        Insert: {
+          author?: string | null
+          fetched_at?: string
+          guid: string
+          id?: string
+          image_url?: string | null
+          is_factcheck?: boolean
+          kind?: string
+          published_at: string
+          source_id: string
+          summary?: string | null
+          title: string
+          url: string
+          verdict?: string | null
+        }
+        Update: {
+          author?: string | null
+          fetched_at?: string
+          guid?: string
+          id?: string
+          image_url?: string | null
+          is_factcheck?: boolean
+          kind?: string
+          published_at?: string
+          source_id?: string
+          summary?: string | null
+          title?: string
+          url?: string
+          verdict?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "news_articles_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "news_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      news_sources: {
+        Row: {
+          candidate_id: string | null
+          color: string | null
+          created_at: string
+          fetch_via_github: boolean
+          homepage_url: string | null
+          id: string
+          is_active: boolean
+          is_factcheck: boolean
+          kind: string
+          last_fetch_error: string | null
+          last_fetched_at: string | null
+          name: string
+          orientation: string
+          rss_url: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          candidate_id?: string | null
+          color?: string | null
+          created_at?: string
+          fetch_via_github?: boolean
+          homepage_url?: string | null
+          id?: string
+          is_active?: boolean
+          is_factcheck?: boolean
+          kind?: string
+          last_fetch_error?: string | null
+          last_fetched_at?: string | null
+          name: string
+          orientation: string
+          rss_url: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          candidate_id?: string | null
+          color?: string | null
+          created_at?: string
+          fetch_via_github?: boolean
+          homepage_url?: string | null
+          id?: string
+          is_active?: boolean
+          is_factcheck?: boolean
+          kind?: string
+          last_fetch_error?: string | null
+          last_fetched_at?: string | null
+          name?: string
+          orientation?: string
+          rss_url?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "news_sources_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parrainages: {
+        Row: {
+          candidate_id: string | null
+          created_at: string
+          id: string
+          snapshot_date: string
+          source_name: string
+          total: number
+        }
+        Insert: {
+          candidate_id?: string | null
+          created_at?: string
+          id?: string
+          snapshot_date: string
+          source_name: string
+          total: number
+        }
+        Update: {
+          candidate_id?: string | null
+          created_at?: string
+          id?: string
+          snapshot_date?: string
+          source_name?: string
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parrainages_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       parties: {
         Row: {
@@ -229,116 +767,187 @@ export type Database = {
           order_index?: number
           updated_at?: string
         }
-        Update: Partial<Database["public"]["Tables"]["parties"]["Insert"]>
-        Relationships: []
-      }
-      news_sources: {
-        Row: {
-          id: string
-          slug: string
-          name: string
-          homepage_url: string | null
-          rss_url: string
-          orientation: string
-          color: string | null
-          is_factcheck: boolean
-          is_active: boolean
-          last_fetched_at: string | null
-          last_fetch_error: string | null
-          kind: string
-          candidate_id: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          slug: string
-          name: string
-          homepage_url?: string | null
-          rss_url: string
-          orientation: string
+        Update: {
+          abbreviation?: string | null
           color?: string | null
-          is_factcheck?: boolean
-          is_active?: boolean
-          last_fetched_at?: string | null
-          last_fetch_error?: string | null
-          kind?: string
-          candidate_id?: string | null
           created_at?: string
+          id?: string
+          logo_url?: string | null
+          name?: string
+          order_index?: number
           updated_at?: string
         }
-        Update: Partial<Database["public"]["Tables"]["news_sources"]["Insert"]>
-        Relationships: []
-      }
-      news_articles: {
-        Row: {
-          id: string
-          source_id: string
-          guid: string
-          url: string
-          title: string
-          summary: string | null
-          image_url: string | null
-          author: string | null
-          published_at: string
-          fetched_at: string
-          is_factcheck: boolean
-          verdict: string | null
-          kind: string
-        }
-        Insert: {
-          id?: string
-          source_id: string
-          guid: string
-          url: string
-          title: string
-          summary?: string | null
-          image_url?: string | null
-          author?: string | null
-          published_at: string
-          fetched_at?: string
-          is_factcheck?: boolean
-          verdict?: string | null
-          kind?: string
-        }
-        Update: Partial<Database["public"]["Tables"]["news_articles"]["Insert"]>
-        Relationships: []
-      }
-      candidate_aliases: {
-        Row: { id: string; candidate_id: string; alias: string; created_at: string }
-        Insert: { id?: string; candidate_id: string; alias: string; created_at?: string }
-        Update: Partial<Database["public"]["Tables"]["candidate_aliases"]["Insert"]>
         Relationships: []
       }
       party_aliases: {
-        Row: { id: string; party_id: string; alias: string; created_at: string }
-        Insert: { id?: string; party_id: string; alias: string; created_at?: string }
-        Update: Partial<Database["public"]["Tables"]["party_aliases"]["Insert"]>
+        Row: {
+          alias: string
+          created_at: string
+          id: string
+          party_id: string
+        }
+        Insert: {
+          alias: string
+          created_at?: string
+          id?: string
+          party_id: string
+        }
+        Update: {
+          alias?: string
+          created_at?: string
+          id?: string
+          party_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "party_aliases_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_token_follows: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          token: string
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          token: string
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_token_follows_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_token_follows_token_fkey"
+            columns: ["token"]
+            isOneToOne: false
+            referencedRelation: "push_tokens"
+            referencedColumns: ["token"]
+          },
+        ]
+      }
+      push_token_muted_channels: {
+        Row: {
+          channel: string
+          created_at: string
+          token: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          token: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_token_muted_channels_token_fkey"
+            columns: ["token"]
+            isOneToOne: false
+            referencedRelation: "push_tokens"
+            referencedColumns: ["token"]
+          },
+        ]
+      }
+      push_token_orientations: {
+        Row: {
+          created_at: string
+          orientation: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          orientation: string
+          token: string
+        }
+        Update: {
+          created_at?: string
+          orientation?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_token_orientations_token_fkey"
+            columns: ["token"]
+            isOneToOne: false
+            referencedRelation: "push_tokens"
+            referencedColumns: ["token"]
+          },
+        ]
+      }
+      push_tokens: {
+        Row: {
+          app_version: string | null
+          created_at: string
+          enabled: boolean
+          last_seen_at: string
+          platform: string
+          token: string
+        }
+        Insert: {
+          app_version?: string | null
+          created_at?: string
+          enabled?: boolean
+          last_seen_at?: string
+          platform: string
+          token: string
+        }
+        Update: {
+          app_version?: string | null
+          created_at?: string
+          enabled?: boolean
+          last_seen_at?: string
+          platform?: string
+          token?: string
+        }
         Relationships: []
       }
       theme_keywords: {
-        Row: { id: string; theme_id: string; keyword: string; created_at: string }
-        Insert: { id?: string; theme_id: string; keyword: string; created_at?: string }
-        Update: Partial<Database["public"]["Tables"]["theme_keywords"]["Insert"]>
-        Relationships: []
-      }
-      article_candidates: {
-        Row: { article_id: string; candidate_id: string; score: number }
-        Insert: { article_id: string; candidate_id: string; score?: number }
-        Update: Partial<Database["public"]["Tables"]["article_candidates"]["Insert"]>
-        Relationships: []
-      }
-      article_parties: {
-        Row: { article_id: string; party_id: string; score: number }
-        Insert: { article_id: string; party_id: string; score?: number }
-        Update: Partial<Database["public"]["Tables"]["article_parties"]["Insert"]>
-        Relationships: []
-      }
-      article_themes: {
-        Row: { article_id: string; theme_id: string; score: number }
-        Insert: { article_id: string; theme_id: string; score?: number }
-        Update: Partial<Database["public"]["Tables"]["article_themes"]["Insert"]>
-        Relationships: []
+        Row: {
+          created_at: string
+          id: string
+          keyword: string
+          theme_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          keyword: string
+          theme_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          keyword?: string
+          theme_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "theme_keywords_theme_id_fkey"
+            columns: ["theme_id"]
+            isOneToOne: false
+            referencedRelation: "themes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       themes: {
         Row: {
@@ -361,132 +970,127 @@ export type Database = {
           slug: string
           updated_at?: string
         }
-        Update: Partial<Database["public"]["Tables"]["themes"]["Insert"]>
-        Relationships: []
-      }
-      push_tokens: {
-        Row: {
-          token: string
-          platform: string
-          app_version: string | null
-          last_seen_at: string
-          created_at: string
-        }
-        Insert: {
-          token: string
-          platform: string
-          app_version?: string | null
-          last_seen_at?: string
+        Update: {
+          color?: string | null
           created_at?: string
+          icon?: string | null
+          id?: string
+          name?: string
+          order_index?: number
+          slug?: string
+          updated_at?: string
         }
-        Update: Partial<Database["public"]["Tables"]["push_tokens"]["Insert"]>
-        Relationships: []
-      }
-      push_token_follows: {
-        Row: {
-          token: string
-          candidate_id: string
-          created_at: string
-        }
-        Insert: {
-          token: string
-          candidate_id: string
-          created_at?: string
-        }
-        Update: Partial<Database["public"]["Tables"]["push_token_follows"]["Insert"]>
-        Relationships: []
-      }
-      push_token_orientations: {
-        Row: {
-          token: string
-          orientation: string
-          created_at: string
-        }
-        Insert: {
-          token: string
-          orientation: string
-          created_at?: string
-        }
-        Update: Partial<Database["public"]["Tables"]["push_token_orientations"]["Insert"]>
-        Relationships: []
-      }
-      election_reminders_sent: {
-        Row: {
-          milestone_key: string
-          sent_at: string
-        }
-        Insert: {
-          milestone_key: string
-          sent_at?: string
-        }
-        Update: Partial<Database["public"]["Tables"]["election_reminders_sent"]["Insert"]>
-        Relationships: []
-      }
-      app_config: {
-        Row: { key: string; value: Json; updated_at: string }
-        Insert: { key: string; value: Json; updated_at?: string }
-        Update: Partial<Database["public"]["Tables"]["app_config"]["Insert"]>
         Relationships: []
       }
     }
-    Views: Record<string, never>
+    Views: {
+      parrainages_latest: {
+        Row: {
+          candidate_id: string | null
+          first_name: string | null
+          last_name: string | null
+          party_id: string | null
+          photo_url: string | null
+          snapshot_date: string | null
+          source_name: string | null
+          total: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidates_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parrainages_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
     Functions: {
+      _bump_admin_change_counter: { Args: never; Returns: undefined }
+      _schedule_election_milestone: {
+        Args: { job_name: string; milestone_qs: string; target_ts: string }
+        Returns: undefined
+      }
+      clear_orientations: { Args: { p_token: string }; Returns: undefined }
+      decode_html_entities: { Args: { s: string }; Returns: string }
+      get_election_results_for_round: {
+        Args: { p_round: number }
+        Returns: {
+          candidate_id: string
+          first_name: string
+          gender: string
+          is_qualified: boolean
+          is_winner: boolean
+          last_name: string
+          party_abbreviation: string
+          party_color: string
+          party_name: string
+          percentage: number
+          photo_url: string
+          rank: number
+          round: number
+          slug: string
+          votes: number
+        }[]
+      }
+      get_fcm_service_account: { Args: never; Returns: string }
+      get_ingest_secret: { Args: never; Returns: string }
+      get_push_broadcast_secret: { Args: never; Returns: string }
+      is_admin: { Args: { uid: string }; Returns: boolean }
+      publish_round_results: { Args: { p_round: number }; Returns: undefined }
+      purge_old_articles: {
+        Args: never
+        Returns: {
+          deleted_factcheck: number
+          deleted_orphan: number
+          deleted_total: number
+        }[]
+      }
       register_push_token: {
-        Args: { p_token: string; p_platform: string; p_app_version?: string | null }
+        Args: { p_app_version?: string; p_platform: string; p_token: string }
         Returns: undefined
       }
-      unfollow_candidate: {
-        Args: { p_token: string; p_candidate_id: string }
-        Returns: undefined
-      }
-      unfollow_orientation: {
-        Args: { p_token: string; p_orientation: string }
-        Returns: undefined
-      }
-      clear_orientations: {
-        Args: { p_token: string }
+      reschedule_election_reminders: { Args: never; Returns: undefined }
+      set_token_enabled: {
+        Args: { p_enabled: boolean; p_token: string }
         Returns: undefined
       }
       tokens_for_press_orientation: {
         Args: { orient: string }
-        Returns: { token: string; platform: string }[]
+        Returns: {
+          platform: string
+          token: string
+        }[]
       }
       tokens_for_press_orientations: {
         Args: { orients: string[] }
-        Returns: { token: string; platform: string }[]
-      }
-      get_election_results_for_round: {
-        Args: { p_round: number }
         Returns: {
-          round: number
-          candidate_id: string
-          percentage: number
-          votes: number | null
-          is_qualified: boolean
-          is_winner: boolean
-          rank: number | null
-          first_name: string
-          last_name: string
-          photo_url: string | null
-          slug: string
-          gender: string | null
-          party_name: string | null
-          party_abbreviation: string | null
-          party_color: string | null
+          platform: string
+          token: string
         }[]
       }
-      publish_round_results: {
-        Args: { p_round: number }
+      unaccent: { Args: { "": string }; Returns: string }
+      unfollow_candidate: {
+        Args: { p_candidate_id: string; p_token: string }
         Returns: undefined
       }
-      unpublish_round_results: {
-        Args: { p_round: number }
+      unfollow_orientation: {
+        Args: { p_orientation: string; p_token: string }
         Returns: undefined
       }
-      is_admin: {
-        Args: { uid: string }
-        Returns: boolean
+      unmute_channel: {
+        Args: { p_channel: string; p_token: string }
+        Returns: undefined
       }
+      unpublish_round_results: { Args: { p_round: number }; Returns: undefined }
     }
     Enums: {
       affair_status:
@@ -497,11 +1101,140 @@ export type Database = {
         | "relaxe"
       candidate_status: "declared" | "pressenti" | "withdrawn"
     }
-    CompositeTypes: Record<string, never>
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
 
-export type Tables<T extends keyof Database["public"]["Tables"]> =
-  Database["public"]["Tables"][T]["Row"]
-export type Enums<T extends keyof Database["public"]["Enums"]> =
-  Database["public"]["Enums"][T]
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      affair_status: [
+        "mis_en_examen",
+        "en_cours",
+        "classee",
+        "condamnation",
+        "relaxe",
+      ],
+      candidate_status: ["declared", "pressenti", "withdrawn"],
+    },
+  },
+} as const
