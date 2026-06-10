@@ -65,7 +65,7 @@ Vérifiez votre inscription sur les listes électorales, faites ou recevez une p
 Activez ou coupez chaque catégorie indépendamment : actualités, candidats suivis, mises à jour des candidats.
 
 📊 PARRAINAGES ET RÉSULTATS
-Suivez la collecte des parrainages (source : Conseil constitutionnel) et consultez les résultats le soir du scrutin.
+Suivez la collecte des parrainages (source officielle : Conseil constitutionnel) et consultez les résultats dès leur publication officielle par le ministère de l'Intérieur (resultats-elections.interieur.gouv.fr).
 
 ━━━━━━━━━━━━━━━━━━━━
 NOS SOURCES
@@ -75,7 +75,9 @@ Presse — Gauche : Blast, L'Humanité, Libération, Mediapart, Politis, Reporte
 
 Fact-checking : 20 Minutes (Fake Off), CheckNews (Libération), Les Décodeurs (Le Monde).
 
-S'y ajoutent les comptes publics officiels des candidats (X, YouTube). La liste à jour est consultable dans l'application (Plus → Méthodologie et sources) ; chaque article renvoie à sa source d'origine.
+S'y ajoutent les comptes publics officiels des candidats déclarés (X, YouTube), intégrés au fur et à mesure des déclarations de candidature. La liste à jour est consultable dans l'application (Plus → Méthodologie et sources) ; chaque article renvoie à sa source d'origine.
+
+Renseignements officiels : démarches et vote — service-public.fr, maprocuration.gouv.fr, elections.interieur.gouv.fr · parrainages — conseil-constitutionnel.fr · résultats — resultats-elections.interieur.gouv.fr.
 
 ━━━━━━━━━━━━━━━━━━━━
 NOS ENGAGEMENTS

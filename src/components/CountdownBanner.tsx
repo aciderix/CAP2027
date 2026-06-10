@@ -90,14 +90,14 @@ function computeBannerText(
 
   if (nowMs < r1Start) {
     if (r1Official) return `J-${diffDays(r1Start, nowMs)} avant le 1er tour`;
-    return `${approxOffset(r1Start, nowMs)} avant le 1er tour`;
+    return `${approxOffset(r1Start, nowMs)} avant le 1er tour (date estimée)`;
   }
   if (nowMs < r1End) {
     return `${formatHMS(r1End - nowMs)} avant les résultats du 1er tour`;
   }
   if (nowMs < r2Start) {
     if (r2Official) return `J-${diffDays(r2Start, nowMs)} avant le 2nd tour`;
-    return `${approxOffset(r2Start, nowMs)} avant le 2nd tour`;
+    return `${approxOffset(r2Start, nowMs)} avant le 2nd tour (date estimée)`;
   }
   if (nowMs < r2End) {
     return `${formatHMS(r2End - nowMs)} avant les résultats finaux`;
