@@ -1,7 +1,13 @@
 import { useState } from 'react';
-import { Crown, BarChart3 } from 'lucide-react';
+import { Crown, BarChart3, ExternalLink } from 'lucide-react';
 import { useAppConfig } from '../lib/appConfig';
 import { useElectionResults, type ElectionResultRow } from '../lib/electionResults';
+import { openLink } from '../lib/openLink';
+
+// Renseignement gouvernemental (politique Play "déclarations trompeuses") :
+// la source officielle doit être visible directement, pas cachée derrière
+// un bouton d'aide.
+const RESULTS_SOURCE_URL = 'https://www.resultats-elections.interieur.gouv.fr';
 
 export function ResultsList() {
   const { data: cfg } = useAppConfig();
@@ -16,6 +22,13 @@ export function ResultsList() {
           <BarChart3 className="w-4 h-4 text-[#1a56db]" />
           Résultats officiels
         </h2>
+        <a
+          href={RESULTS_SOURCE_URL}
+          onClick={(e) => { e.preventDefault(); void openLink(RESULTS_SOURCE_URL); }}
+          className="text-[11px] font-bold text-slate-400 hover:text-[#1a56db] hover:underline whitespace-nowrap inline-flex items-center gap-1"
+        >
+          Source <ExternalLink className="w-3 h-3" />
+        </a>
         {round1Published && round2Published && (
           <div className="inline-flex rounded-full bg-slate-100 p-1 text-xs font-bold">
             <button
@@ -36,12 +49,24 @@ export function ResultsList() {
 
       {!round1Published && (
         <div className="p-6 text-sm text-center text-slate-500">
-          Les résultats ne sont pas encore publiés. Cette page se remplira automatiquement dès la
-          publication officielle.
+          Les résultats ne sont pas encore publiés. Cette page se remplira automatiquement dès leur
+          publication officielle par le ministère de l'Intérieur.
         </div>
       )}
 
       {round1Published && <RoundResults round={activeRound} />}
+
+      <div className="px-5 py-3 border-t border-slate-100 text-[11px] text-slate-400 text-center">
+        Source officielle :{' '}
+        <a
+          href={RESULTS_SOURCE_URL}
+          onClick={(e) => { e.preventDefault(); void openLink(RESULTS_SOURCE_URL); }}
+          className="font-bold hover:text-[#1a56db] hover:underline"
+        >
+          resultats-elections.interieur.gouv.fr
+        </a>{' '}
+        (ministère de l'Intérieur)
+      </div>
     </div>
   );
 }

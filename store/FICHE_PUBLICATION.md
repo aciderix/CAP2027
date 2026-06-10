@@ -91,48 +91,73 @@ Follow France's 2027 election: balanced news, candidates, political compass.
 ```
 
 **Full Description**
+
+> Version alignée sur le texte réellement en ligne dans la Play Console
+> (celui cité par Google dans le refus du 10/06/2026), avec les correctifs
+> conformité : source officielle des résultats (ministère de l'Intérieur),
+> bloc « Official government information », et comptes candidats reformulés
+> en « declared candidates… added as candidacies are announced ».
+
 ```
-CAP 2027 is the independent civic app to follow the 2027 French presidential
-election, neutrally. No account, no ads, no tracking.
+CAP 2027 is the independent civic app for following the 2027 French presidential election, with complete neutrality.
 
-DISCLAIMER — CAP 2027 is an INDEPENDENT app. It is not affiliated with, nor
-endorsed by, any government or public authority. This is not an official app.
-For any procedure, the app links to the official French government websites
-(service-public.fr, maprocuration.gouv.fr, elections.interieur.gouv.fr).
+No account, no ads, no tracking. Your choices stay on your phone.
 
-• Balanced news feed — articles aggregated from media across the political
-  spectrum plus fact-checking sources (full list below), each labelled by
-  the orientation of its source and linking back to the original article.
-• Political compass — answer questions on the key issues and discover which
-  candidates you align with. No candidate names are shown during the test:
-  you position yourself on ideas, not on people.
-• Candidate profiles, presented equally — biography, party, programme,
-  proposals, with the same layout for everyone.
-• Follow your favourite candidates — add them to your watchlist and get their
-  latest news, posts and videos in a personalised feed, with optional alerts.
-• Programmes by topic, with original sources to verify every claim.
-• Side-by-side comparison of two candidates.
-• The voter toolkit — check your electoral registration, set up or receive a
-  proxy vote, and get ready for election day. All procedures link to the
-  official government websites (service-public.fr, maprocuration.gouv.fr,
-  elections.interieur.gouv.fr), with civic reminders for every key deadline.
-• Notifications you control by category, plus civic reminders so you never
-  miss a key date.
+⚠️ INDEPENDENT APP — CAP 2027 is neither affiliated with nor endorsed by any government agency or entity. It is not an official app. For procedures, the app redirects you to official government websites: service-public.fr (voter registration), maprocuration.gouv.fr (proxy voting), elections.interieur.gouv.fr (voting process).
 
+━━━━━━━━━━━━━━━━━━━━
+WHAT YOU CAN DO
+━━━━━━━━━━━━━━━━━━━━
+
+📰 FOLLOW THE NEWS, FROM ALL PERSPECTIVES
+A feed aggregated from media outlets of all persuasions and fact-checking sources (full list below). Each article is labeled according to its source's orientation and links to the original article.
+
+🧭 FIND YOUR POLITICAL COMPASS
+Answer questions on major issues (economy, environment, social issues, security, Europe, etc.) and discover which candidates you agree with most. No candidate names are displayed during the test: you're focusing on ideas, not personalities.
+
+👥 DISCOVER THE CANDIDATES ON EQUAL FOOTING
+Identical profiles for each candidate: biography, party, platform, proposals. No bias, no hierarchy.
+
+⭐ FOLLOW YOUR FAVORITE CANDIDATES
+Find news, posts, and videos from your favorite candidates in a personalized feed, with optional notifications for each post.
+
+📋 PLATFORMS BY THEME & COMPARISON TOOL
+Each candidate's platform is organized by theme, with original sources to verify each piece of information, and a side-by-side comparison of two candidates, topic by topic.
+
+🗳️ THE VOTER'S TOOLBOX
+Check your voter registration, create or receive a proxy vote, and prepare for election day. Each step links to official government websites (service-public.fr, maprocuration.gouv.fr, elections.interieur.gouv.fr). Civic reminders highlight key deadlines.
+
+🔔 NOTIFICATIONS YOU CONTROL
+Activate or deactivate each category independently: news, followed candidates, candidate updates.
+
+📊 SPONSORSHIPS AND RESULTS
+Track the collection of sponsorships (official source: Constitutional Council) and view the results as soon as they are officially published by the French Ministry of the Interior (resultats-elections.interieur.gouv.fr).
+
+━━━━━━━━━━━━━━━━━━━━
 OUR SOURCES
-Press — Left: Blast, L'Humanité, Libération, Mediapart, Politis, Reporterre ·
-Centre: France 24, France Info, Le Monde, Le Point · Centre-right: L'Express,
-L'Opinion, Le Figaro · Right: Causeur, Le JDD, Valeurs Actuelles · Transverse:
-Atlantico, Marianne.
-Fact-checking: 20 Minutes (Fake Off), CheckNews (Libération), Les Décodeurs
-(Le Monde). Plus the candidates' official public accounts (X, YouTube).
-The up-to-date list is available in the app (More → Methodology & sources);
-every article links back to its original source.
+━━━━━━━━━━━━━━━━━━━━
 
-Our commitments: strict neutrality, privacy (no account, no ad cookies, no
-personal data shared), independence (not affiliated with any party, candidate,
-media, or government / public authority — this is not an official app), and
-100% free.
+Press — Left: Blast, L'Humanité, Libération, Mediapart, Politis, Reporterre · Center: France 24, France Info, Le Monde, Le Point · Center-right: L'Express, L'Opinion, Le Figaro · Right: Causeur, Le JDD, Valeurs Actuelles · Transversal: Atlantico, Marianne.
+
+Fact-checking: 20 Minutes (Fake Off), CheckNews (Libération), Les Décodeurs (Le Monde).
+
+In addition: the official public accounts (X, YouTube) of declared candidates, added as candidacies are announced. The updated list can be found in the app (More → Methodology and Sources); each article links to its original source.
+
+Official government information: procedures and voting — service-public.fr, maprocuration.gouv.fr, elections.interieur.gouv.fr · sponsorships — conseil-constitutionnel.fr · results — resultats-elections.interieur.gouv.fr.
+
+━━━━━━━━━━━━━━━━━━━━
+OUR COMMITMENTS
+━━━━━━━━━━━━━━━━━━━━
+
+✓ NEUTRALITY — All candidates are presented in the same way. Sources are cited and verifiable.
+
+✓ PRIVACY — No registration, no advertising cookies, no personal data shared.
+
+✓ INDEPENDENCE — No affiliation with any party, candidate, media outlet, or government. Unofficial app.
+
+✓ FREE — Completely free, no in-app purchases.
+
+CAP 2027: Get informed freely, compare with confidence, choose with full knowledge.
 ```
 
 ---
