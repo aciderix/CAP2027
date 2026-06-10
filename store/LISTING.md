@@ -44,49 +44,52 @@ CE QUE VOUS POUVEZ FAIRE
 ━━━━━━━━━━━━━━━━━━━━
 
 📰 SUIVRE L'ACTUALITÉ, TOUS BORDS CONFONDUS
-Un fil d'actualité agrégé depuis des médias de toutes sensibilités — gauche, centre, droite — ainsi que des sources de fact-checking. Chaque article est clairement étiqueté selon l'orientation de sa source, pour vous faire votre propre opinion en connaissance de cause.
+Un fil agrégé depuis des médias de toutes sensibilités et des sources de fact-checking (liste complète ci-dessous). Chaque article est étiqueté selon l'orientation de sa source et renvoie vers l'article original.
 
 🧭 TROUVER VOTRE BOUSSOLE POLITIQUE
-Répondez à une série de questions sur les grands sujets (économie, écologie, social, sécurité, Europe…) et découvrez avec quels candidats vous êtes le plus en accord. Pendant le test, aucun nom de candidat n'est affiché : vous vous positionnez sur les idées, pas sur les personnes.
+Répondez à des questions sur les grands sujets (économie, écologie, social, sécurité, Europe…) et découvrez avec quels candidats vous êtes le plus en accord. Aucun nom de candidat affiché pendant le test : vous vous positionnez sur les idées, pas sur les personnes.
 
 👥 DÉCOUVRIR LES CANDIDATS, À ÉGALITÉ
-Des fiches présentées de manière strictement identique pour chaque candidat : biographie, parti, programme, propositions. Aucun parti pris, aucune hiérarchie.
+Des fiches strictement identiques pour chaque candidat : biographie, parti, programme, propositions. Aucun parti pris, aucune hiérarchie.
 
 ⭐ SUIVRE VOS CANDIDATS FAVORIS
-Ajoutez vos candidats préférés à votre suivi et retrouvez dans un fil personnalisé leurs dernières actualités, prises de parole, posts et vidéos. Recevez une notification dès qu'ils publient quelque chose de nouveau (si vous l'activez).
+Retrouvez dans un fil personnalisé les actualités, posts et vidéos de vos candidats préférés, avec notification optionnelle à chaque publication.
 
-📋 EXPLORER LES PROGRAMMES PAR THÈME
-Le programme de chaque candidat, organisé thème par thème, avec les sources d'origine pour vérifier chaque information.
-
-⚖️ COMPARER CÔTE À CÔTE
-Mettez deux candidats face à face et comparez leurs positions, sujet par sujet, d'un seul coup d'œil.
+📋 PROGRAMMES PAR THÈME & COMPARATEUR
+Le programme de chaque candidat organisé par thème, avec les sources d'origine pour vérifier chaque information, et la comparaison de deux candidats côte à côte, sujet par sujet.
 
 🗳️ LA BOÎTE À OUTILS DU VOTANT
-Tout ce qu'il faut pour voter sans rien oublier : vérifiez votre inscription sur les listes électorales, faites ou recevez une procuration, et préparez le jour du scrutin. Les démarches renvoient vers les sites officiels de l'État (service-public.fr, maprocuration.gouv.fr, elections.interieur.gouv.fr). Des rappels civiques vous préviennent des échéances clés — clôture des inscriptions, délais de procuration, veille et jour de vote, publication des résultats.
+Vérifiez votre inscription sur les listes électorales, faites ou recevez une procuration, préparez le jour du scrutin. Chaque démarche renvoie vers les sites officiels de l'État (service-public.fr, maprocuration.gouv.fr, elections.interieur.gouv.fr). Des rappels civiques signalent les échéances clés.
 
 🔔 DES NOTIFICATIONS QUE VOUS MAÎTRISEZ
-Choisissez précisément ce que vous voulez recevoir : actualités, candidats suivis, mises à jour des candidats. Chaque catégorie s'active ou se coupe indépendamment, et les rappels électoraux veillent à ce que vous ne manquiez aucune date clé.
+Activez ou coupez chaque catégorie indépendamment : actualités, candidats suivis, mises à jour des candidats.
 
-📊 SUIVRE LES PARRAINAGES ET LES RÉSULTATS
-Suivez la collecte des parrainages des candidats, et consultez les résultats le soir du scrutin.
+📊 PARRAINAGES ET RÉSULTATS
+Suivez la collecte des parrainages (source : Conseil constitutionnel) et consultez les résultats le soir du scrutin.
+
+━━━━━━━━━━━━━━━━━━━━
+NOS SOURCES
+━━━━━━━━━━━━━━━━━━━━
+
+Presse — Gauche : Blast, L'Humanité, Libération, Mediapart, Politis, Reporterre · Centre : France 24, France Info, Le Monde, Le Point · Centre-droit : L'Express, L'Opinion, Le Figaro · Droite : Causeur, Le JDD, Valeurs Actuelles · Transverse : Atlantico, Marianne.
+
+Fact-checking : 20 Minutes (Fake Off), CheckNews (Libération), Les Décodeurs (Le Monde).
+
+S'y ajoutent les comptes publics officiels des candidats (X, YouTube). La liste à jour est consultable dans l'application (Plus → Méthodologie et sources) ; chaque article renvoie à sa source d'origine.
 
 ━━━━━━━━━━━━━━━━━━━━
 NOS ENGAGEMENTS
 ━━━━━━━━━━━━━━━━━━━━
 
-✓ NEUTRALITÉ — Tous les candidats sont traités de la même façon, avec la même présentation. Sources vérifiables et citées.
+✓ NEUTRALITÉ — Tous les candidats sont présentés de la même façon. Sources citées et vérifiables.
 
-✓ VIE PRIVÉE — Aucune inscription, aucun compte, aucun cookie publicitaire, aucune donnée personnelle partagée. L'application fonctionne sans collecter votre identité.
+✓ VIE PRIVÉE — Aucune inscription, aucun cookie publicitaire, aucune donnée personnelle partagée.
 
-✓ INDÉPENDANCE — CAP 2027 n'est affiliée à aucun parti, aucun candidat, aucun média, ni à aucune administration ou entité gouvernementale. Ce n'est pas une application officielle.
+✓ INDÉPENDANCE — Aucune affiliation à un parti, un candidat, un média ou une administration. Application non officielle.
 
 ✓ GRATUIT — Entièrement gratuit, sans achat intégré.
 
-━━━━━━━━━━━━━━━━━━━━
-
-CAP 2027 est un outil au service des citoyens : s'informer librement, comparer sereinement, et aborder l'élection présidentielle de 2027 en toute autonomie.
-
-Téléchargez l'application et faites votre choix, en toute connaissance de cause.
+CAP 2027 : s'informer librement, comparer sereinement, choisir en connaissance de cause.
 ```
 
 ---

@@ -101,8 +101,8 @@ For any procedure, the app links to the official French government websites
 (service-public.fr, maprocuration.gouv.fr, elections.interieur.gouv.fr).
 
 • Balanced news feed — articles aggregated from media across the political
-  spectrum (left, centre, right) plus fact-checking sources, each labelled by
-  the orientation of its source.
+  spectrum plus fact-checking sources (full list below), each labelled by
+  the orientation of its source and linking back to the original article.
 • Political compass — answer questions on the key issues and discover which
   candidates you align with. No candidate names are shown during the test:
   you position yourself on ideas, not on people.
@@ -118,6 +118,16 @@ For any procedure, the app links to the official French government websites
   elections.interieur.gouv.fr), with civic reminders for every key deadline.
 • Notifications you control by category, plus civic reminders so you never
   miss a key date.
+
+OUR SOURCES
+Press — Left: Blast, L'Humanité, Libération, Mediapart, Politis, Reporterre ·
+Centre: France 24, France Info, Le Monde, Le Point · Centre-right: L'Express,
+L'Opinion, Le Figaro · Right: Causeur, Le JDD, Valeurs Actuelles · Transverse:
+Atlantico, Marianne.
+Fact-checking: 20 Minutes (Fake Off), CheckNews (Libération), Les Décodeurs
+(Le Monde). Plus the candidates' official public accounts (X, YouTube).
+The up-to-date list is available in the app (More → Methodology & sources);
+every article links back to its original source.
 
 Our commitments: strict neutrality, privacy (no account, no ad cookies, no
 personal data shared), independence (not affiliated with any party, candidate,
