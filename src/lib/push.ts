@@ -48,17 +48,24 @@ async function getPlugin() {
 }
 
 export async function registerPushNotifications(): Promise<{ ok: boolean; error?: string }> {
-  if (!Capacitor.isNativePlatform()) {
+  // Write BEFORE any guard so we can tell if this function runs at all
+  const isNative = Capacitor.isNativePlatform();
+  const isEnabled = getPushEnabled();
+  writeDiag({ lastError: `entry native:${isNative} enabled:${isEnabled} registered:${registered}` });
+
+  if (!isNative) {
     writeDiag({ lastError: 'native-only' });
     return { ok: false, error: 'native-only' };
   }
-  if (!getPushEnabled()) {
+  if (!isEnabled) {
     writeDiag({ lastError: 'opt-in required' });
     return { ok: false, error: 'opt-in required' };
   }
 
   try {
+    writeDiag({ lastError: 'importing plugin…' });
     const PushNotifications = await getPlugin();
+    writeDiag({ lastError: 'plugin loaded, checking permissions…' });
 
     let perm = await PushNotifications.checkPermissions();
     writeDiag({ permission: perm.receive as any });
