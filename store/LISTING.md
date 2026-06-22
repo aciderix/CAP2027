@@ -20,20 +20,38 @@ CAP 2027
 ## Description courte (max 80 caractères)
 
 ```
-S'informer, comparer, choisir pour la présidentielle 2027. Neutre et sans compte.
+Élection présidentielle 2027 : actus, candidats, vote, boussole. Sans compte.
 ```
-*(79 caractères)*
+*(77 caractères)*
 
 **Variantes :**
-- `Actualités tous bords, programmes et boussole politique. 100 % neutre.` (69)
-- `Suivez la présidentielle 2027 : actus, candidats, boussole. Sans compte.` (72)
+- `Présidentielle 2027 : élections, vote, candidats, programmes. 100 % neutre.` (73)
+- `S'informer, comparer, choisir pour la présidentielle 2027. Neutre, sans compte.` (78)
+- `Suivez l'élection 2027 : actus tous bords, boussole de vote, candidats.` (70)
+
+---
+
+## Mots-clés ASO (référencement Play Store)
+
+> Le Play Store n'a pas de champ « mots-clés » dédié (contrairement à l'App Store) :
+> l'indexation se fait sur le **nom**, la **description courte** et la **description
+> complète**. Les termes ci-dessous sont donc intégrés naturellement dans les textes
+> (pas de bourrage, interdit par les règles Play). Cible : recherches liées aux
+> **élections**, au **vote** et à l'**engagement citoyen**.
+
+**Champ lexical à couvrir :**
+`élection présidentielle 2027` · `élections` · `vote` · `voter` · `bureau de vote` ·
+`scrutin` · `candidats` · `candidate` · `programmes politiques` · `boussole politique` ·
+`test politique` · `affinités politiques` · `engagement citoyen` · `démocratie` ·
+`débat` · `politique française` · `actualité politique` · `fact-checking` ·
+`procuration` · `inscription listes électorales` · `parrainages` · `1er / 2nd tour`.
 
 ---
 
 ## Description complète (max 4000 caractères)
 
 ```
-CAP 2027 est l'application civique indépendante pour suivre l'élection présidentielle française de 2027, en toute neutralité.
+CAP 2027 est l'application civique indépendante pour suivre l'élection présidentielle française de 2027, en toute neutralité. Préparez votre vote, comparez les candidats et leurs programmes, et renforcez votre engagement citoyen — librement et sans parti pris.
 
 Pas de compte, pas de publicité, pas de tracking. Vos choix restent sur votre téléphone.
 
@@ -47,7 +65,7 @@ CE QUE VOUS POUVEZ FAIRE
 Un fil agrégé depuis des médias de toutes sensibilités et des sources de fact-checking (liste complète ci-dessous). Chaque article est étiqueté selon l'orientation de sa source et renvoie vers l'article original.
 
 🧭 TROUVER VOTRE BOUSSOLE POLITIQUE
-Répondez à des questions sur les grands sujets (économie, écologie, social, sécurité, Europe…) et découvrez avec quels candidats vous êtes le plus en accord. Aucun nom de candidat affiché pendant le test : vous vous positionnez sur les idées, pas sur les personnes.
+Un test politique simple pour mesurer vos affinités avant le vote. Répondez à des questions sur les grands sujets (économie, écologie, social, sécurité, Europe…) et découvrez avec quels candidats vous êtes le plus en accord. Aucun nom de candidat affiché pendant le test : vous vous positionnez sur les idées, pas sur les personnes. Partagez votre résultat pour lancer le débat.
 
 👥 DÉCOUVRIR LES CANDIDATS, À ÉGALITÉ
 Des fiches strictement identiques pour chaque candidat : biographie, parti, programme, propositions. Aucun parti pris, aucune hiérarchie.
@@ -102,7 +120,7 @@ CAP 2027 : s'informer librement, comparer sereinement, choisir en connaissance d
 |---|---|
 | Catégorie | **Actualités et magazines** (ou *News & Magazines*) |
 | Type | Application |
-| Tags | actualités, politique, élection, présidentielle, civique |
+| Tags | actualités, politique, élection, présidentielle, vote, candidats, civique, démocratie |
 | Public cible | 18 ans et + (contenu politique/actualités) |
 | Contenu publicitaire | Non |
 | Achats intégrés | Non |
@@ -145,4 +163,15 @@ Première version de CAP 2027 :
 • Comparateur de candidats
 • Notifications personnalisables et rappels civiques
 100 % neutre, sans compte, sans publicité.
+```
+
+**Mise à jour (suite aux retours des testeurs) :**
+
+```
+Nouveautés :
+• Tutoriel de bienvenue revu, avec aperçu des sections (relançable depuis les Réglages)
+• Infobulles « ? » pour expliquer les fonctionnalités clés
+• Partage d'articles et de profils de candidats sur les réseaux sociaux
+• Bouton « Noter l'application »
+Toujours 100 % neutre, sans compte, sans publicité.
 ```

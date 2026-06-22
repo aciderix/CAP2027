@@ -10,6 +10,8 @@ import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
 import { TwitterPostCard } from './TwitterPostCard';
 import { useFollowedOrientations } from '../lib/orientationFollows';
 import { openLink } from '../lib/openLink';
+import { ShareButton } from './ui/ShareButton';
+import { InfoTip } from './ui/InfoTip';
 
 type Mode = 'news' | 'factcheck';
 
@@ -273,7 +275,15 @@ export function NewsFeed({ mode }: { mode: Mode }) {
               and mirrored to push_token_orientations so the server can
               filter press notifs the same way. */}
           {!isFactcheck && filters.orientations.length > 0 && (
-            <ScrollRow label="Orientations suivies">
+            <ScrollRow
+              label="Orientations suivies"
+              info={
+                <InfoTip align="left" label="À quoi servent les orientations ?">
+                  Filtrez le fil par bord politique de la source. « Toutes » affiche
+                  tout. Votre sélection s’applique aussi aux notifications d’actualités.
+                </InfoTip>
+              }
+            >
               <Chip
                 active={followedOrientations.size === 0}
                 onClick={() => clearOrientations()}
@@ -449,12 +459,15 @@ export function NewsFeed({ mode }: { mode: Mode }) {
 
 // ----------- Sub-components -----------
 
-function ScrollRow({ label, children }: { label: string; children: React.ReactNode }) {
+function ScrollRow({ label, info, children }: { label: string; info?: React.ReactNode; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement | null>(null);
   return (
     <div>
       <div className="flex items-center justify-between mb-1 px-1">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          {label}
+          {info}
+        </span>
       </div>
       <div
         ref={ref}
@@ -620,7 +633,14 @@ function FeaturedCard({ article }: { article: ArticleRow }) {
       <div className="p-3 sm:p-4 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
           <span>{time}</span>
-          <ExternalLink className="w-3.5 h-3.5 text-slate-300 group-hover:text-[#1a56db] transition-colors" />
+          <div className="flex items-center gap-0.5">
+            <ShareButton
+              title={article.title}
+              text={`${article.title} — à lire sur CAP 2027`}
+              url={article.url}
+            />
+            <ExternalLink className="w-3.5 h-3.5 text-slate-300 group-hover:text-[#1a56db] transition-colors" />
+          </div>
         </div>
         {article.summary && (
           <p className="text-sm text-slate-600 leading-snug line-clamp-2">{article.summary}</p>
@@ -665,7 +685,14 @@ function CompactCard({ article }: { article: ArticleRow }) {
         <div className="flex-1 min-w-0 flex flex-col gap-1">
           <div className="flex items-center justify-between gap-2">
             <SourceLine source={article.source} time={time} />
-            {article.verdict && <VerdictBadge verdict={article.verdict} />}
+            <div className="flex items-center gap-1 shrink-0">
+              {article.verdict && <VerdictBadge verdict={article.verdict} />}
+              <ShareButton
+                title={article.title}
+                text={`${article.title} — à lire sur CAP 2027`}
+                url={article.url}
+              />
+            </div>
           </div>
           <h3 className="font-bold text-[#102a5c] leading-snug text-sm sm:text-[15px] line-clamp-2 group-hover:text-[#1a56db] transition-colors">
             {article.title}

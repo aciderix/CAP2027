@@ -1,4 +1,4 @@
-import { User, Eye, Star, FileText, Scale, Newspaper, Search, ExternalLink, Play } from 'lucide-react';
+import { User, Eye, Star, FileText, Scale, Newspaper, Search, ExternalLink, Play, Share2, Check } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -11,6 +11,8 @@ import { openLink } from '../lib/openLink';
 import { CandidateParrainagesInline } from './CandidateParrainagesInline';
 import { TwitterPostCard } from './TwitterPostCard';
 import { STABLE_STALE_MS } from '../lib/queryClient';
+import { ShareButton } from './ui/ShareButton';
+import { shareCandidate, type ShareOutcome } from '../lib/share';
 
 type CandidateRow = Tables<'candidates'>;
 type PartyRow = Tables<'parties'>;
@@ -333,17 +335,24 @@ export function CandidatesList() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => toggleFollow(selectedCandidate.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold transition-all shrink-0 ${
-                    isFollowing
-                      ? 'bg-amber-50 border border-amber-200 text-amber-700'
-                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm'
-                  }`}
-                >
-                  <Star className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isFollowing ? 'fill-amber-400 text-amber-400' : 'text-slate-400'}`} />
-                  <span className="hidden min-[380px]:inline">{isFollowing ? 'Suivi' : 'Suivre'}</span>
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <CandidateShareButton
+                    name={fullName(selectedCandidate)}
+                    slug={selectedCandidate.slug}
+                    party={selectedCandidate.parties?.name ?? null}
+                  />
+                  <button
+                    onClick={() => toggleFollow(selectedCandidate.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold transition-all ${
+                      isFollowing
+                        ? 'bg-amber-50 border border-amber-200 text-amber-700'
+                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm'
+                    }`}
+                  >
+                    <Star className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isFollowing ? 'fill-amber-400 text-amber-400' : 'text-slate-400'}`} />
+                    <span className="hidden min-[380px]:inline">{isFollowing ? 'Suivi' : 'Suivre'}</span>
+                  </button>
+                </div>
              </div>
 
              <div className="flex flex-col gap-4">
@@ -504,6 +513,34 @@ export function CandidatesList() {
   );
 }
 
+function CandidateShareButton({ name, slug, party }: { name: string; slug: string; party: string | null }) {
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const handle = async () => {
+    if (busy) return;
+    setBusy(true);
+    const outcome: ShareOutcome = await shareCandidate({ name, slug, party });
+    setBusy(false);
+    if (outcome === 'copied') {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    }
+  };
+
+  return (
+    <button
+      onClick={handle}
+      disabled={busy}
+      aria-label="Partager le profil"
+      title={copied ? 'Lien copié' : 'Partager le profil'}
+      className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#1a56db] shadow-sm transition-all disabled:opacity-50"
+    >
+      {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
+    </button>
+  );
+}
+
 function DetailSkeleton() {
   return (
     <div className="space-y-3">
@@ -579,14 +616,21 @@ function CandidateNewsCard({ article }: { article: NewsArticle }) {
               )}
               <span className="text-slate-300">·</span>
               <span>{relativeTime(article.published_at)}</span>
-              {isVideo && (
-                <span className="ml-auto inline-flex items-center gap-1 bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider">
-                  Vidéo
-                </span>
-              )}
-              {isPress && (
-                <ExternalLink className="w-3 h-3 text-slate-300 ml-auto group-hover:text-[#1a56db] transition-colors" />
-              )}
+              <span className="ml-auto flex items-center gap-1">
+                {isVideo && (
+                  <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider">
+                    Vidéo
+                  </span>
+                )}
+                <ShareButton
+                  title={article.title}
+                  text={`${article.title} — à lire sur CAP 2027`}
+                  url={article.url}
+                />
+                {isPress && (
+                  <ExternalLink className="w-3 h-3 text-slate-300 group-hover:text-[#1a56db] transition-colors" />
+                )}
+              </span>
             </div>
             <h4 className="font-bold text-[#102a5c] text-sm leading-snug line-clamp-2 group-hover:text-[#1a56db] transition-colors">
               {article.title}
