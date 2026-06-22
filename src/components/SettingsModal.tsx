@@ -188,7 +188,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex flex-col gap-1 mt-2">
             <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 px-1 pb-1 inline-flex items-center gap-1">
               Types de notifications
-              <InfoTip align="left" label="À quoi servent ces réglages ?">
+              <InfoTip label="À quoi servent ces réglages ?">
                 Activez ou coupez chaque catégorie indépendamment. Les rappels
                 électoraux restent toujours actifs (échéances civiques).
               </InfoTip>

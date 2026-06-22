@@ -647,7 +647,7 @@ function Results({
         </span>
         <h3 className="text-xl sm:text-2xl font-bold text-[#102a5c] mb-1 inline-flex items-center gap-1.5">
           Vos affinités politiques
-          <InfoTip align="left" label="Comment le score est-il calculé ?">
+          <InfoTip label="Comment le score est-il calculé ?">
             Pour chaque proposition, un accord avec la position d’un candidat ajoute
             un point, un désaccord en retire un. « Sans avis » ne compte pas. Le
             classement reflète vos réponses, pas une préférence de l’app.

@@ -278,7 +278,7 @@ export function NewsFeed({ mode }: { mode: Mode }) {
             <ScrollRow
               label="Orientations suivies"
               info={
-                <InfoTip align="left" label="À quoi servent les orientations ?">
+                <InfoTip label="À quoi servent les orientations ?">
                   Filtrez le fil par bord politique de la source. « Toutes » affiche
                   tout. Votre sélection s’applique aussi aux notifications d’actualités.
                 </InfoTip>
