@@ -6,6 +6,12 @@ name: Android build (debug APK)
 # Pour un APK + AAB signés, voir android-package.yml.
 on:
   workflow_dispatch:
+  # Déclencheur temporaire limité à la branche de test : permet de lancer
+  # le build sans dispatch manuel (le token d'intégration n'a pas le droit
+  # de dispatcher). À retirer une fois le test terminé.
+  push:
+    branches:
+      - claude/blissful-cori-88ld94
 
 permissions:
   contents: write
