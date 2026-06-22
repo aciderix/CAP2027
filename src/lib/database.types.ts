@@ -893,6 +893,24 @@ export type Database = {
           },
         ]
       }
+      push_token_themes: {
+        Row: {
+          created_at: string
+          theme: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          theme: string
+          token: string
+        }
+        Update: {
+          created_at?: string
+          theme?: string
+          token?: string
+        }
+        Relationships: []
+      }
       push_tokens: {
         Row: {
           app_version: string | null
@@ -1020,6 +1038,7 @@ export type Database = {
         Returns: undefined
       }
       clear_orientations: { Args: { p_token: string }; Returns: undefined }
+      clear_themes: { Args: { p_token: string }; Returns: undefined }
       decode_html_entities: { Args: { s: string }; Returns: string }
       get_election_results_for_round: {
         Args: { p_round: number }
@@ -1084,6 +1103,10 @@ export type Database = {
       }
       unfollow_orientation: {
         Args: { p_orientation: string; p_token: string }
+        Returns: undefined
+      }
+      unfollow_theme: {
+        Args: { p_theme: string; p_token: string }
         Returns: undefined
       }
       unmute_channel: {
