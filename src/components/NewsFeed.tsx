@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
 import { TwitterPostCard } from './TwitterPostCard';
 import { useFollowedOrientations } from '../lib/orientationFollows';
+import { useFollowedThemes, POLITICS_THEME_SLUG } from '../lib/themeFollows';
 import { openLink } from '../lib/openLink';
 import { ShareButton } from './ui/ShareButton';
 import { InfoTip } from './ui/InfoTip';
@@ -86,22 +87,28 @@ function fullName(c: CandidateLite) {
 export function NewsFeed({ mode }: { mode: Mode }) {
   const [search, setSearch] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
-  // Persistent multi-select: drives both the in-app feed filter and
-  // the push-broadcast filter for press notifs. Empty set = "no
-  // filter, receive everything" (opt-in restrictif with lenient
-  // default). See lib/orientationFollows.ts.
+  // Persistent multi-select sets. Both drive the in-app feed filter AND
+  // the push-broadcast filter for press notifs. Empty set = "no filter,
+  // receive everything" (opt-in restrictif with lenient default).
+  // See lib/orientationFollows.ts / lib/themeFollows.ts.
   const { followed: followedOrientations, toggle: toggleOrientation, clear: clearOrientations } =
     useFollowedOrientations();
+  const {
+    followed: followedThemes,
+    isFollowed: themeFollowed,
+    toggle: toggleTheme,
+    clear: clearThemes,
+    setOnly: setOnlyThemes,
+  } = useFollowedThemes();
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const [selectedParty, setSelectedParty] = useState<string | null>(null);
 
   const isFactcheck = mode === 'factcheck';
 
-  // Reset transient filters on mode switch. Orientation set is
-  // persistent across mode switches (it's a saved user preference).
+  // Reset transient filters on mode switch. Orientation AND theme sets
+  // are persistent across mode switches (saved user preferences that also
+  // drive notifs).
   useEffect(() => {
-    setSelectedTheme(null);
     setSelectedCandidate(null);
     setSelectedParty(null);
     setSearch('');
@@ -161,7 +168,12 @@ export function NewsFeed({ mode }: { mode: Mode }) {
   // Filter by chips first (cheap), then run fuzzy search on the result.
   const chipFiltered = useMemo(() => {
     return articles.filter((a) => {
-      if (selectedTheme && !a.article_themes.some((x) => x.theme?.id === selectedTheme)) return false;
+      // Category (theme) filter: empty set = no filter, non-empty = the
+      // article must carry one of the followed themes (matched by slug).
+      if (followedThemes.size > 0) {
+        const hit = a.article_themes.some((x) => x.theme?.slug && followedThemes.has(x.theme.slug));
+        if (!hit) return false;
+      }
       // Orientation filter: empty set = no filter, non-empty = must
       // be one of the followed orientations (only applied in news
       // mode — factcheck has its own dedicated tab).
@@ -173,7 +185,7 @@ export function NewsFeed({ mode }: { mode: Mode }) {
       if (selectedParty && !a.article_parties.some((x) => x.party?.id === selectedParty)) return false;
       return true;
     });
-  }, [articles, selectedTheme, followedOrientations, selectedCandidate, selectedParty, isFactcheck]);
+  }, [articles, followedThemes, followedOrientations, selectedCandidate, selectedParty, isFactcheck]);
 
   // Fuzzy search: tolerates typos and missing accents (e.g. "melanchon" → Mélenchon).
   const fuse = useMemo(() => new Fuse(chipFiltered, {
@@ -202,7 +214,7 @@ export function NewsFeed({ mode }: { mode: Mode }) {
   const rest = filtered.slice(1);
 
   const clearAll = () => {
-    setSelectedTheme(null);
+    clearThemes();
     clearOrientations();
     setSelectedCandidate(null);
     setSelectedParty(null);
@@ -304,25 +316,50 @@ export function NewsFeed({ mode }: { mode: Mode }) {
             </ScrollRow>
           )}
 
-          {/* Themes */}
-          {filters.themes.length > 0 && (
-            <ScrollRow label="Thèmes">
-              <Chip
-                active={selectedTheme === null}
-                onClick={() => setSelectedTheme(null)}
-                label="Tous"
-              />
-              {filters.themes.map((t) => (
+          {/* Categories (themes). Multi-select, persisted locally and
+              mirrored to push_token_themes so the server filters press
+              notifs by topic the same way. Drives the feed + the notifs. */}
+          {filters.themes.length > 0 && (() => {
+            const politicsOnly = followedThemes.size === 1 && followedThemes.has(POLITICS_THEME_SLUG);
+            return (
+              <ScrollRow
+                label="Catégories suivies"
+                info={
+                  <InfoTip label="À quoi servent les catégories ?">
+                    Filtrez le fil par thème. « Toutes » affiche tout. Votre sélection
+                    s’applique aussi aux notifications d’actualités presse.
+                  </InfoTip>
+                }
+                action={
+                  <button
+                    onClick={() => (politicsOnly ? clearThemes() : setOnlyThemes([POLITICS_THEME_SLUG]))}
+                    className={`text-[10px] font-bold rounded-full px-2 py-1 border transition-colors ${
+                      politicsOnly
+                        ? 'bg-[#102a5c] text-white border-[#102a5c]'
+                        : 'bg-white text-[#1a56db] border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    Politique uniquement
+                  </button>
+                }
+              >
                 <Chip
-                  key={t.id}
-                  active={selectedTheme === t.id}
-                  onClick={() => setSelectedTheme(selectedTheme === t.id ? null : t.id)}
-                  label={t.name}
-                  dotColor={t.color || '#94a3b8'}
+                  active={followedThemes.size === 0}
+                  onClick={() => clearThemes()}
+                  label="Toutes"
                 />
-              ))}
-            </ScrollRow>
-          )}
+                {filters.themes.map((t) => (
+                  <Chip
+                    key={t.id}
+                    active={themeFollowed(t.slug)}
+                    onClick={() => toggleTheme(t.slug)}
+                    label={t.name}
+                    dotColor={t.color || '#94a3b8'}
+                  />
+                ))}
+              </ScrollRow>
+            );
+          })()}
         </div>
       )}
 
@@ -360,7 +397,7 @@ export function NewsFeed({ mode }: { mode: Mode }) {
               />
             ))}
           </DrawerRow>
-          {(selectedTheme || followedOrientations.size > 0 || selectedCandidate || selectedParty || search) && (
+          {(followedThemes.size > 0 || followedOrientations.size > 0 || selectedCandidate || selectedParty || search) && (
             <button
               onClick={clearAll}
               className="self-start inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-700"
@@ -459,15 +496,16 @@ export function NewsFeed({ mode }: { mode: Mode }) {
 
 // ----------- Sub-components -----------
 
-function ScrollRow({ label, info, children }: { label: string; info?: React.ReactNode; children: React.ReactNode }) {
+function ScrollRow({ label, info, action, children }: { label: string; info?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement | null>(null);
   return (
     <div>
-      <div className="flex items-center justify-between mb-1 px-1">
+      <div className="flex items-center justify-between gap-2 mb-1 px-1">
         <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
           {label}
           {info}
         </span>
+        {action}
       </div>
       <div
         ref={ref}
