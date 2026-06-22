@@ -16,8 +16,13 @@
 // verify_jwt stays false because the publishable/secret key format isn't
 // a JWT; we do our own check below.
 //
-// POST body: { title, body, url?, candidate_id?, orientation?, orientations?, type? }
+// POST body: { title, body, url?, candidate_id?, orientation?, orientations?, themes?, type? }
 //   - candidate_id wins; then orientations[]; then orientation; else broadcast
+//   - themes[] is an ADDITIONAL refinement (news categories, themes.slug):
+//     applied on top of the chosen targeting. Opt-in lenient — a token with
+//     no followed theme (no row in push_token_themes) receives everything;
+//     a token with followed themes only passes if one intersects themes[].
+//     Empty/absent themes[] => no category filtering (legacy behaviour).
 //   - type is a category tag forwarded as FCM data.type; the client
 //     reads it on reception to invalidate the right TanStack Query
 //     keys (see lib/push.ts pushNotificationReceived).
@@ -140,6 +145,7 @@ interface SendInput {
   candidate_id?: string;
   orientation?: string;
   orientations?: string[];
+  themes?: string[];
   type?: string;
 }
 
@@ -270,6 +276,27 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Filtre par catégorie d'actualité (thème). Opt-in lenient, calqué sur
+  // les orientations : un token SANS thème suivi reçoit tout ; un token
+  // AVEC des thèmes suivis ne passe que si l'un d'eux est dans payload.themes.
+  // Ne s'applique que si la notif porte des thèmes (notifs presse). Lenient :
+  // en cas d'erreur de lecture, on n'exclut personne.
+  if (payload.themes && payload.themes.length > 0 && tokens.length > 0) {
+    const { data: themeRows, error: thErr } = await supabase
+      .from("push_token_themes")
+      .select("token, theme");
+    if (!thErr && themeRows && themeRows.length > 0) {
+      const wanted = new Set(payload.themes);
+      const restricted = new Set<string>(); // tokens qui ont défini des thèmes
+      const matching = new Set<string>();    // tokens dont un thème suivi matche
+      for (const r of themeRows as any[]) {
+        restricted.add(r.token);
+        if (wanted.has(r.theme)) matching.add(r.token);
+      }
+      tokens = tokens.filter((t) => !restricted.has(t.token) || matching.has(t.token));
+    }
+  }
+
   let sent = 0, failed = 0;
   const errors: string[] = [];
   for (const t of tokens) {
@@ -349,6 +376,7 @@ Deno.serve(async (req) => {
     candidate_id: payload.candidate_id ?? null,
     orientation: payload.orientation ?? null,
     orientations: payload.orientations ?? null,
+    themes: payload.themes ?? null,
     type: payload.type ?? null,
     sample_errors: errors,
   });

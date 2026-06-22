@@ -1,5 +1,6 @@
-import { Bell, Trash2, Shield, AlertTriangle, Newspaper, UserCheck, Megaphone, Vote, Star, BookOpen } from 'lucide-react';
+import { Bell, Trash2, Shield, AlertTriangle, Newspaper, UserCheck, Megaphone, Vote, Star, BookOpen, Landmark } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Modal } from './ui/Modal';
@@ -11,7 +12,9 @@ import {
 import { registerPushNotifications, getPushToken } from '../lib/push';
 import { registerPushWeb, getWebPushToken } from '../lib/pushWeb';
 import { useMutedChannels, type NotifChannel } from '../lib/notificationChannels';
+import { useFollowedThemes, POLITICS_THEME_SLUG } from '../lib/themeFollows';
 import { supabase } from '../lib/supabase';
+import { STABLE_STALE_MS } from '../lib/queryClient';
 import { canRateApp, openRateApp } from '../lib/rateApp';
 import { InfoTip } from './ui/InfoTip';
 
@@ -41,6 +44,30 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const { isEnabled: channelEnabled, toggle: toggleChannel } = useMutedChannels();
+  const {
+    followed: followedThemes,
+    isFollowed: themeFollowed,
+    toggle: toggleTheme,
+    clear: clearThemes,
+    setOnly: setOnlyThemes,
+  } = useFollowedThemes();
+
+  // Themes list (reference data, very stable). Only fetched when the modal
+  // is open AND notifs are on — it drives the press-notif category filter.
+  const themesQuery = useQuery({
+    queryKey: ['notifThemes'],
+    enabled: isOpen,
+    staleTime: STABLE_STALE_MS,
+    queryFn: async (): Promise<Array<{ slug: string; name: string; color: string | null }>> => {
+      const { data, error } = await supabase
+        .from('themes')
+        .select('slug, name, color')
+        .order('order_index');
+      if (error) throw error;
+      return (data ?? []) as Array<{ slug: string; name: string; color: string | null }>;
+    },
+  });
+  const themes = themesQuery.data ?? [];
 
   const refreshPerm = () => {
     if (Capacitor.isNativePlatform()) {
@@ -237,6 +264,56 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </div>
         )}
 
+        {/* Catégories d'actualité — affine les notifs presse par thème.
+            Visible seulement si les notifs ET le canal "Actualités presse"
+            sont actifs (le filtre ne porte que sur ces notifs-là). */}
+        {notifEnabled && channelEnabled('news_press') && (
+          <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex flex-col gap-3 mt-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 px-1 pb-0.5 inline-flex items-center gap-1">
+                Catégories d'actualité
+                <InfoTip label="À quoi sert ce filtre ?">
+                  Filtre les notifications d'actualités presse par thème. « Toutes » =
+                  aucune restriction. Sinon, vous ne recevez que les sujets choisis.
+                </InfoTip>
+              </p>
+              <p className="text-xs text-slate-500 px-1 leading-snug">
+                S'applique aux notifications « Actualités presse ».
+              </p>
+            </div>
+
+            {(() => {
+              const politicsOnly = followedThemes.size === 1 && followedThemes.has(POLITICS_THEME_SLUG);
+              return (
+                <button
+                  onClick={() => (politicsOnly ? clearThemes() : setOnlyThemes([POLITICS_THEME_SLUG]))}
+                  className={`inline-flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold border transition-colors ${
+                    politicsOnly
+                      ? 'bg-[#102a5c] text-white border-[#102a5c]'
+                      : 'bg-white text-[#102a5c] border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <Landmark className="w-4 h-4" />
+                  Actualités politiques uniquement
+                </button>
+              );
+            })()}
+
+            <div className="flex flex-wrap gap-1.5">
+              <ThemeChip active={followedThemes.size === 0} onClick={clearThemes} label="Toutes" />
+              {themes.map((t) => (
+                <ThemeChip
+                  key={t.slug}
+                  active={themeFollowed(t.slug)}
+                  onClick={() => toggleTheme(t.slug)}
+                  label={t.name}
+                  dotColor={t.color}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Aide & découverte */}
         <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex flex-col gap-3 mt-2">
           <button
@@ -319,6 +396,24 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </p>
       </div>
     </Modal>
+  );
+}
+
+function ThemeChip({
+  active, onClick, label, dotColor,
+}: { active: boolean; onClick: () => void; label: string; dotColor?: string | null }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition-all whitespace-nowrap ${
+        active
+          ? 'bg-[#102a5c] text-white border-[#102a5c] shadow-sm'
+          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+      }`}
+    >
+      {dotColor && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />}
+      {label}
+    </button>
   );
 }
 
