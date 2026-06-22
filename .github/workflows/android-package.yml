@@ -34,11 +34,6 @@ on:
         description: "Version code entier (laisser vide = auto, minutes depuis 2020)"
         required: false
         default: ""
-  # Déclencheur temporaire limité à la branche de dev pour produire un
-  # build de test signé. À retirer après le test.
-  push:
-    branches:
-      - claude/blissful-cori-88ld94
 
 permissions:
   contents: write
