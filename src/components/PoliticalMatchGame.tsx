@@ -3,12 +3,14 @@ import { motion, useAnimation, PanInfo } from 'motion/react';
 import {
   ArrowLeft, ArrowRight, ArrowUp,
   CheckCircle, XCircle, HelpCircle,
-  RotateCcw, Trophy, ChevronRight, Share2,
+  RotateCcw, Trophy, ChevronRight, Share2, Star,
 } from 'lucide-react';
 import { Button } from './ui/Button';
 import { supabase } from '../lib/supabase';
 import type { Tables } from '../lib/database.types';
 import { shareBoussoleResults, preloadShareImages, preloadCandidatePhotos, getLastShareTimings } from '../lib/share';
+import { shouldShowRatePrompt, openRateApp, markRateLater, markRateNever } from '../lib/rateApp';
+import { InfoTip } from './ui/InfoTip';
 
 type Stance = 'pour' | 'contre' | 'neutre';
 type Phase = 'tutorial' | 'loading' | 'resume_prompt' | 'game' | 'results' | 'error';
@@ -643,7 +645,14 @@ function Results({
         <span className="bg-[#102a5c]/10 text-[#102a5c] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-3 inline-block">
           Classement
         </span>
-        <h3 className="text-xl sm:text-2xl font-bold text-[#102a5c] mb-1">Vos affinités politiques</h3>
+        <h3 className="text-xl sm:text-2xl font-bold text-[#102a5c] mb-1 inline-flex items-center gap-1.5">
+          Vos affinités politiques
+          <InfoTip label="Comment le score est-il calculé ?">
+            Pour chaque proposition, un accord avec la position d’un candidat ajoute
+            un point, un désaccord en retire un. « Sans avis » ne compte pas. Le
+            classement reflète vos réponses, pas une préférence de l’app.
+          </InfoTip>
+        </h3>
         <p className="text-sm text-slate-500">
           {totalAnswered} / {totalProps} propositions répondues
           {!isComplete && ' (test partiel)'}
@@ -741,6 +750,52 @@ function Results({
         <Button onClick={onClose} variant={onResume ? 'outline' : 'primary'} className={onResume ? 'flex-1 py-2.5 rounded-xl' : 'flex-1 bg-[#102a5c] hover:bg-[#153b82] text-white py-2.5 rounded-xl'}>
           Fermer
         </Button>
+      </div>
+
+      {top && top.answered > 0 && <RatePromptInline />}
+    </div>
+  );
+}
+
+// Non-invasive "rate the app" prompt, shown once after a meaningful
+// action (finishing/answering the Boussole). Hidden on web, after rating,
+// after "Ne plus demander", or within the cooldown after "Plus tard".
+function RatePromptInline() {
+  const [visible, setVisible] = useState(() => shouldShowRatePrompt());
+  if (!visible) return null;
+
+  return (
+    <div className="rounded-2xl bg-amber-50/60 border border-amber-100 p-4 flex flex-col gap-3 mt-1 animate-in fade-in duration-300">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-full bg-white shadow-sm flex items-center justify-center text-amber-500 shrink-0">
+          <Star className="w-5 h-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="font-bold text-[#102a5c] text-sm">Vous aimez CAP 2027 ?</p>
+          <p className="text-xs text-slate-500 leading-snug mt-0.5">
+            Une note sur le Play Store aide d’autres citoyens à découvrir l’app. C’est rapide et ça compte beaucoup.
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => { void openRateApp(); setVisible(false); }}
+          className="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 bg-[#1a56db] hover:bg-[#154bbd] text-white font-bold text-xs py-2.5 px-3 rounded-xl transition-colors"
+        >
+          <Star className="w-4 h-4" /> Noter l'application
+        </button>
+        <button
+          onClick={() => { markRateLater(); setVisible(false); }}
+          className="inline-flex items-center justify-center text-xs font-bold text-slate-500 hover:text-slate-700 px-3 py-2.5"
+        >
+          Plus tard
+        </button>
+        <button
+          onClick={() => { markRateNever(); setVisible(false); }}
+          className="inline-flex items-center justify-center text-xs font-semibold text-slate-400 hover:text-slate-600 px-3 py-2.5"
+        >
+          Ne plus demander
+        </button>
       </div>
     </div>
   );

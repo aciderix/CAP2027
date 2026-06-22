@@ -8,6 +8,101 @@
 
 import { Capacitor } from '@capacitor/core';
 
+// ---------------------------------------------------------------------------
+// Lightweight link sharing (articles, candidate profiles).
+//
+// Unlike the Boussole image share below, this just shares a title + URL:
+//   - native  → @capacitor/share (Android share sheet)
+//   - web     → navigator.share when available (mobile browsers, recent
+//               desktops), otherwise copy the link to the clipboard.
+// The app is also built as the cap2027.fr website; on web we degrade to
+// clipboard copy so there's always a usable action.
+// ---------------------------------------------------------------------------
+
+const WEB_BASE = 'https://cap2027.fr';
+
+export type ShareOutcome = 'shared' | 'copied' | 'cancelled' | 'error';
+
+export interface ShareLinkInput {
+  title: string;
+  /** Optional longer text; falls back to title. Keep the tone neutral. */
+  text?: string;
+  url: string;
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function shareLink({ title, text, url }: ShareLinkInput): Promise<ShareOutcome> {
+  const body = text?.trim() || title;
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { Share } = await import('@capacitor/share');
+      await Share.share({ title, text: body, url, dialogTitle: 'Partager' });
+      return 'shared';
+    } catch (e: any) {
+      // User cancelling the sheet rejects on some Android versions.
+      if (/cancel/i.test(String(e?.message ?? e))) return 'cancelled';
+      return 'error';
+    }
+  }
+
+  // Web: native share sheet if the browser supports it…
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      await navigator.share({ title, text: body, url });
+      return 'shared';
+    }
+  } catch (e: any) {
+    if (e?.name === 'AbortError') return 'cancelled';
+    // fall through to clipboard
+  }
+
+  // …otherwise copy the link.
+  const ok = await copyToClipboard(`${body}\n${url}`);
+  return ok ? 'copied' : 'error';
+}
+
+/** Share a news article (press article, tweet, video). Shares the source URL. */
+export function shareArticle(opts: { title: string; url: string; sourceName?: string | null }): Promise<ShareOutcome> {
+  const via = opts.sourceName ? ` (${opts.sourceName})` : '';
+  return shareLink({
+    title: opts.title,
+    text: `${opts.title}${via} — à lire sur CAP 2027`,
+    url: opts.url,
+  });
+}
+
+/** Share a candidate profile. Links to the cap2027.fr web fiche. */
+export function shareCandidate(opts: { name: string; slug: string; party?: string | null }): Promise<ShareOutcome> {
+  const party = opts.party ? ` (${opts.party})` : '';
+  return shareLink({
+    title: `${opts.name} — CAP 2027`,
+    text: `Découvrez le profil de ${opts.name}${party} sur CAP 2027, l’app neutre de la présidentielle 2027.`,
+    url: `${WEB_BASE}/explorer/candidats/${encodeURIComponent(opts.slug)}`,
+  });
+}
+
 interface ScoreLike {
   candidate: {
     id: string;

@@ -160,6 +160,13 @@ export default function App() {
     return () => window.removeEventListener('cap2027:goto-home', goHome);
   }, []);
 
+  // Replay the welcome tutorial on demand (Réglages → Revoir le tutoriel).
+  useEffect(() => {
+    const replay = () => setShowOnboarding(true);
+    window.addEventListener('cap2027:replay-onboarding', replay);
+    return () => window.removeEventListener('cap2027:replay-onboarding', replay);
+  }, []);
+
   const handleOnboardingComplete = () => {
     localStorage.setItem('hasSeenOnboarding', 'true');
     setShowOnboarding(false);

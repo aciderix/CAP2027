@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-build-${{ github.ref }}
@@ -77,10 +77,20 @@ jobs:
           echo "Found APK: $APK_PATH"
           echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: cap2027-debug-${{ github.sha }}
-          path: ${{ steps.apk.outputs.path }}
-          if-no-files-found: error
-          retention-days: 14
+      # Publié dans une GitHub Release (et non un artifact) : les assets de
+      # release ne consomment pas le quota de stockage des artifacts Actions.
+      # Pratique quand ce quota est plein. Tag unique par run.
+      - name: Publish debug APK to a GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          TAG="debug-${{ github.run_number }}-${SHORT_SHA}"
+          # Renomme l'APK pour un nom de fichier explicite côté téléchargement.
+          DEST="cap2027-debug-${TAG}.apk"
+          cp "${{ steps.apk.outputs.path }}" "$DEST"
+          gh release create "$TAG" "$DEST" \
+            --target "${{ github.sha }}" \
+            --title "Debug APK ${TAG}" \
+            --notes "Build debug automatique depuis \`${{ github.ref_name }}\` (${{ github.sha }}). APK installable pour test (non signé pour le Play Store)."
+          echo "Release publiée : $TAG"

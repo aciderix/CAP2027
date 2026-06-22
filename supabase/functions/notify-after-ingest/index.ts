@@ -51,6 +51,7 @@ interface ArticleRow {
   kind: string;
   source?: { orientation: string | null } | null;
   article_candidates?: Array<{ candidate: Candidate | null }>;
+  article_themes?: Array<{ theme: { slug: string | null } | null }>;
 }
 
 interface PostPayload {
@@ -60,6 +61,7 @@ interface PostPayload {
   candidate_id?: string;
   orientation?: string;
   orientations?: string[];
+  themes?: string[];
   type?: string;
 }
 
@@ -94,7 +96,8 @@ Deno.serve(async (req) => {
     .select(`
       id, title, summary, url, published_at, kind,
       source:news_sources(orientation),
-      article_candidates(candidate:candidates(id, first_name, last_name))
+      article_candidates(candidate:candidates(id, first_name, last_name)),
+      article_themes(theme:themes(slug))
     `)
     .gt("fetched_at", since)
     .order("published_at", { ascending: false });
@@ -166,6 +169,16 @@ Deno.serve(async (req) => {
   const pressItems = [...pressArticles, ...orphanMedia];
   const pressOrientations = new Set<string>();
   for (const a of pressItems) pressOrientations.add(a.source?.orientation ?? "transverse");
+  // Union des thèmes (themes.slug) des nouvelles actus presse. Permet à
+  // push-broadcast de filtrer par catégorie suivie (opt-in lenient :
+  // un token sans thème suivi reçoit tout).
+  const pressThemes = new Set<string>();
+  for (const a of pressItems) {
+    for (const link of a.article_themes ?? []) {
+      const slug = link.theme?.slug;
+      if (slug) pressThemes.add(slug);
+    }
+  }
   if (pressItems.length > 0) {
     const sample = pressItems[0];
     const pressTitle = pressItems.length === 1
@@ -176,6 +189,7 @@ Deno.serve(async (req) => {
       body: (sample.title || "").slice(0, 140) || "Ouvrez CAP 2027 pour les consulter",
       url: sample.url,
       orientations: [...pressOrientations],
+      themes: [...pressThemes],
       type: "article_press",
     }, dryRun));
   }
@@ -186,6 +200,7 @@ Deno.serve(async (req) => {
     press_articles: pressArticles.length,
     orphan_media: orphanMedia.length,
     press_orientations: [...pressOrientations],
+    press_themes: [...pressThemes],
     dispatched,
   });
 });

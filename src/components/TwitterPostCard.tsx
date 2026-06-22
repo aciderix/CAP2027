@@ -5,6 +5,7 @@
 import { Repeat2, ExternalLink } from 'lucide-react';
 import { parseXPost, rewriteNitterUrl, rewriteNitterImage } from '../lib/twitter';
 import { openLink } from '../lib/openLink';
+import { ShareButton } from './ui/ShareButton';
 
 interface SourceLite {
   name: string;
@@ -59,14 +60,21 @@ export function TwitterPostCard({
               <div className="text-[11px] text-slate-500">{relativeTime(published_at)}</div>
             </div>
           </div>
-          <a
-            href={targetUrl}
-            onClick={(e) => { e.preventDefault(); void openLink(targetUrl); }}
-            className="shrink-0 text-[11px] font-bold text-[#1a56db] hover:underline inline-flex items-center gap-1"
-            title="Ouvrir sur x.com"
-          >
-            Voir sur X <ExternalLink className="w-3 h-3" />
-          </a>
+          <div className="shrink-0 flex items-center gap-0.5">
+            <ShareButton
+              title={`${displayName} sur X`}
+              text={`${body ? body.slice(0, 180) : `Publication de ${displayName}`} — via CAP 2027`}
+              url={targetUrl}
+            />
+            <a
+              href={targetUrl}
+              onClick={(e) => { e.preventDefault(); void openLink(targetUrl); }}
+              className="text-[11px] font-bold text-[#1a56db] hover:underline inline-flex items-center gap-1"
+              title="Ouvrir sur x.com"
+            >
+              Voir sur X <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
         </div>
 
         {/* Retweet attribution */}

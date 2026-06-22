@@ -1,31 +1,42 @@
 name: Android package (signed APK + AAB)
 
-# Déclenchement MANUEL uniquement (jamais sur push) — pour ne pas
-# consommer de minutes GitHub Actions à chaque commit. Produit en une
-# seule passe un APK release signé (installable directement / sideload)
-# ET un Android App Bundle signé (à uploader sur la Play Console).
+# Produit en une seule passe un APK release signé (installable directement
+# / sideload, pour TESTER avant publication) ET un Android App Bundle signé
+# (à uploader sur la Play Console).
+#
+# Les deux artefacts sont publiés dans une GitHub Release (et non en
+# artifacts Actions) car le quota de stockage des artifacts est plein.
+#
+# Versionnage :
+#   - versionCode : si non fourni, calculé automatiquement = nombre de
+#     minutes écoulées depuis 2020-01-01 (UTC). Strictement croissant à
+#     chaque build, bien au-dessus des petits codes manuels déjà utilisés,
+#     et sous le plafond Play (2 100 000 000). Garantit "code > version en
+#     ligne" sans intervention.
+#   - versionName : si non fourni, "1.1.0".
+#   On peut toujours forcer des valeurs via "Run workflow" (inputs).
 #
 # Secrets repository requis (Settings → Secrets and variables → Actions):
 #   ANDROID_KEYSTORE_BASE64    keystore .jks encodé en base64
 #   ANDROID_KEYSTORE_PASSWORD  mot de passe du keystore
 #   ANDROID_KEY_ALIAS          alias de la clé dans le keystore
 #   ANDROID_KEY_PASSWORD       mot de passe de cet alias
-# (Mêmes secrets que android-release.yml — voir docs/RELEASE.md.)
+# (voir docs/RELEASE.md.)
 
 on:
   workflow_dispatch:
     inputs:
       version_name:
-        description: "Version affichée aux utilisateurs (ex: 1.0.0)"
-        required: true
-        default: "1.0.0"
+        description: "Version affichée (laisser vide = 1.1.0)"
+        required: false
+        default: ""
       version_code:
-        description: "Version code (entier, doit strictement augmenter entre releases)"
-        required: true
-        default: "1"
+        description: "Version code entier (laisser vide = auto, minutes depuis 2020)"
+        required: false
+        default: ""
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-package-${{ github.ref }}
@@ -40,6 +51,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          VN="${{ github.event.inputs.version_name }}"
+          VC="${{ github.event.inputs.version_code }}"
+          if [ -z "$VC" ]; then VC=$(( ( $(date -u +%s) - 1577836800 ) / 60 )); fi
+          if [ -z "$VN" ]; then VN="1.1.0"; fi
+          echo "version_name=$VN" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VC" >> "$GITHUB_OUTPUT"
+          echo "Resolved versionName=$VN versionCode=$VC"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -103,8 +125,8 @@ jobs:
       - name: Build signed APK + AAB
         working-directory: android
         env:
-          VERSION_CODE: ${{ inputs.version_code }}
-          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ steps.ver.outputs.version_code }}
+          VERSION_NAME: ${{ steps.ver.outputs.version_name }}
           ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/android/app/release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -113,33 +135,45 @@ jobs:
         # compilation → plus rapide que deux jobs séparés).
         run: ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
 
-      - name: Locate artifacts
+      - name: Locate & rename artifacts
         id: artifacts
         run: |
-          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          AAB_PATH=$(find android/app/build/outputs/bundle/release -name "*.aab" | head -n 1)
-          if [ -z "$APK_PATH" ]; then echo "::error::No APK produced"; exit 1; fi
-          if [ -z "$AAB_PATH" ]; then echo "::error::No AAB produced"; exit 1; fi
-          echo "Found APK: $APK_PATH"
-          echo "Found AAB: $AAB_PATH"
-          echo "apk=$APK_PATH" >> "$GITHUB_OUTPUT"
-          echo "aab=$AAB_PATH" >> "$GITHUB_OUTPUT"
+          APK_SRC=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          AAB_SRC=$(find android/app/build/outputs/bundle/release -name "*.aab" | head -n 1)
+          if [ -z "$APK_SRC" ]; then echo "::error::No APK produced"; exit 1; fi
+          if [ -z "$AAB_SRC" ]; then echo "::error::No AAB produced"; exit 1; fi
+          VN="${{ steps.ver.outputs.version_name }}"
+          VC="${{ steps.ver.outputs.version_code }}"
+          APK="cap2027-${VN}-${VC}.apk"
+          AAB="cap2027-${VN}-${VC}.aab"
+          cp "$APK_SRC" "$APK"
+          cp "$AAB_SRC" "$AAB"
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          echo "aab=$AAB" >> "$GITHUB_OUTPUT"
+          echo "Found APK: $APK_SRC -> $APK"
+          echo "Found AAB: $AAB_SRC -> $AAB"
 
-      - name: Upload signed APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: cap2027-apk-${{ inputs.version_name }}-${{ inputs.version_code }}
-          path: ${{ steps.artifacts.outputs.apk }}
-          if-no-files-found: error
-          retention-days: 30
+      # Publié dans une GitHub Release (et non un artifact) : les assets de
+      # release ne consomment pas le quota de stockage des artifacts Actions.
+      - name: Publish APK + AAB to a GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VN="${{ steps.ver.outputs.version_name }}"
+          VC="${{ steps.ver.outputs.version_code }}"
+          TAG="release-${VN}-${VC}"
+          gh release create "$TAG" \
+            "${{ steps.artifacts.outputs.apk }}" \
+            "${{ steps.artifacts.outputs.aab }}" \
+            --target "${{ github.sha }}" \
+            --title "Release ${VN} (code ${VC})" \
+            --notes "Build release SIGNÉ depuis \`${{ github.ref_name }}\` (${{ github.sha }}).
 
-      - name: Upload signed AAB
-        uses: actions/upload-artifact@v4
-        with:
-          name: cap2027-aab-${{ inputs.version_name }}-${{ inputs.version_code }}
-          path: ${{ steps.artifacts.outputs.aab }}
-          if-no-files-found: error
-          retention-days: 30
+          - **APK** : installable directement pour TESTER (sideload).
+          - **AAB** : à uploader sur la Play Console (versionCode ${VC}, versionName ${VN}).
+
+          versionCode auto = minutes depuis 2020-01-01 (strictement croissant, > codes déjà en ligne)."
+          echo "Release publiée : $TAG"
 
       - name: Cleanup keystore
         if: always()

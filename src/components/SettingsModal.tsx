@@ -1,4 +1,4 @@
-import { Bell, Trash2, Shield, AlertTriangle, Newspaper, UserCheck, Megaphone, Vote } from 'lucide-react';
+import { Bell, Trash2, Shield, AlertTriangle, Newspaper, UserCheck, Megaphone, Vote, Star, BookOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -12,6 +12,8 @@ import { registerPushNotifications, getPushToken } from '../lib/push';
 import { registerPushWeb, getWebPushToken } from '../lib/pushWeb';
 import { useMutedChannels, type NotifChannel } from '../lib/notificationChannels';
 import { supabase } from '../lib/supabase';
+import { canRateApp, openRateApp } from '../lib/rateApp';
+import { InfoTip } from './ui/InfoTip';
 
 // Reflète l'état du toggle maître côté serveur (push_tokens.enabled) pour
 // que push-broadcast cesse réellement d'envoyer quand l'utilisateur coupe
@@ -184,8 +186,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         {/* Notification channels — only meaningful when notifs are on */}
         {notifEnabled && (
           <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex flex-col gap-1 mt-2">
-            <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 px-1 pb-1">
+            <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 px-1 pb-1 inline-flex items-center gap-1">
               Types de notifications
+              <InfoTip label="À quoi servent ces réglages ?">
+                Activez ou coupez chaque catégorie indépendamment. Les rappels
+                électoraux restent toujours actifs (échéances civiques).
+              </InfoTip>
             </p>
             <ChannelRow
               icon={<Newspaper className="w-4 h-4" />}
@@ -230,6 +236,44 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
           </div>
         )}
+
+        {/* Aide & découverte */}
+        <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex flex-col gap-3 mt-2">
+          <button
+            onClick={() => {
+              onClose();
+              setTimeout(() => window.dispatchEvent(new Event('cap2027:replay-onboarding')), 150);
+            }}
+            className="flex items-center gap-3 text-left w-full"
+          >
+            <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-[#1a56db] shrink-0">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-bold text-[#102a5c] text-sm">Revoir le tutoriel</p>
+              <p className="text-xs text-slate-500 leading-snug mt-0.5">
+                Relancez la présentation des fonctionnalités à tout moment.
+              </p>
+            </div>
+          </button>
+
+          {canRateApp() && (
+            <button
+              onClick={() => { void openRateApp(); }}
+              className="flex items-center gap-3 text-left w-full border-t border-slate-100 pt-3"
+            >
+              <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-amber-500 shrink-0">
+                <Star className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-bold text-[#102a5c] text-sm">Noter l'application</p>
+                <p className="text-xs text-slate-500 leading-snug mt-0.5">
+                  Donnez votre avis sur le Google Play Store. Ça aide beaucoup !
+                </p>
+              </div>
+            </button>
+          )}
+        </div>
 
         {/* Quick info */}
         <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex items-start gap-3 mt-2">
