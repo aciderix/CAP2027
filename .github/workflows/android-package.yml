@@ -34,6 +34,11 @@ on:
         description: "Version code entier (laisser vide = auto, minutes depuis 2020)"
         required: false
         default: ""
+  # Déclencheur temporaire (build AAB frais pour pré-inscription Play).
+  # À retirer après le build.
+  push:
+    branches:
+      - claude/blissful-cori-88ld94
 
 permissions:
   contents: write
