@@ -159,7 +159,7 @@ function normalize(item: any): NormalizedItem | null {
 }
 
 function stripAccents(s: string): string {
-  return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 function makePattern(keyword: string): RegExp {
   const ascii = stripAccents(keyword);

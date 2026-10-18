@@ -472,12 +472,15 @@ RSS, contrôle Demos Kratos et keepalive dans `cap2027-privacy` (branche
 spécification du Match + script de simulation.
 
 ### A. Infra & GitHub
+Correctif déployé le 18/10 : `ingest-from-xml` v4 (préfiltre des mots-clés, 3 040 → 650 ms de CPU
+sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage du Figaro).
+
 | # | Tâche | Qui | Dépend de |
 |---|---|---|---|
-| A1 | Retirer les déclencheurs de test et fusionner `cap2027-privacy` dans `main` (active RSS toutes les 30 min, contrôle DK quotidien, keepalive) | moi, après ton OK | — |
-| A2 | Admin : source X Mélenchon → `https://nitter.meowing.monster/JLMelenchon/rss` | toi | — |
+| A1 | ✅ Fait : `cap2027-privacy` fusionné dans `main` (RSS toutes les 30 min, contrôle DK quotidien, keepalive) ; premiers runs réels OK | moi | — |
+| A2 | ✅ Fait : source X Mélenchon → `https://nitter.meowing.monster/JLMelenchon/rss` | moi | — |
 | A3 | Vérifier facturation / quota Actions du compte : **les builds APK/AAB tournent dans le dépôt privé** | toi | — |
-| A4 | Supprimer `android-release.yml` (échoue à chaque push, doublon) | moi | — |
+| A4 | ✅ Fait : `android-release.yml` supprimé | moi | — |
 | A5 | Fusionner la branche CAP2027 dans `main` (config Supabase locale, migration `decode_html_entities`, script RSS, docs) | toi (PR) | — |
 | A6 | Vérifier puis supprimer `diag-fcm` / `diag-parrainages` (fonctions de debug ouvertes en prod) | moi, après ton OK | — |
 | A7 | Optionnel : URLs de prod en dur dans les migrations → `app_config` ou Vault | moi | — |
@@ -494,9 +497,9 @@ spécification du Match + script de simulation.
 ### C. Données Demos Kratos (socle du Match et du comparateur)
 | # | Tâche | Qui | Dépend de |
 |---|---|---|---|
-| C1 | Migration `dk_*` (thèmes, candidats, mesures, synthèses, affinités, Match) + `dk_imports` + `candidates.dk_id` | moi (local) | — |
-| C2 | Correspondance des thèmes DK (27) → nos 15 : trancher agriculture et défense | toi | — |
-| C3 | RPC `dk_import` (une transaction, remplacement complet), testée en local avec le zip | moi | C1 |
+| C1 | ✅ Fait en local : migration `dk_*` + `dk_imports` + `dk_candidate_links` + `dk_theme_map` | moi | — |
+| C2 | ✅ Décidé : agriculture → écologie, défense → international (alignés sur nos mots-clés presse) | moi | — |
+| C3 | ✅ Fait en local : RPC `dk_import`, testée avec le zip (import, réimport ignoré, export invalide refusé, remplacement complet) | moi | C1 |
 | C4 | Import automatique : le workflow DK pousse l'export si le hash a changé (d'abord à blanc) | moi | C3, A1 |
 | C5 | Candidats : rattacher les 12 communs ; créer les 11 absents en non publiés | moi + toi (validation) | C3 |
 | C6 | Attribution « Propulsé par Demos Kratos » + écran Sources (licence, date d'import) | moi | C3 |

@@ -140,6 +140,8 @@ create table if not exists public.dk_candidate_links (
 
 -- Thèmes DK (27) → nos thèmes (15, utilisés pour la presse). Clé = id DK
 -- (stable), slug DK pour la lisibilité ; theme_slug null = sans équivalent.
+-- Les cas ambigus suivent nos mots-clés presse (theme_keywords), pour que
+-- programmes et actualités d'un même sujet tombent dans le même thème.
 create table if not exists public.dk_theme_map (
   dk_theme_id   text primary key,
   dk_theme_slug text not null,
@@ -164,10 +166,10 @@ insert into public.dk_theme_map (dk_theme_id, dk_theme_slug, theme_slug) values
   ('thm_culture',                          'culture',             'culture'),
   ('e20729e4-cf14-49db-acd0-4b991ca14e33', 'transport',           'transports'),
   ('c2ed0e74-398b-4aa9-84e9-3dcf51735e0b', 'outre-mer',           'institutions'),
-  ('1ee7966e-6365-4b88-bff3-b8730529e12a', 'agriculture',         'economie'),      -- à trancher (C2) : economie ou ecologie
+  ('1ee7966e-6365-4b88-bff3-b8730529e12a', 'agriculture',         'ecologie'),      -- nos mots-clés agricoles (agroécologie, pesticide…) sont en écologie
   ('7e90ced4-a58a-4c2c-90d1-323b488e1353', 'sport',               'sport'),
   ('4aed6f0d-11d4-4062-8514-fd0e70e73b85', 'politique-familiale', 'social'),
-  ('268954ad-5093-4b8c-903b-83dd877d9b11', 'defense',             'international'), -- à trancher (C2) : international ou securite
+  ('268954ad-5093-4b8c-903b-83dd877d9b11', 'defense',             'international'), -- comme « guerre », « Ukraine » dans nos mots-clés
   ('dec44c28-bf25-4439-9d17-f90581332c62', 'protection-animale',  'ecologie'),
   ('d504e176-584a-411a-bb53-5c1bca3319cb', 'protection-sociale',  'social'),
   ('fb8fd953-964a-4f5f-84a5-bfb10c1a6b4a', 'industrie',           'economie'),
