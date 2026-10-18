@@ -178,6 +178,12 @@ insert into public.dk_theme_map (dk_theme_id, dk_theme_slug, theme_slug) values
   ('dc91a7ec-5a84-41b9-8dca-463c08484dd2', 'non-classe',          null)
 on conflict (dk_theme_id) do nothing;
 
+-- Seuils du Match (app : DEFAULT_MATCH_PARAMS), réglables sans nouvelle
+-- version de l'app ; à recalibrer avec scripts/match_fairness_sim.py.
+insert into public.app_config (key, value) values
+  ('match.params', '{"minStatements": 13, "minThemes": 10, "k": 8, "unlockComparisons": 6, "unlockThemes": 3}'::jsonb)
+on conflict (key) do nothing;
+
 -- ── Droits : lecture publique, écriture réservée au service role ───────────
 do $$
 declare t text;

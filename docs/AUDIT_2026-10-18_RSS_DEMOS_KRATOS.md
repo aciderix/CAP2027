@@ -500,21 +500,22 @@ sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage
 | C1 | ✅ Fait en local : migration `dk_*` + `dk_imports` + `dk_candidate_links` + `dk_theme_map` | moi | — |
 | C2 | ✅ Décidé : agriculture → écologie, défense → international (alignés sur nos mots-clés presse) | moi | — |
 | C3 | ✅ Fait en local : RPC `dk_import`, testée avec le zip (import, réimport ignoré, export invalide refusé, remplacement complet) | moi | C1 |
-| C4 | Import automatique : le workflow DK pousse l'export si le hash a changé (d'abord à blanc) | moi | C3, A1 |
+| C4 | ✅ Fait : fonction `ingest-demos-kratos` (non déployée) + workflow quotidien à blanc (compare au dernier import) ; import réel via « Run workflow → import » | moi | C3, A1 |
 | C5 | Candidats : rattacher les 12 communs ; créer les 11 absents en non publiés | moi + toi (validation) | C3 |
 | C6 | Attribution « Propulsé par Demos Kratos » + écran Sources (licence, date d'import) | moi | C3 |
+| C9 | Copier les photos des candidats DK dans notre Storage à l'import (leur serveur limite les requêtes et n'envoie pas d'en-tête CORS : photos lentes ou absentes, inutilisables dans l'image de partage) | moi | C4 |
 | C7 | Demander à DK : citation ou `measureIds` qui justifient chaque position du Match | toi | — |
 | C8 | Mise en prod (migration puis 1er import), puis publication des candidats | moi + toi | C3–C6 |
 
 ### D. Match v2 (spécification en 4.6)
 | # | Tâche | Qui | Dépend de |
 |---|---|---|---|
-| D1 | Vue `match_candidates` : jouable si ≥ 13 affirmations et ≥ 10 thèmes (seuils dans `app_config`) | moi | C3 |
-| D2 | Score : points ±1 / ±0,5, poids 1/√(affirmations du thème), ÷ (Σ poids + 8), affichage % | moi | D1 |
-| D3 | Paquet de cartes adaptatif ; classement débloqué à ≥ 6 comparaisons sur ≥ 3 thèmes | moi | D1 |
-| D4 | Résultats : rubrique « Pas encore assez d'informations », « non abordé » par thème | moi | D2 |
-| D5 | « Nouveaux choix disponibles » / « X rejoint le Match », affirmations reformulées, badge, push `match_update` optionnel | moi | D2 |
-| D6 | Nouvelle clé de réponses v3, image de partage en %, infobulle méthode + attribution DK | moi | D2 |
+| D1 | ✅ Fait (calcul côté app, `src/lib/matchScoring.ts`) : jouable si ≥ 13 affirmations et ≥ 10 thèmes ; seuils dans `app_config.match.params` | moi | C3 |
+| D2 | ✅ Fait, identique à la simulation Python sur 201 jeux de réponses | moi | D1 |
+| D3 | ✅ Fait (testé : verrou visible à 6 cartes, classement débloqué à 13) | moi | D1 |
+| D4 | ✅ Rubrique « Pas encore assez d'informations » faite ; reste le détail « non abordé » par thème | moi | D2 |
+| D5 | ✅ Fait et testé (nouvel export simulé) sauf la notification push `match_update` | moi | D2 |
+| D6 | ✅ Fait | moi | D2 |
 | D7 | Recalibrage auto : simulation lancée à chaque nouvel export (dans le workflow DK) | moi | C4 |
 
 ### E. Comparateur v2 (inspiré de demos-kratos.fr, voir 4.5)

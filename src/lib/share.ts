@@ -113,11 +113,18 @@ interface ScoreLike {
     parties: { name: string | null; abbreviation: string | null; color: string | null } | null;
   };
   total: number;
+  /** Score du Match en % (affichage prioritaire sur `total` s'il est fourni). */
+  pct?: number;
   agree: number;
   disagree: number;
   neutral: number;
   answered: number;
   totalProps: number;
+}
+
+function scoreLabel(s: ScoreLike): string {
+  if (s.pct !== undefined) return `${s.pct} %`;
+  return `${s.total > 0 ? '+' : ''}${s.total}`;
 }
 
 const SHARE_URL = 'https://cap2027.fr';
@@ -247,8 +254,8 @@ async function generateImage(scores: ScoreLike[], totalAnswered: number, totalPr
   ctx.fillStyle = 'rgba(255,255,255,0.7)';
   ctx.font = '28px Inter, system-ui, sans-serif';
   const subtitle = totalAnswered === totalProps
-    ? `Test complet — ${totalProps} propositions`
-    : `${totalAnswered} / ${totalProps} propositions répondues`;
+    ? `Test complet — ${totalProps} affirmations`
+    : `${totalAnswered} / ${totalProps} affirmations répondues`;
   ctx.fillText(subtitle, W / 2, 215);
 
   // Top 3 candidate cards
@@ -331,18 +338,19 @@ async function generateImage(scores: ScoreLike[], totalAnswered: number, totalPr
     // Breakdown line (accords • désaccords • sans avis)
     ctx.fillStyle = '#94a3b8';
     ctx.font = '24px Inter, system-ui, sans-serif';
-    const breakdown = `${s.agree} accord${s.agree > 1 ? 's' : ''} • ${s.disagree} désaccord${s.disagree > 1 ? 's' : ''} • ${s.neutral} sans avis`;
+    const breakdown = s.pct !== undefined
+      ? `${s.agree} accord${s.agree > 1 ? 's' : ''} • ${s.disagree} désaccord${s.disagree > 1 ? 's' : ''}`
+      : `${s.agree} accord${s.agree > 1 ? 's' : ''} • ${s.disagree} désaccord${s.disagree > 1 ? 's' : ''} • ${s.neutral} sans avis`;
     ctx.fillText(breakdown, photoX + photoR + 30, y + 180);
 
     // Score
     const empty = s.answered === 0;
     if (!empty) {
-      const positive = s.total >= 0;
+      const positive = s.pct !== undefined ? s.pct >= 50 : s.total >= 0;
       ctx.fillStyle = positive ? '#059669' : '#dc2626';
       ctx.font = 'bold 80px Inter, system-ui, sans-serif';
       ctx.textAlign = 'right';
-      const sign = s.total > 0 ? '+' : '';
-      ctx.fillText(`${sign}${s.total}`, cardX + cardW - 50, y + 120);
+      ctx.fillText(scoreLabel(s), cardX + cardW - 50, y + 120);
     } else {
       ctx.fillStyle = '#cbd5e1';
       ctx.font = 'bold 56px Inter, system-ui, sans-serif';
@@ -401,8 +409,7 @@ function buildShareText(scores: ScoreLike[]): string {
   if (!top || top.answered === 0) {
     return `J'ai découvert mes affinités politiques pour la présidentielle 2027 sur CAP 2027. À ton tour !\n\n${SHARE_URL}`;
   }
-  const sign = top.total > 0 ? '+' : '';
-  return `Mon top match pour la présidentielle 2027 selon CAP 2027 : ${fullName(top.candidate)} (${sign}${top.total}).\n\nFais le test : ${SHARE_URL}`;
+  return `Mon top match pour la présidentielle 2027 selon CAP 2027 : ${fullName(top.candidate)} (${scoreLabel(top)}).\n\nFais le test : ${SHARE_URL}`;
 }
 
 export async function shareBoussoleResults(

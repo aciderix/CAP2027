@@ -5,30 +5,16 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
 import { PoliticalMatchGame } from './PoliticalMatchGame';
-import { supabase } from '../lib/supabase';
 import { STABLE_STALE_MS } from '../lib/queryClient';
-
-const ANSWERS_KEY = 'cap2027.matchAnswers.v2';
-
-// Lightweight version of the Comparateur query — same queryKey so both
-// hooks share the cache entry. The badge only needs the proposition
-// ids to cross-reference with the localStorage answers map.
-type PropRow = { id: string };
-
-function readAnsweredIds(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
-  try {
-    const raw = JSON.parse(localStorage.getItem(ANSWERS_KEY) ?? '{}') as Record<string, unknown>;
-    return new Set(Object.keys(raw));
-  } catch {
-    return new Set();
-  }
-}
+import { useAppConfig } from '../lib/appConfig';
+import { DEFAULT_MATCH_PARAMS, coverageByCandidate, isPlayable } from '../lib/matchScoring';
+import { MATCH_QUERY_KEY, fetchMatchData, loadSeen, loadStoredAnswers, validAnswers } from '../lib/matchData';
 
 export function PoliticalMatchCard() {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const appConfig = useAppConfig();
 
   // The MoreMenu's "Mes résultats de Boussole" entry navigates here and
   // then asks us to open the modal via this event. App.tsx fires the
@@ -46,37 +32,28 @@ export function PoliticalMatchCard() {
     if (location.pathname === '/boussole') navigate('/');
   };
 
-  // Active match proposition ids. Shared cache with the Comparateur
-  // (same queryKey) so opening either screen warms the badge instantly.
-  // Invalidated by the admin counter sync + the foreground
-  // 'match_proposition_change' push, so a new proposition added in
-  // the admin console is reflected here without waiting for staleTime.
-  const propsQuery = useQuery({
-    queryKey: ['matchPropositions'],
+  // Affirmations et positions Demos Kratos, même cache que le jeu.
+  const matchQuery = useQuery({
+    queryKey: MATCH_QUERY_KEY,
     staleTime: STABLE_STALE_MS,
-    queryFn: async (): Promise<PropRow[]> => {
-      const { data, error } = await supabase
-        .from('candidate_match_propositions')
-        .select('id, text, candidate_id, theme_id, order_index')
-        .eq('is_active', true)
-        .order('order_index');
-      if (error) throw error;
-      return (data ?? []) as PropRow[];
-    },
+    queryFn: fetchMatchData,
   });
 
-  // Re-read answers whenever the modal closes (the game saves on each
-  // swipe) or fresh propositions arrive. Filter the stored ids by the
-  // currently-active proposition set so retired propositions don't
-  // inflate the answered count.
-  const { remaining, total } = useMemo(() => {
-    const props = propsQuery.data ?? [];
-    if (props.length === 0) return { remaining: 0, total: 0 };
-    const answered = readAnsweredIds();
-    let count = 0;
-    for (const p of props) if (answered.has(p.id)) count++;
-    return { remaining: props.length - count, total: props.length };
-  }, [propsQuery.data, isOpen]);
+  // Recalculé à la fermeture du jeu (qui enregistre à chaque carte) ou à
+  // l'arrivée de nouvelles données. « Nouveaux choix » quand un export
+  // Demos Kratos plus récent que la dernière partie apporte des cartes.
+  const { remaining, total, isNew } = useMemo(() => {
+    const d = matchQuery.data;
+    if (!d) return { remaining: 0, total: 0, isNew: false };
+    const params = { ...DEFAULT_MATCH_PARAMS, ...(appConfig.data?.['match.params'] ?? {}) };
+    const coverage = coverageByCandidate(d.statements, d.stances);
+    const playable = new Set(d.candidates.filter((c) => isPlayable(coverage.get(c.id), params)).map((c) => c.id));
+    const relevant = d.statements.filter((s) => Object.keys(d.stances[s.id] ?? {}).some((cid) => playable.has(cid)));
+    const answered = validAnswers(loadStoredAnswers(), relevant);
+    const count = relevant.filter((s) => !(s.id in answered)).length;
+    const seen = loadSeen();
+    return { remaining: count, total: relevant.length, isNew: !!seen && seen.version !== d.version };
+  }, [matchQuery.data, appConfig.data, isOpen]);
 
   const showBadge = total > 0 && remaining > 0;
 
@@ -86,10 +63,10 @@ export function PoliticalMatchCard() {
         {showBadge && (
           <span
             className="absolute top-2 right-2 sm:top-3 sm:right-3 z-30 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] sm:text-[11px] font-bold border border-amber-200 shadow-sm"
-            title={`${remaining} proposition${remaining > 1 ? 's' : ''} restante${remaining > 1 ? 's' : ''}`}
+            title={`${remaining} affirmation${remaining > 1 ? 's' : ''} restante${remaining > 1 ? 's' : ''}`}
           >
             <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3" strokeWidth={2.5} />
-            {remaining} à compléter
+            {isNew ? `${remaining} nouveau${remaining > 1 ? 'x' : ''} choix` : `${remaining} à compléter`}
           </span>
         )}
         {/* Left Content */}
@@ -98,7 +75,7 @@ export function PoliticalMatchCard() {
             Match politique
           </h2>
           <p className="text-slate-600 mb-3 sm:mb-5 text-[12px] sm:text-[15px] leading-[1.4] sm:leading-relaxed">
-            Répondez à des propositions anonymes et découvrez avec quels candidats vous êtes le plus compatible.
+            Réagissez à des affirmations et découvrez de quels candidats vous êtes le plus proche, d’après leur programme.
           </p>
           <Button
             onClick={() => setIsOpen(true)}

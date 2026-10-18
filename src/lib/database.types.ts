@@ -531,6 +531,418 @@ export type Database = {
           },
         ]
       }
+      dk_affinities: {
+        Row: {
+          candidate_a_id: string
+          candidate_b_id: string
+          commentary: string | null
+          distribution: Json | null
+          id: number
+          points: NonNullable<Json>
+          theme_id: string | null
+          url: string
+        }
+        Insert: {
+          candidate_a_id: string
+          candidate_b_id: string
+          commentary?: string | null
+          distribution?: Json | null
+          id?: never
+          points?: NonNullable<Json>
+          theme_id?: string | null
+          url: string
+        }
+        Update: {
+          candidate_a_id?: string
+          candidate_b_id?: string
+          commentary?: string | null
+          distribution?: Json | null
+          id?: never
+          points?: NonNullable<Json>
+          theme_id?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dk_affinities_candidate_a_id_fkey"
+            columns: ["candidate_a_id"]
+            isOneToOne: false
+            referencedRelation: "dk_candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dk_affinities_candidate_b_id_fkey"
+            columns: ["candidate_b_id"]
+            isOneToOne: false
+            referencedRelation: "dk_candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dk_affinities_theme_id_fkey"
+            columns: ["theme_id"]
+            isOneToOne: false
+            referencedRelation: "dk_themes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dk_candidate_links: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          dk_candidate_id: string
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          dk_candidate_id: string
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          dk_candidate_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dk_candidate_links_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: true
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dk_candidates: {
+        Row: {
+          full_name: string
+          id: string
+          measure_count: number
+          official_site_url: string | null
+          party: string | null
+          photo_url: string | null
+          short_bio: string | null
+          slug: string
+          theme_counts: NonNullable<Json>
+          url: string
+        }
+        Insert: {
+          full_name: string
+          id: string
+          measure_count?: number
+          official_site_url?: string | null
+          party?: string | null
+          photo_url?: string | null
+          short_bio?: string | null
+          slug: string
+          theme_counts?: NonNullable<Json>
+          url: string
+        }
+        Update: {
+          full_name?: string
+          id?: string
+          measure_count?: number
+          official_site_url?: string | null
+          party?: string | null
+          photo_url?: string | null
+          short_bio?: string | null
+          slug?: string
+          theme_counts?: NonNullable<Json>
+          url?: string
+        }
+        Relationships: []
+      }
+      dk_imports: {
+        Row: {
+          content_hash: string
+          counts: NonNullable<Json>
+          file_name: string
+          format_version: number
+          generated_at: string
+          id: number
+          imported_at: string
+          kind: string
+          meta: NonNullable<Json>
+        }
+        Insert: {
+          content_hash: string
+          counts: NonNullable<Json>
+          file_name: string
+          format_version: number
+          generated_at: string
+          id?: never
+          imported_at?: string
+          kind: string
+          meta: NonNullable<Json>
+        }
+        Update: {
+          content_hash?: string
+          counts?: NonNullable<Json>
+          file_name?: string
+          format_version?: number
+          generated_at?: string
+          id?: never
+          imported_at?: string
+          kind?: string
+          meta?: NonNullable<Json>
+        }
+        Relationships: []
+      }
+      dk_match_candidates: {
+        Row: {
+          full_name: string
+          id: string
+          party: string | null
+          photo_url: string | null
+          slug: string
+          url: string
+        }
+        Insert: {
+          full_name: string
+          id: string
+          party?: string | null
+          photo_url?: string | null
+          slug: string
+          url: string
+        }
+        Update: {
+          full_name?: string
+          id?: string
+          party?: string | null
+          photo_url?: string | null
+          slug?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      dk_match_stances: {
+        Row: {
+          candidate_id: string
+          stance: string
+          statement_id: string
+        }
+        Insert: {
+          candidate_id: string
+          stance: string
+          statement_id: string
+        }
+        Update: {
+          candidate_id?: string
+          stance?: string
+          statement_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dk_match_stances_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "dk_match_candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dk_match_stances_statement_id_fkey"
+            columns: ["statement_id"]
+            isOneToOne: false
+            referencedRelation: "dk_match_statements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dk_match_statements: {
+        Row: {
+          id: string
+          sort_order: number
+          text: string
+          theme_id: string | null
+          theme_label: string | null
+          theme_slug: string | null
+        }
+        Insert: {
+          id: string
+          sort_order: number
+          text: string
+          theme_id?: string | null
+          theme_label?: string | null
+          theme_slug?: string | null
+        }
+        Update: {
+          id?: string
+          sort_order?: number
+          text?: string
+          theme_id?: string | null
+          theme_label?: string | null
+          theme_slug?: string | null
+        }
+        Relationships: []
+      }
+      dk_measure_themes: {
+        Row: {
+          measure_id: string
+          position: number
+          theme_id: string
+        }
+        Insert: {
+          measure_id: string
+          position: number
+          theme_id: string
+        }
+        Update: {
+          measure_id?: string
+          position?: number
+          theme_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dk_measure_themes_measure_id_fkey"
+            columns: ["measure_id"]
+            isOneToOne: false
+            referencedRelation: "dk_measures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dk_measure_themes_theme_id_fkey"
+            columns: ["theme_id"]
+            isOneToOne: false
+            referencedRelation: "dk_themes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dk_measures: {
+        Row: {
+          candidate_id: string
+          description: string
+          exact_quote: string
+          id: string
+          source_url: string
+          title: string
+          url: string
+        }
+        Insert: {
+          candidate_id: string
+          description: string
+          exact_quote: string
+          id: string
+          source_url: string
+          title: string
+          url: string
+        }
+        Update: {
+          candidate_id?: string
+          description?: string
+          exact_quote?: string
+          id?: string
+          source_url?: string
+          title?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dk_measures_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "dk_candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dk_syntheses: {
+        Row: {
+          candidate_id: string
+          id: number
+          key_figures: NonNullable<Json>
+          key_measure_ids: string[]
+          scope: string
+          summary: string
+          theme_id: string | null
+          url: string
+        }
+        Insert: {
+          candidate_id: string
+          id?: never
+          key_figures?: NonNullable<Json>
+          key_measure_ids?: string[]
+          scope: string
+          summary: string
+          theme_id?: string | null
+          url: string
+        }
+        Update: {
+          candidate_id?: string
+          id?: never
+          key_figures?: NonNullable<Json>
+          key_measure_ids?: string[]
+          scope?: string
+          summary?: string
+          theme_id?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dk_syntheses_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "dk_candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dk_syntheses_theme_id_fkey"
+            columns: ["theme_id"]
+            isOneToOne: false
+            referencedRelation: "dk_themes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dk_theme_map: {
+        Row: {
+          dk_theme_id: string
+          dk_theme_slug: string
+          theme_slug: string | null
+        }
+        Insert: {
+          dk_theme_id: string
+          dk_theme_slug: string
+          theme_slug?: string | null
+        }
+        Update: {
+          dk_theme_id?: string
+          dk_theme_slug?: string
+          theme_slug?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dk_theme_map_theme_slug_fkey"
+            columns: ["theme_slug"]
+            isOneToOne: false
+            referencedRelation: "themes"
+            referencedColumns: ["slug"]
+          },
+        ]
+      }
+      dk_themes: {
+        Row: {
+          id: string
+          label: string
+          slug: string
+          sort_order: number
+          url: string
+        }
+        Insert: {
+          id: string
+          label: string
+          slug: string
+          sort_order: number
+          url: string
+        }
+        Update: {
+          id?: string
+          label?: string
+          slug?: string
+          sort_order?: number
+          url?: string
+        }
+        Relationships: []
+      }
       election_reminders_sent: {
         Row: {
           milestone_key: string
@@ -1040,6 +1452,10 @@ export type Database = {
       clear_orientations: { Args: { p_token: string }; Returns: undefined }
       clear_themes: { Args: { p_token: string }; Returns: undefined }
       decode_html_entities: { Args: { s: string }; Returns: string }
+      dk_import: {
+        Args: { p_file_name: string; p_payload: Json }
+        Returns: Json
+      }
       get_election_results_for_round: {
         Args: { p_round: number }
         Returns: {
