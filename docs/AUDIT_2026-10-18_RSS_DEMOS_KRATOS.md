@@ -500,12 +500,12 @@ sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage
 | C1 | ✅ Fait en local : migration `dk_*` + `dk_imports` + `dk_candidate_links` + `dk_theme_map` | moi | — |
 | C2 | ✅ Décidé : agriculture → écologie, défense → international (alignés sur nos mots-clés presse) | moi | — |
 | C3 | ✅ Fait en local : RPC `dk_import`, testée avec le zip (import, réimport ignoré, export invalide refusé, remplacement complet) | moi | C1 |
-| C4 | ✅ Fait : fonction `ingest-demos-kratos` (non déployée) + workflow quotidien à blanc (compare au dernier import) ; import réel via « Run workflow → import » | moi | C3, A1 |
+| C4 | ✅ Fait : fonction `ingest-demos-kratos` (déployée le 18/10, v1) + workflow quotidien à blanc (compare au dernier import) ; import réel via « Run workflow → import » | moi | C3, A1 |
 | C5 | Candidats : rattacher les 12 communs ; créer les 11 absents en non publiés | moi + toi (validation) | C3 |
 | C6 | Attribution « Propulsé par Demos Kratos » + écran Sources (licence, date d'import) | moi | C3 |
 | C9 | Copier les photos des candidats DK dans notre Storage à l'import (leur serveur limite les requêtes et n'envoie pas d'en-tête CORS : photos lentes ou absentes, inutilisables dans l'image de partage) | moi | C4 |
 | C7 | Demander à DK : citation ou `measureIds` qui justifient chaque position du Match | toi | — |
-| C8 | Mise en prod (migration puis 1er import), puis publication des candidats | moi + toi | C3–C6 |
+| C8 | ✅ Mise en prod faite le 18/10 : migration (appliquée en 5 morceaux, `dk_import` collée dans l'éditeur SQL : l'outil MCP bloque sur les `delete`), 1er import (27 thèmes, 23 candidats, 4 116 mesures, 277 synthèses, 883 affinités, 41 affirmations, 315 positions, 12 candidats reliés). Reste : publication des candidats | moi + toi | C3–C6 |
 
 ### D. Match v2 (spécification en 4.6)
 | # | Tâche | Qui | Dépend de |
