@@ -381,6 +381,69 @@ ailleurs obtient, avec le total brut, Mélenchon 1er (+10 sur 32 comparées) dev
 désaccords » et un % (50 + 50 × score). Garder la mention « peu de données » sous 5
 comparaisons. Recalibrer k quand l'export change (simulation à scripter). Indiquer dans
 l'infobulle que le calcul est propre à CAP 2027 et diffère de celui de demos-kratos.fr.
+(Version finale : voir la spécification ci-dessous.)
+
+#### Spécification : règles d'équité du Match
+
+Paramètres choisis par simulation (`scripts/match_fairness_sim.py`, export du 16/10).
+À stocker dans `app_config` pour les ajuster sans nouvelle version de l'app ; relancer le
+script à chaque nouvel export.
+
+**1. Candidat « jouable »** : au moins **15 affirmations** positionnées **et** au moins
+**10 thèmes** distincts (sur les 18 thèmes du Match).
+- Aujourd'hui : 10 jouables. Non jouables : Gabriel Attal (13 affirmations, 10 thèmes),
+  Olivier Becht (13 / 7), Clara Egger (9 / 3).
+- Un candidat non jouable n'est **pas noté du tout** (ses positions sont ignorées), ce
+  qui évite un classement sur 2 ou 3 sujets.
+- Calcul côté serveur à chaque import du fichier `match` (vue `match_candidates` :
+  nb d'affirmations, nb de thèmes, `playable`, `playable_since`), croisé avec
+  `candidates.is_published`.
+
+**2. Score** (ta logique de points, amortie et équilibrée) :
+- points : +1 d'accord, −1 désaccord, ±0,5 si le candidat est « plutôt » pour/contre ;
+  passer ou « non abordé » = 0, et l'affirmation n'est pas comptée ;
+- poids d'une affirmation = 1/√(nombre d'affirmations de son thème), ce qui ramène les
+  institutions de 20 % à 11 % du score ;
+- score = Σ poids × points / (Σ poids + **8**) ; affichage 50 + 50 × score en %, avec
+  « +7 · 12 accords, 5 désaccords » en détail.
+- Une simple moyenne par thème a été testée : **moins bonne** (fidélité 90 % contre
+  97 %), car un thème à une seule affirmation pèse alors autant que les 8 des
+  institutions.
+
+**3. Paquet de cartes adaptatif** (au lieu du hasard) : la carte suivante est celle qui
+profite le plus aux candidats jouables **les moins comparés** jusque-là, avec un bonus si
+son thème est nouveau pour eux, plus un léger aléa. Les cartes sans aucun candidat
+jouable positionné ne sont pas proposées.
+
+**4. Déblocage du classement** : affiché quand **chaque candidat jouable a au moins 6
+comparaisons sur au moins 3 thèmes**. Avant : « Encore quelques cartes pour un résultat
+équitable », avec une barre de progression. Résultat simulé : **8 cartes en médiane, 11
+pour 90 % des joueurs** (contre 17 et 23 avec un ordre au hasard).
+
+**5. Écran de résultats, rubrique « Pas encore assez d'informations pour le Match »** :
+liste des non-jouables avec leur couverture (« 13 affirmations, 7 thèmes sur 18 ») et
+« Son programme n'aborde pas encore assez de sujets pour une comparaison équitable »,
+plus un lien vers sa fiche et la page Demos Kratos.
+
+**6. Retour dans le Match : « Nouveaux choix disponibles »**
+- Le client stocke pour chaque réponse `{statementId: {answer, textHash}}`, ainsi que
+  `lastMatchVersion` (`meta.contentHash`) et `lastPlayable` (liste des jouables).
+- À l'ouverture de l'app ou du Match, si la version a changé :
+  - **nouvelles affirmations** non répondues et touchant au moins un jouable → badge
+    « N nouveaux choix disponibles » ; la reprise ne propose que celles-ci ;
+  - **candidat devenu jouable** → « Gabriel Attal rejoint le Match ». Les affirmations
+    étant communes, les réponses déjà données comptent tout de suite pour lui. On ne
+    propose que les cartes où il est positionné et qui n'ont pas encore de réponse ;
+  - **affirmation reformulée** (`textHash` différent) → reposée (« affirmation
+    reformulée ») ;
+  - **affirmation supprimée** → la réponse est retirée ; **position modifiée** → le
+    score est recalculé, car il est calculé en direct à partir des positions courantes ;
+  - **candidat redevenu non jouable** → il passe dans la rubrique « Pas encore assez
+    d'informations ».
+- Badge « Nouveau » sur l'entrée du Match, et en option un push après import
+  (`push-broadcast`, type `match_update`, dans le canal « Mises à jour candidats »,
+  désactivable) : « Le Match s'enrichit : 5 nouveaux choix · Gabriel Attal rejoint le
+  Match ».
 
 `candidate_match_propositions` devient inutile pour le Match. Le `Comparateur.tsx`
 actuel, qui s'en sert aussi, passera sur les mesures, synthèses et affinités DK (4.5).
