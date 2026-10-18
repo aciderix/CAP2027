@@ -358,6 +358,30 @@ seul candidat** (`candidate_match_propositions.candidate_id`). Le score d'un can
    justifient chaque position (leur méthode les a déjà). On pourrait alors afficher
    « Pourquoi ? » sous chaque résultat, avec la citation du programme.
 
+**Garder notre formule (points +1 / −1) avec les données DK ? Oui, ajustée.** La
+licence porte sur les données, pas sur le calcul. Mais avec des affirmations communes et
+une couverture inégale (9 à 35 sujets sur 41 selon le candidat), le **total brut**
+favorise mécaniquement les candidats qui couvrent beaucoup de sujets. Simulation sur
+l'export du 16/10 : 20 000 électeurs aléatoires et 400 « clones » par candidat (un clone
+répond exactement comme le candidat).
+
+| Calcul | Électeurs aléatoires : part de 1ers (idéal 7,7 % chacun) | Clone → son candidat bien 1er |
+|---|---|---|
+| Total brut (+1/−1) | 2,1 % à 13,0 % (favorise les couvertures larges) | 83 % (Le Pen 26 %, Becht 60 %) |
+| Méthode DK | 2,8 % à 16,1 % (favorise les couvertures faibles) | 92 % (Dupont-Aignan 34 %) |
+| **Points ÷ (comparées + 12)** | **4,2 % à 10,6 %** | **96 %** |
+| Points ÷ (comparées + 8) | 3,6 % à 12,3 % | 97 % |
+
+Exemple : un électeur identique à Clara Egger sur ses 9 sujets et « pour » partout
+ailleurs obtient, avec le total brut, Mélenchon 1er (+10 sur 32 comparées) devant Egger
+(+9 sur 9).
+
+→ Garder les points (+1 / −1, et ±0,5 pour « plutôt »), mais **classer sur points ÷
+(nb comparées + k)** avec k ≈ 10. On peut toujours afficher « +7 · 12 accords, 5
+désaccords » et un % (50 + 50 × score). Garder la mention « peu de données » sous 5
+comparaisons. Recalibrer k quand l'export change (simulation à scripter). Indiquer dans
+l'infobulle que le calcul est propre à CAP 2027 et diffère de celui de demos-kratos.fr.
+
 `candidate_match_propositions` devient inutile pour le Match. Le `Comparateur.tsx`
 actuel, qui s'en sert aussi, passera sur les mesures, synthèses et affinités DK (4.5).
 
