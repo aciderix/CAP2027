@@ -12,6 +12,10 @@ Required env:
     SUPABASE_URL              public, ok in workflow file
     SUPABASE_PUBLISHABLE_KEY  public anon key, ok in workflow file
     INGEST_FROM_XML_TOKEN     shared secret, MUST be a GitHub secret
+
+Optional env:
+    DRY_RUN=1                 fetch every feed and check the token, but
+                              POST nothing: no write to the database.
 """
 
 from __future__ import annotations
@@ -140,10 +144,28 @@ def post_xml(supabase_url: str, slug: str, token: str, xml: bytes) -> tuple[int,
             return r.status, {"raw": body.decode("utf-8", errors="replace")[:500]}
 
 
+def check_token(supabase_url: str, token: str) -> bool:
+    """Vérifie le jeton sans rien écrire : sur un slug inexistant, la fonction
+    répond 404 « source not found » si le jeton est bon, 401 sinon (le contrôle
+    du jeton passe avant toute lecture ou écriture)."""
+    try:
+        post_xml(supabase_url, "__dry_run_token_check__", token, b"<rss/>")
+    except urllib.error.HTTPError as e:
+        return e.code == 404
+    return False
+
+
 def main() -> int:
     supabase_url = env("SUPABASE_URL").rstrip("/")
     publishable_key = env("SUPABASE_PUBLISHABLE_KEY")
     ingest_token = env("INGEST_FROM_XML_TOKEN")
+    dry_run = os.environ.get("DRY_RUN") == "1"
+
+    if dry_run:
+        ok = check_token(supabase_url, ingest_token)
+        print(f"DRY RUN — no POST. Ingest token {'accepted' if ok else 'REJECTED'} by ingest-from-xml.")
+        if not ok:
+            return 1
 
     try:
         sources = list_sources(supabase_url, publishable_key)
@@ -182,6 +204,9 @@ def main() -> int:
             break
         if xml is None:
             summary.append({"slug": slug, "fetch_error": " | ".join(errors)})
+            continue
+        if dry_run:
+            summary.append({"slug": slug, "dry_run": True, "bytes": len(xml), "items": xml.count(b"<item") + xml.count(b"<entry")})
             continue
 
         try:
