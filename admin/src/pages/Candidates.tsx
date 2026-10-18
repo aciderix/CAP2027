@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Loader2, Upload, X, Save } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Upload, X, Save, ExternalLink } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SubResourceList, type FieldSpec } from '../components/SubResourceList';
 
@@ -35,6 +35,24 @@ async function listParties() {
   if (error) throw error;
   return (data ?? []) as Party[];
 }
+// Candidats suivis par Demos Kratos (export importé chaque jour). Une fiche
+// y est reliée automatiquement quand son slug est identique : programme,
+// comparateur et Match de l'app en dépendent.
+interface DkCandidate { slug: string; measure_count: number; official_site_url: string | null; url: string; }
+async function listDkCandidates() {
+  const { data, error } = await supabase
+    .from('dk_candidates').select('slug, measure_count, official_site_url, url');
+  if (error) throw error;
+  return new Map(((data ?? []) as DkCandidate[]).map((d) => [d.slug, d]));
+}
+
+function DkBadge({ dk }: { dk: DkCandidate | undefined }) {
+  if (!dk) return <span className="ml-2 text-[9px] uppercase tracking-widest bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold">Hors Demos Kratos</span>;
+  return dk.measure_count > 0
+    ? <span className="ml-2 text-[9px] uppercase tracking-widest bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">Demos Kratos · {dk.measure_count} mesures</span>
+    : <span className="ml-2 text-[9px] uppercase tracking-widest bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded font-bold">Demos Kratos · programme à venir</span>;
+}
+
 async function listThemes() {
   const { data, error } = await supabase
     .from('themes').select('id, name, slug').order('order_index');
@@ -47,6 +65,7 @@ export function Candidates() {
   const list = useQuery({ queryKey: ['admin', 'candidates'], queryFn: listCandidates });
   const parties = useQuery({ queryKey: ['admin', 'parties'], queryFn: listParties });
   const themes = useQuery({ queryKey: ['admin', 'themes'], queryFn: listThemes });
+  const dk = useQuery({ queryKey: ['admin', 'dkCandidates'], queryFn: listDkCandidates });
   const [editing, setEditing] = useState<Candidate | 'new' | null>(null);
 
   const remove = useMutation({
@@ -81,6 +100,7 @@ export function Candidates() {
                 {!c.is_published && (
                   <span className="ml-2 text-[9px] uppercase tracking-widest bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">Brouillon</span>
                 )}
+                {dk.data && <DkBadge dk={dk.data.get(c.slug)} />}
               </div>
               <div className="text-xs text-slate-500 truncate">{c.parties?.name ?? '—'} · /{c.slug}</div>
             </div>
@@ -105,6 +125,7 @@ export function Candidates() {
           candidate={editing === 'new' ? null : editing}
           parties={parties.data ?? []}
           themes={themes.data ?? []}
+          dkBySlug={dk.data ?? null}
           onClose={() => setEditing(null)}
           onSaved={() => qc.invalidateQueries({ queryKey: ['admin', 'candidates'] })}
         />
@@ -113,23 +134,35 @@ export function Candidates() {
   );
 }
 
-type Tab = 'profile' | 'aliases' | 'bio' | 'programs' | 'proposals' | 'affairs' | 'boussole';
+// Le Match (ex-Boussole) utilise désormais les affirmations Demos Kratos :
+// candidate_match_propositions n'est plus éditée ici.
+type Tab = 'profile' | 'aliases' | 'bio' | 'programs' | 'proposals' | 'affairs';
 const TABS: { k: Tab; label: string }[] = [
   { k: 'profile', label: 'Profil' },
   { k: 'aliases', label: 'Alias' },
   { k: 'bio', label: 'Biographie' },
-  { k: 'programs', label: 'Programme (long)' },
-  { k: 'proposals', label: 'Propositions' },
+  { k: 'programs', label: 'Programme long (facultatif)' },
+  { k: 'proposals', label: 'Propositions (facultatif)' },
   { k: 'affairs', label: 'Affaires' },
-  { k: 'boussole', label: 'Boussole' },
 ];
 
+function OptionalNote() {
+  return (
+    <p className="text-xs bg-sky-50 text-sky-800 border border-sky-100 rounded-lg p-2 mb-3">
+      Facultatif : le programme affiché dans l'app (écran Programmes, comparateur, Match, onglet
+      « Prog. » de la fiche) vient de Demos Kratos et se met à jour seul. Ce que vous saisissez ici
+      s'affiche en plus.
+    </p>
+  );
+}
+
 function CandidateEditor({
-  candidate, parties, themes, onClose, onSaved,
+  candidate, parties, themes, dkBySlug, onClose, onSaved,
 }: {
   candidate: Candidate | null;
   parties: Party[];
   themes: Theme[];
+  dkBySlug: Map<string, DkCandidate> | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -240,12 +273,6 @@ function CandidateEditor({
     { kind: 'array-text', key: 'source_urls', label: 'URLs sources', placeholder: 'https://…' },
     { kind: 'number', key: 'order_index', label: 'Ordre' },
   ];
-  const boussoleFields: FieldSpec[] = [
-    { kind: 'select', key: 'theme_id', label: 'Thème', required: true, options: themeOpts },
-    { kind: 'textarea', key: 'text', label: 'Proposition (1-2 phrases)', required: true, rows: 3 },
-    { kind: 'checkbox', key: 'is_active', label: 'Active dans le test' },
-    { kind: 'number', key: 'order_index', label: 'Ordre' },
-  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -297,6 +324,7 @@ function CandidateEditor({
                   <option value="F">Féminin</option>
                 </select>
               </label>
+              {dkBySlug && <DkStatus dk={dkBySlug.get(form.slug || computedSlug)} />}
               <label className="flex flex-col gap-1 col-span-2">
                 <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Parti</span>
                 <select value={form.party_id ?? ''} onChange={(e) => set('party_id', e.target.value || null)} className="input">
@@ -336,6 +364,15 @@ function CandidateEditor({
                   className="input font-mono text-sm"
                 />
                 <span className="text-[10px] text-slate-400">Affiché sur la fiche après le parti. Idéalement vers l'agenda des meetings.</span>
+                {!form.website_url && dkBySlug?.get(form.slug || computedSlug)?.official_site_url && (
+                  <button
+                    type="button"
+                    onClick={() => set('website_url', dkBySlug.get(form.slug || computedSlug)!.official_site_url)}
+                    className="self-start text-[11px] font-bold text-accent hover:underline"
+                  >
+                    Utiliser le site indiqué par Demos Kratos : {dkBySlug.get(form.slug || computedSlug)!.official_site_url}
+                  </button>
+                )}
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Ordre</span>
@@ -390,7 +427,8 @@ function CandidateEditor({
                   }}
                 />
               )}
-              {tab === 'programs' && (
+              {tab === 'programs' && (<>
+                <OptionalNote />
                 <SubResourceList
                   parentId={cid}
                   config={{
@@ -404,8 +442,9 @@ function CandidateEditor({
                     emptyText: 'Aucun chapitre de programme. Ajoutez-en un par thème pour la fiche détaillée.',
                   }}
                 />
-              )}
-              {tab === 'proposals' && (
+              </>)}
+              {tab === 'proposals' && (<>
+                <OptionalNote />
                 <SubResourceList
                   parentId={cid}
                   config={{
@@ -418,7 +457,7 @@ function CandidateEditor({
                     subLabel: (r) => r.themes?.name ?? null,
                   }}
                 />
-              )}
+              </>)}
               {tab === 'affairs' && (
                 <SubResourceList
                   parentId={cid}
@@ -433,25 +472,35 @@ function CandidateEditor({
                   }}
                 />
               )}
-              {tab === 'boussole' && (
-                <SubResourceList
-                  parentId={cid}
-                  config={{
-                    table: 'candidate_match_propositions',
-                    parentKey: 'candidate_id',
-                    title: 'Propositions Boussole',
-                    fields: boussoleFields,
-                    labelKey: 'text',
-                    selectExpr: '*, themes(id, name, color)',
-                    subLabel: (r) => r.themes?.name ?? null,
-                    defaultValues: { is_active: true },
-                  }}
-                />
-              )}
             </>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+function DkStatus({ dk }: { dk: DkCandidate | undefined }) {
+  if (!dk) {
+    return (
+      <p className="col-span-2 text-xs bg-slate-50 text-slate-600 border border-slate-200 rounded-lg p-2">
+        Aucun candidat Demos Kratos n'a ce slug : pas de programme, de comparateur ni de Match pour cette
+        fiche. Si le candidat est sur demos-kratos.fr, donnez à la fiche le même slug que l'adresse de sa
+        page (demos-kratos.fr/candidats/<b>slug</b>/) : le lien se fait alors tout seul.
+      </p>
+    );
+  }
+  return (
+    <p className="col-span-2 text-xs bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-lg p-2 flex flex-wrap items-center gap-x-2">
+      <span>
+        Reliée à Demos Kratos (même slug) :{' '}
+        {dk.measure_count > 0
+          ? <>programme de <b>{dk.measure_count} mesures</b>, utilisé par l'écran Programmes, le comparateur et le Match.</>
+          : <>programme pas encore analysé ; il apparaîtra automatiquement.</>}
+      </span>
+      <a href={dk.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-bold hover:underline">
+        Voir sur demos-kratos.fr <ExternalLink className="w-3 h-3" />
+      </a>
+    </p>
   );
 }

@@ -8,12 +8,13 @@ name: Ingest external RSS sources
 # Sources are picked up automatically if their fetch_via_github
 # column is true in the news_sources table — toggle it in the admin
 # console, no workflow changes needed.
+#
+# La version planifiée tourne désormais dans le dépôt public
+# aciderix/cap2027-privacy (runners gratuits, sans quota) avec son propre
+# secret INGEST_FROM_XML_TOKEN. Ici, déclenchement manuel uniquement,
+# pour éviter une double ingestion.
 
 on:
-  schedule:
-    # Every 30 minutes, offset by 4 min so we don't pile up at xx:00
-    # and we land before the notify-after-ingest cron at xx:16.
-    - cron: "4,34 * * * *"
   workflow_dispatch:
 
 permissions:

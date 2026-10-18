@@ -341,7 +341,7 @@ export default function App() {
                  <div onClick={() => setExplorerView('comparateur')} className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 flex flex-col justify-center min-h-[120px] hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden group">
                     <div className="relative z-10 pr-6 sm:pr-10">
                       <h3 className="text-[18px] sm:text-xl font-bold text-[#102a5c] mb-1 sm:mb-2 group-hover:text-[#1a56db] transition-colors">Comparateur thématique</h3>
-                      <p className="text-[13px] sm:text-[14px] text-slate-600 leading-relaxed max-w-[90%] sm:max-w-none">Sélectionnez une thématique (écologie, économie...) et opposez directement les propositions des candidats majeurs.</p>
+                      <p className="text-[13px] sm:text-[14px] text-slate-600 leading-relaxed max-w-[90%] sm:max-w-none">Choisissez 2 ou 3 candidats : proximité de leurs programmes, thèmes privilégiés et face-à-face thème par thème.</p>
                     </div>
                     <Scale className="absolute right-[-10px] sm:right-2 top-1/2 -translate-y-1/2 w-[100px] h-[100px] sm:w-[130px] sm:h-[130px] text-emerald-50 pointer-events-none transition-transform group-hover:scale-105" strokeWidth={2.5} />
                  </div>

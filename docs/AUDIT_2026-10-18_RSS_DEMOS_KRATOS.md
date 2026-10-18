@@ -1,0 +1,549 @@
+# Audit du 18/10/2026 — builds, ingest RSS, partenariat Demos Kratos
+
+Constat et plan. Tout a été fait **en lecture seule** sur la prod (Supabase MCP en
+`select` uniquement, GitHub en lecture). Aucune donnée de prod n'a été modifiée.
+
+---
+
+## 1. Dernier APK + AAB et branche `main`
+
+| | |
+|---|---|
+| Dernier build signé réussi | `Android package (signed APK + AAB)` run **#12**, 30/09/2026 |
+| Branche / commit | `claude/blissful-cori-88ld94` @ `f161ee6` (« fix(ci): update Android SDK setup action ») |
+| `main` | `f57d7dd` = merge de la PR #27 de cette même branche |
+| Contenu | **Identique** : `main^{tree}` = `f161ee6^{tree}` = `ea78923` |
+
+→ `main` correspond exactement au code du dernier APK/AAB.
+
+À nettoyer : `.github/workflows/android-release.yml` (ancien AAB seul, remplacé par
+`android-package.yml`) échoue **à chaque push** en 0 s (le nom affiché est le chemin du
+fichier, signe d'un workflow que GitHub n'arrive pas à démarrer). Il fait doublon : le
+supprimer.
+
+---
+
+## 2. « Ingest external RSS sources » en échec
+
+Deux problèmes distincts.
+
+### 2.1 Depuis le 17/10 : les jobs ne démarrent plus (bloquant)
+
+- Les runs échouent en **2-3 s**, `runner_id = 0`, aucun log (HTTP 404) : aucun runner
+  n'a été attribué, le script Python ne s'exécute même pas.
+- Aucun run du keep-alive (lun/mer/ven) depuis le 30/09.
+- Le dépôt est **privé** → les minutes Actions sont décomptées du quota du compte.
+
+C'est la signature d'un blocage **facturation / quota Actions** (« The job was not started
+because… spending limit / payment »). À vérifier sur
+<https://github.com/settings/billing> → *Actions* (minutes consommées, moyen de paiement,
+budget). Les jobs étant facturés à la minute entière, un cron toutes les 30 min revient à
+environ 1 min par run.
+
+Options :
+1. Régler la facturation / relever le budget (immédiat).
+2. Espacer le cron (`4,34 * * * *` → toutes les 2 h) : X/Le Figaro n'ont pas besoin de
+   30 min.
+3. À terme, sortir l'ingestion de GitHub Actions (voir 2.3).
+
+### 2.2 Depuis le 21/08 : le flux X de Mélenchon est mort (ton intuition était juste)
+
+| Source `fetch_via_github` | URL | État |
+|---|---|---|
+| `jean-luc-melenchon` (twitter) | `https://nitter.net/JLMelenchon/rss` | **HTTP 410 Gone**, `last_fetch_error = "no items parsed"`, dernier article le 20/08 |
+| `lefigaro-politique` | `https://www.lefigaro.fr/rss/figaro_politique.xml` | OK (200), mais plus ingéré depuis le 11/10 faute de runner |
+
+Le script ne sort en erreur que si **toutes** les sources échouent ; Le Figaro masquait
+donc la panne X depuis deux mois.
+
+Alternatives testées le 18/10 :
+
+| Option | Résultat | Avis |
+|---|---|---|
+| `nitter.net` | 410 | mort |
+| `xcancel.com` (`rss.xcancel.com`) | 302 → 451 | service RSS suspendu |
+| `nitter.poast.org`, `nitter.privacydev.net` | 502 | morts |
+| `lightbrd.com`, `nitter.space`, `shitter.thepixora.com` | 403 (anti-bot) | inutilisables |
+| **`nitter.meowing.monster`** | **200, posts du 17/10** | marche **aujourd'hui**, mais instance bénévole : fragile |
+| Bluesky `melenchon.bsky.social` | compte vide (0 post), ce n'est pas lui | non |
+| **API X officielle (pay-per-use)** | ≈ 0,005 $ par post lu | fiable : ~1,5 $/mois pour 1 compte, ~20 $/mois pour 13 candidats |
+| **`melenchon.fr/feed/`** (blog) | 200, RSS valide | contenu long, pas des tweets, mais stable |
+
+Recommandation :
+- **Court terme** (1 ligne en base, via l'admin) : `rss_url` → 
+  `https://nitter.meowing.monster/JLMelenchon/rss`.
+- **Robustesse** : fait, voir 2.3 (miroirs de repli, et le job échoue dès qu'une source
+  échoue).
+- **Durable** : API X pay-per-use avec `since_id` (seuls les nouveaux posts sont
+  facturés) quand il y aura plusieurs candidats à suivre. Ajouter aussi le blog
+  `melenchon.fr/feed/` et `lafranceinsoumise.fr/feed/` en sources `press` / candidat.
+
+### 2.3 `nitter.meowing.monster` validé de bout en bout (en local)
+
+Test du 18/10 : le flux meowing passe par le vrai code du workflow (`fetch_rss`) puis par
+la vraie fonction `ingest-from-xml` (servie par Deno sur la base Supabase locale).
+
+- 18 posts insérés, tous rattachés au candidat (`article_candidates`), 32 tags thème,
+  13 images, 7 RT. Au 2e passage : 0 inséré (la déduplication par guid fonctionne).
+- **Sortie identique à l'ancien nitter.net** : guid = id du post, `/status/<id>#m`,
+  auteur `@handle`, images `/pic/media%2F…`, préfixe `RT by @…:`. Seule différence : des
+  liens en `http://`.
+- Côté app, `rewriteNitterUrl` / `rewriteNitterImage` (`src/lib/twitter.ts`) donnent
+  bien `https://x.com/JLMelenchon/status/…` et `https://pbs.twimg.com/media/…` (testé).
+  **Aucune mise à jour de l'APK n'est nécessaire.**
+- `scripts/ingest_external_rss.py` :
+  - **repli automatique** pour les sources `kind=twitter` : `rss_url`, puis
+    `NITTER_MIRRORS` (meowing en premier). Une réponse sans `<item>`/`<entry>` (page
+    anti-bot, suspension) compte comme un échec. Les miroirs doivent garder « nitter. »
+    dans le nom d'hôte, sinon la regex de l'app ne réécrit pas les liens.
+  - **le run échoue dès qu'une source échoue**, et non plus seulement si toutes
+    échouent. Les autres sources sont quand même ingérées.
+  - Tests en local : `nitter.net` (410) bascule sur meowing → exit 0 ; compte
+    inexistant → les 4 miroirs échouent → exit 1.
+
+### 2.4 Faire tourner les runners sur le dépôt public `cap2027-privacy` ?
+
+Techniquement oui : sur un dépôt **public**, les runners GitHub standard sont gratuits et
+sans quota. Points à connaître :
+
+1. **Logs publics** : n'importe qui peut lire les logs des runs. Les secrets sont
+   masqués automatiquement, mais tout ce que le script affiche est visible (slugs, URLs
+   RSS, compteurs : rien de sensible ici). Pour Demos Kratos, n'afficher que des
+   compteurs et le hash, jamais le contenu du listing FTP.
+2. **Secrets** : à recréer dans ce dépôt (`INGEST_FROM_XML_TOKEN`, `DK_FTP_*`). Ne
+   déclencher que sur `schedule` / `workflow_dispatch` : les PR de forks ne reçoivent
+   pas les secrets.
+3. **Désactivation après 60 jours sans activité** du dépôt public : prévoir un job
+   mensuel qui réactive les workflows via l'API (`PUT
+   /repos/{owner}/{repo}/actions/workflows/{id}/enable`), sinon l'ingestion s'arrêtera
+   en silence.
+4. **Conditions GitHub** : les CGU d'Actions excluent les usages « sans rapport avec le
+   logiciel du dépôt ». Faire tourner le pipeline de CAP 2027 depuis le dépôt de la page
+   de confidentialité est une zone grise, et l'ingestion actuelle depuis le dépôt privé
+   l'est aussi. Risque faible à ce volume. Le plus propre : présenter ce dépôt public
+   comme la **partie publique du projet CAP 2027** (page de confidentialité + scripts de
+   collecte), README à l'appui.
+5. Le code (`ingest_external_rss.py`, futur import DK) devient public : il ne contient
+   aucun secret, la clé publishable Supabase étant publique par nature.
+
+### 2.5 Autres sources en erreur (hors GitHub)
+
+- `politis` : `https://www.politis.fr/feed/` renvoie un 301 vers la page d'accueil, le
+  flux a disparu. Trouver la nouvelle URL ou désactiver la source.
+- `lepoint-24h` : 403 DataDome (anti-bot), y compris depuis notre IP. Candidat à
+  `fetch_via_github`, sans garantie.
+
+---
+
+## 3. Supabase en local
+
+Installé dans la session (CLI 2.121.0 + Docker) :
+
+```sh
+supabase start          # Studio http://127.0.0.1:54323 · API http://127.0.0.1:54321
+                        # DB postgresql://postgres:postgres@127.0.0.1:54322/postgres
+```
+
+- `supabase/config.toml` ajouté (`supabase init` ; analytics désactivé, inutile en local).
+- Les **71 migrations** du dépôt s'appliquent de bout en bout.
+- **Dérive schéma corrigée** : `public.decode_html_entities(text)` existait en prod sans
+  aucune migration (création manuelle), et le rejeu cassait sur
+  `20260530000000_harden_function_search_path.sql`. Ajout de
+  `20260529235959_create_decode_html_entities.sql` : définition identique à la prod, en
+  `create or replace`, donc sans effet si elle est appliquée en prod.
+- ⚠️ Les migrations contiennent l'URL de **prod** en dur (cron `ingest-rss`,
+  `notify-after-ingest`, `fetch-parrainages`, triggers `push-broadcast`). En local, après
+  un `supabase db reset`, lancer :
+  ```sql
+  select cron.unschedule(jobid) from cron.job;
+  ```
+  (Les secrets Vault sont absents en local, donc la prod répondrait de toute façon 401.
+  À terme : lire l'URL des fonctions depuis `app_config` ou Vault plutôt qu'en dur.)
+- Données : la base locale ne contient que les seeds des migrations (4 candidats contre
+  13 en prod). Pour un miroir des tables de référence :
+  `supabase db dump --data-only` avec le mot de passe DB (Settings → Database), à ne
+  pas committer.
+
+---
+
+## 4. Partenariat Demos Kratos
+
+### 4.1 Accès FTPS
+
+- `filou.o2switch.net:21`, FTPS explicite. **Non joignable depuis mon conteneur** : le
+  proxy sortant ne laisse passer que du HTTPS. L'analyse ci-dessous porte sur le zip
+  envoyé (export du 16/10/2026 08:15 UTC).
+- Identifiants : **non committés**, même dans un dépôt privé (ils resteraient dans
+  l'historique git, les forks et les clones). À créer en secrets :
+  - GitHub → Settings → Secrets → Actions : `DK_FTP_HOST`, `DK_FTP_USER`, `DK_FTP_PASSWORD`
+  - et/ou `supabase secrets set DK_FTP_…` si l'import tourne dans une Edge Function.
+
+### 4.2 Format de l'export (très propre)
+
+Le dossier contient un `README.md` qui décrit le format, et deux JSON horodatés en UTC
+(nom trié = ordre chronologique, ignorer les `.part`) :
+
+| Fichier | Contenu (export du 16/10) |
+|---|---|
+| `demos-kratos-programmes-<ts>.json` (5 Mo) | 27 thèmes, 23 candidats, **4 116 mesures**, 277 synthèses, 883 affinités |
+| `demos-kratos-match-<ts>.json` (55 Ko) | 41 affirmations, 13 candidats, 315 positions (`FOR` / `RATHER_FOR` / `RATHER_AGAINST` / `AGAINST`) |
+
+- `meta.contentHash` (SHA-256) : **c'est le checksum demandé**. Un nouveau fichier n'est
+  déposé que si les données changent ; on compare le hash à celui du dernier import.
+  (Je n'ai pas réussi à le recalculer de mon côté, la canonicalisation n'est pas
+  documentée, mais le README demande juste de le comparer.)
+- Chaque fichier est **complet** (pas un différentiel) : remplacer intégralement.
+- `id` UUID **stables** entre exports, à utiliser comme clés. Les `slug` peuvent changer.
+- **Chaque objet porte une `url`** vers sa page sur demos-kratos.fr. Une mesure pointe
+  par exemple vers
+  `…/candidats/jean-luc-melenchon/themes/institutions/#mesure-<id>` : le lien « propulsé
+  par » vers la page exacte se fait sans calcul.
+- Qualité vérifiée : 0 mesure sans citation exacte, sans source ou sans description.
+  274 mesures sont multi-thèmes (3 thèmes au plus) ; 1 786 sources sont des PDF.
+- **Licence CC BY-NC 4.0** : attribution obligatoire (`meta.attribution`), **pas d'usage
+  commercial**. Aucune pub ni achat intégré dans CAP 2027 aujourd'hui, donc compatible.
+  À reconfirmer avec lui si l'app se monétise un jour, dons compris.
+
+### 4.3 Correspondance avec notre base
+
+**Candidats** (clé : `slug` au 1er import, puis `dk_id` stocké) :
+- 12 en commun : philippe, retailleau, lisnard, melenchon, dupont-aignan, asselineau,
+  philippot, ruffin, guedj, tondelier, batho, arthaud.
+- Seulement chez nous : `clementine-autain`.
+- Seulement chez DK (11) : roussel (231 mesures), branco (708), le-pen (106), attal
+  (37), becht (44), egger (14), zemmour, bertrand, bouamrane, mikolajczak, dubuisson
+  (0 mesure pour ces cinq derniers).
+  → les créer en `is_published = false`, à valider dans l'admin.
+- Note : en prod, **les 13 candidats sont actuellement `is_published = false`**.
+
+**Thèmes** : 27 chez DK, 15 chez nous, sans « Europe » côté DK. Proposition :
+- garder **la taxonomie DK** pour tout ce qui vient de DK (mesures, synthèses,
+  comparateur, Match) ;
+- **table de correspondance** `dk_theme → theme` pour relier programmes et actualités
+  (les 15 thèmes restent pour le tagging presse) :
+
+| Nos thèmes | Thèmes DK |
+|---|---|
+| economie | economie, fiscalite, industrie, agriculture* |
+| social | travail, retraites, logement, politique-familiale, protection-sociale |
+| ecologie | environnement, energie, protection-animale (agriculture*) |
+| sante / education / securite / justice / immigration / sport | identiques |
+| institutions | institutions, outre-mer |
+| international | international, defense (europe : pas d'équivalent DK) |
+| technologie | numerique, science |
+| culture | culture |
+| transports | transport |
+| — | non-classe (ignoré) |
+
+\* à trancher.
+
+**Ce que l'export remplace ou enrichit :**
+
+| Export DK | Chez nous aujourd'hui | Proposition |
+|---|---|---|
+| `measures[]` | `candidate_proposals` (5 lignes en seed, 0 en prod) | tables `dk_*` (titre, description, **citation exacte**, source, lien DK) |
+| `syntheses[]` (global + par thème, chiffres clés) | `candidate_programs` (1 ligne en prod) | synthèses DK affichées dans la fiche programme |
+| `affinities[]` (paires × thème, barre vert/jaune/rouge, commentaire, points) | rien | nouveau comparateur (4.5) |
+| `match` (41 affirmations communes + 4 niveaux de position) | `candidate_match_propositions` (20 affirmations propres à Mélenchon, pas de positions) | Boussole v2 : affirmations communes × positions, bien plus juste |
+
+### 4.4 Architecture d'import proposée
+
+```
+FTPS DK ──(job planifié)──► liste du dossier ─► dernier *.json (hors .part)
+                                 │ nom ≠ dernier importé ?
+                                 ▼
+                     téléchargement + meta.contentHash ≠ dernier hash ?
+                                 ▼
+                 validation : format, version == 1, counts == longueur des tableaux
+                                 ▼
+          RPC dk_import(payload jsonb) : UNE transaction, remplacement complet
+                                 ▼
+                 dk_imports (fichier, hash, generatedAt, counts, statut)
+```
+
+- **Schéma** : tables miroir préfixées `dk_` (`dk_themes`, `dk_candidates`, `dk_measures`
+  + `dk_measure_themes`, `dk_syntheses`, `dk_affinities` avec `points jsonb`,
+  `dk_match_statements`, `dk_match_stances`, `dk_imports`) ; `candidates.dk_id uuid unique`
+  et `dk_theme_map`. Le miroir reste séparé des tables éditées à la main dans l'admin :
+  un import n'écrase jamais une saisie manuelle.
+- **Où faire tourner le job** :
+  1. **GitHub Actions + Python** (`ftplib.FTP_TLS` gère le FTPS explicite nativement),
+     1 fois par jour : environ 30 min/mois. Recommandé, **une fois la facturation Actions
+     réglée**. Le job POSTe le JSON vers une Edge Function `ingest-demos-kratos`
+     (même modèle que `ingest-from-xml`, avec token).
+  2. Edge Function Supabase + pg_cron : FTP en TCP depuis Deno (seuls les ports 25/587
+     sont bloqués), sans dépendance à GitHub, mais FTPS moins éprouvé en Deno. Limites :
+     2 s de CPU par requête, 150 s de durée en plan gratuit. Il faut donc laisser le gros
+     du travail à la RPC SQL.
+  3. Le plus simple pour tout le monde : demander à DK d'exposer le même dossier en
+     **HTTPS** (répertoire protégé par mot de passe sur son hébergement o2switch).
+     Lisible alors depuis une Edge Function, un script ou un navigateur.
+- RLS : lecture `anon` sur les `dk_*` publiés, écriture via le service role uniquement.
+- Notifs : éventuellement « Programme de X mis à jour » quand ses mesures changent (diff
+  par candidat entre deux imports).
+
+### 4.5 Comparateur : analyse du code de demos-kratos.fr/comparateur
+
+Page Next.js (composant client `ComparateurClient`, graphiques Recharts). Les données
+sont injectées dans la page : pas d'API, ce sont exactement les tableaux de l'export.
+
+1. **Sélection** : grille de cartes candidat (case à cocher, avatar, parti), **3
+   candidats maximum**. Les candidats sans programme sont grisés (« Programme non
+   disponible »). La sélection est dans l'URL (`?c=slug,slug`), donc partageable.
+2. **« Proximité — Ces candidats sont-ils proches ? »** : une carte par paire
+   (« A ↔ B »), barre tricolore (vert convergentes / jaune différentes / rouge
+   opposées, détail en % au toucher), commentaire global, puis une barre par thème triée
+   par convergence décroissante (badge du thème → ancre vers le détail).
+3. **« Vue d'ensemble — Répartition des mesures par thème (%) »** : barres horizontales,
+   une couleur par candidat, triables par candidat, avec le nombre de mesures en
+   infobulle.
+4. **« Le face-à-face — Thème par thème, qui vous convainc ? »** : carrousel par thème
+   (swipe, flèches clavier, pastilles, barre de progression « x thèmes tranchés »). Pour
+   chaque thème : commentaire de la paire, sujets avec pictogramme de verdict (✓
+   convergents, ≈ plutôt convergents, ≠ divergents, ✗ opposés), et pour chaque candidat
+   la synthèse + 3 mesures phares + « Tout voir → ». Boutons « Le plus convaincant » /
+   « Sans préférence » ; à la fin, **« Votre verdict »** (ou « Égalité »), décompte des
+   thèmes et récap « Vos choix, thème par thème ». Rien n'est enregistré côté serveur.
+
+Notre `Comparateur.tsx` actuel affiche seulement les `candidate_match_propositions` par
+thème (vue cartes/colonnes). Les données DK permettent de reprendre les blocs 1, 2 et 4
+presque tels quels. Le 4 est déjà pensé pour le mobile (swipe), donc il colle à l'app
+Capacitor.
+
+### 4.6 Le Match : ce que l'export DK apporte
+
+**Aujourd'hui** (`PoliticalMatchGame.tsx`) : chaque carte est une proposition **d'un
+seul candidat** (`candidate_match_propositions.candidate_id`). Le score d'un candidat est
++1 / −1 sur **ses seules** cartes. Conséquences :
+- un « pour » sur une carte Mélenchon ne dit rien des autres candidats, même s'ils ont
+  une position sur le sujet ;
+- le résultat dépend du nombre de cartes par candidat (seul Mélenchon en a, 20) : la
+  comparaison n'est pas équitable ;
+- le score est un total brut (« +7 »), pas un pourcentage.
+
+**Chez DK** (`demos-kratos-match-*.json` + méthode publiée sur
+<https://demos-kratos.fr/swipe/methode/>) :
+- **41 affirmations communes**, neutres et clivantes (3 par thème au plus), sur
+  lesquelles **chaque candidat est positionné** : `FOR` / `RATHER_FOR` /
+  `RATHER_AGAINST` / `AGAINST`, ou rien s'il n'aborde pas le sujet (13 candidats, 315
+  positions, de 9 à 35 affirmations couvertes selon le candidat). Chaque position
+  s'appuie sur un passage du programme ; en cas de doute, « non abordé ».
+- L'utilisateur répond **pour / contre / passer**, exactement **nos trois gestes de
+  swipe** (droite / gauche / haut). L'interface actuelle se garde telle quelle.
+- Accord par affirmation :
+
+  | Réponse \ candidat | pour | plutôt pour | plutôt contre | contre |
+  |---|---|---|---|---|
+  | Pour | 100 % | 75 % | 25 % | 0 % |
+  | Contre | 0 % | 25 % | 75 % | 100 % |
+
+- Score = (somme des accords + 3 × 0,5) ÷ (nb d'affirmations comparées + 3) : trois
+  affirmations « fantômes » à 50 % évitent qu'un candidat à 2/2 affiche 100 %. Sont
+  exclues les affirmations passées ou que le candidat n'aborde pas. En dessous de 5
+  comparaisons : mention « peu de données ». Tri par score, puis par nombre de
+  comparaisons.
+
+**Verdict : oui, c'est exactement ce qui manque au Match.** Plan :
+1. Tables `dk_match_statements` / `dk_match_stances` alimentées par l'import (fichier
+   `match`, indépendant du fichier `programmes`).
+2. `PoliticalMatchGame` : les cartes deviennent les affirmations, le calcul devient
+   celui de DK, avec un affichage en % et la couverture « x/41 » par candidat. Bonus :
+   le candidat le plus proche **par thème** (`statement.theme`).
+3. Nouvelle clé de stockage des réponses (`cap2027.matchAnswers.v3`) : les réponses
+   v2 portent sur les anciens id, on repart de zéro (l'app n'est pas encore publiée).
+4. Adapter l'image de partage (`shareBoussoleResults`) au score en %.
+5. Mentions : « Affirmations et positions : Demos Kratos » + lien `meta.url`, et lien
+   « Comment est calculé le score ? » vers `meta.methodologyUrl`.
+6. **À demander à DK** : ajouter dans `stances[]` la citation ou les `measureIds` qui
+   justifient chaque position (leur méthode les a déjà). On pourrait alors afficher
+   « Pourquoi ? » sous chaque résultat, avec la citation du programme.
+
+**Garder notre formule (points +1 / −1) avec les données DK ? Oui, ajustée.** La
+licence porte sur les données, pas sur le calcul. Mais avec des affirmations communes et
+une couverture inégale (9 à 35 sujets sur 41 selon le candidat), le **total brut**
+favorise mécaniquement les candidats qui couvrent beaucoup de sujets. Simulation sur
+l'export du 16/10 : 20 000 électeurs aléatoires et 400 « clones » par candidat (un clone
+répond exactement comme le candidat).
+
+| Calcul | Électeurs aléatoires : part de 1ers (idéal 7,7 % chacun) | Clone → son candidat bien 1er |
+|---|---|---|
+| Total brut (+1/−1) | 2,1 % à 13,0 % (favorise les couvertures larges) | 83 % (Le Pen 26 %, Becht 60 %) |
+| Méthode DK | 2,8 % à 16,1 % (favorise les couvertures faibles) | 92 % (Dupont-Aignan 34 %) |
+| **Points ÷ (comparées + 12)** | **4,2 % à 10,6 %** | **96 %** |
+| Points ÷ (comparées + 8) | 3,6 % à 12,3 % | 97 % |
+
+Exemple : un électeur identique à Clara Egger sur ses 9 sujets et « pour » partout
+ailleurs obtient, avec le total brut, Mélenchon 1er (+10 sur 32 comparées) devant Egger
+(+9 sur 9).
+
+→ Garder les points (+1 / −1, et ±0,5 pour « plutôt »), mais **classer sur points ÷
+(nb comparées + k)** avec k ≈ 10. On peut toujours afficher « +7 · 12 accords, 5
+désaccords » et un % (50 + 50 × score). Garder la mention « peu de données » sous 5
+comparaisons. Recalibrer k quand l'export change (simulation à scripter). Indiquer dans
+l'infobulle que le calcul est propre à CAP 2027 et diffère de celui de demos-kratos.fr.
+(Version finale : voir la spécification ci-dessous.)
+
+#### Spécification : règles d'équité du Match
+
+Paramètres choisis par simulation (`scripts/match_fairness_sim.py`, export du 16/10).
+À stocker dans `app_config` pour les ajuster sans nouvelle version de l'app ; relancer le
+script à chaque nouvel export.
+
+**1. Candidat « jouable »** : au moins **13 affirmations** positionnées **et** au moins
+**10 thèmes** distincts (sur les 18 thèmes du Match). Seuil validé le 18/10 : à 13 plutôt
+que 15, l'équité est meilleure (écart 4,3 pts contre 5,2), la fidélité est de 98 % et le
+classement se débloque en 9 cartes (médiane).
+- Aujourd'hui : 11 jouables, dont Gabriel Attal (13 affirmations, 10 thèmes).
+  Non jouables : Olivier Becht (13 / 7 thèmes), Clara Egger (9 / 3).
+- Un candidat non jouable n'est **pas noté du tout** (ses positions sont ignorées), ce
+  qui évite un classement sur 2 ou 3 sujets.
+- Calcul côté serveur à chaque import du fichier `match` (vue `match_candidates` :
+  nb d'affirmations, nb de thèmes, `playable`, `playable_since`), croisé avec
+  `candidates.is_published`.
+
+**2. Score** (ta logique de points, amortie et équilibrée) :
+- points : +1 d'accord, −1 désaccord, ±0,5 si le candidat est « plutôt » pour/contre ;
+  passer ou « non abordé » = 0, et l'affirmation n'est pas comptée ;
+- poids d'une affirmation = 1/√(nombre d'affirmations de son thème), ce qui ramène les
+  institutions de 20 % à 11 % du score ;
+- score = Σ poids × points / (Σ poids + **8**) ; affichage 50 + 50 × score en %, avec
+  « +7 · 12 accords, 5 désaccords » en détail.
+- Une simple moyenne par thème a été testée : **moins bonne** (fidélité 90 % contre
+  97 %), car un thème à une seule affirmation pèse alors autant que les 8 des
+  institutions.
+
+**3. Paquet de cartes adaptatif** (au lieu du hasard) : la carte suivante est celle qui
+profite le plus aux candidats jouables **les moins comparés** jusque-là, avec un bonus si
+son thème est nouveau pour eux, plus un léger aléa. Les cartes sans aucun candidat
+jouable positionné ne sont pas proposées.
+
+**4. Déblocage du classement** : affiché quand **chaque candidat jouable a au moins 6
+comparaisons sur au moins 3 thèmes**. Avant : « Encore quelques cartes pour un résultat
+équitable », avec une barre de progression. Résultat simulé : **9 cartes en médiane, 11
+pour 90 % des joueurs** (contre 17 et 23 avec un ordre au hasard).
+
+**5. Écran de résultats, rubrique « Pas encore assez d'informations pour le Match »** :
+liste des non-jouables avec leur couverture (« 13 affirmations, 7 thèmes sur 18 ») et
+« Son programme n'aborde pas encore assez de sujets pour une comparaison équitable »,
+plus un lien vers sa fiche et la page Demos Kratos.
+
+**6. Retour dans le Match : « Nouveaux choix disponibles »**
+- Le client stocke pour chaque réponse `{statementId: {answer, textHash}}`, ainsi que
+  `lastMatchVersion` (`meta.contentHash`) et `lastPlayable` (liste des jouables).
+- À l'ouverture de l'app ou du Match, si la version a changé :
+  - **nouvelles affirmations** non répondues et touchant au moins un jouable → badge
+    « N nouveaux choix disponibles » ; la reprise ne propose que celles-ci ;
+  - **candidat devenu jouable** → par exemple « Olivier Becht rejoint le Match ». Les affirmations
+    étant communes, les réponses déjà données comptent tout de suite pour lui. On ne
+    propose que les cartes où il est positionné et qui n'ont pas encore de réponse ;
+  - **affirmation reformulée** (`textHash` différent) → reposée (« affirmation
+    reformulée ») ;
+  - **affirmation supprimée** → la réponse est retirée ; **position modifiée** → le
+    score est recalculé, car il est calculé en direct à partir des positions courantes ;
+  - **candidat redevenu non jouable** → il passe dans la rubrique « Pas encore assez
+    d'informations ».
+- Badge « Nouveau » sur l'entrée du Match, et en option un push après import
+  (`push-broadcast`, type `match_update`, dans le canal « Mises à jour candidats »,
+  désactivable) : « Le Match s'enrichit : 5 nouveaux choix · Olivier Becht rejoint le
+  Match ».
+
+`candidate_match_propositions` devient inutile pour le Match. Le `Comparateur.tsx`
+actuel, qui s'en sert aussi, passera sur les mesures, synthèses et affinités DK (4.5).
+
+### 4.7 Attribution « Propulsé par Demos Kratos »
+
+- Sur chaque bloc issu de DK (mesure, synthèse, paire du comparateur, Match) : mention
+  « Propulsé par Demos Kratos » qui ouvre **l'`url` de l'objet** (page exacte sur
+  demos-kratos.fr), via `openLink` (navigateur in-app).
+- Sur chaque mesure : **citation exacte + lien vers la source officielle**
+  (`exactQuote`, `sourceUrl`), comme le demande le README.
+- Écran « À propos / Sources » : texte `meta.attribution`, licence CC BY-NC 4.0 avec
+  lien, date du dernier import (`generatedAt`).
+- Bouton « Signaler une erreur » → page de la mesure sur DK (son lien « Signaler »).
+
+---
+
+## 5. Liste des tâches (mise à jour du 18/10)
+
+**Déjà fait** : diagnostic RSS ; miroirs nitter de repli + échec visible + mode à blanc ;
+Supabase local ; jeton `INGEST_FROM_XML_TOKEN` renouvelé (Supabase + GitHub) ; workflows
+RSS, contrôle Demos Kratos et keepalive dans `cap2027-privacy` (branche
+`claude/friendly-ritchie-nhjj0m`, testés : RSS à blanc OK, FTPS et export DK valides) ;
+spécification du Match + script de simulation.
+
+### A. Infra & GitHub
+Correctif déployé le 18/10 : `ingest-from-xml` v4 (préfiltre des mots-clés, 3 040 → 650 ms de CPU
+sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage du Figaro).
+
+| # | Tâche | Qui | Dépend de |
+|---|---|---|---|
+| A1 | ✅ Fait : `cap2027-privacy` fusionné dans `main` (RSS toutes les 30 min, contrôle DK quotidien, keepalive) ; premiers runs réels OK | moi | — |
+| A2 | ✅ Fait : source X Mélenchon → `https://nitter.meowing.monster/JLMelenchon/rss` | moi | — |
+| A3 | Vérifier facturation / quota Actions du compte : **les builds APK/AAB tournent dans le dépôt privé** | toi | — |
+| A4 | ✅ Fait : `android-release.yml` supprimé | moi | — |
+| A5 | Fusionner la branche CAP2027 dans `main` (config Supabase locale, migration `decode_html_entities`, script RSS, docs) | toi (PR) | — |
+| A6 | `diag-fcm` / `diag-parrainages` : déjà neutralisées (répondent 410 « Gone », aucun code actif). Suppression possible depuis le dashboard Supabase (Edge Functions), purement cosmétique | toi (facultatif) | — |
+| A7 | Optionnel : URLs de prod en dur dans les migrations → `app_config` ou Vault | moi | — |
+
+### B. X / Twitter & sources presse
+| # | Tâche | Qui | Dépend de |
+|---|---|---|---|
+| B1 | Surveiller meowing (le run passe au rouge s'il tombe) ; plan B : API X à l'usage (~1,5 $/mois par compte) | moi | A1 |
+| B2 | Comptes X (et YouTube) des autres candidats : seul Mélenchon en a un. Format : X `https://nitter.meowing.monster/<compte>/rss` (type twitter), YouTube `https://www.youtube.com/feeds/videos.xml?channel_id=<id>` (type youtube), candidat renseigné | toi (admin, Sources RSS) | A1 |
+| B3 | **Alias des candidats** : seuls ceux de Mélenchon existent, donc aucun article de presse n'est rattaché aux 12 autres | toi + moi | — |
+| B4 | Sources mortes : Politis (flux supprimé), Le Point (anti-bot) → nouvelle URL ou désactivation | toi | — |
+| B5 | Optionnel : blogs `melenchon.fr/feed/`, `lafranceinsoumise.fr/feed/` | moi | — |
+
+### C. Données Demos Kratos (socle du Match et du comparateur)
+| # | Tâche | Qui | Dépend de |
+|---|---|---|---|
+| C1 | ✅ Fait en local : migration `dk_*` + `dk_imports` + `dk_candidate_links` + `dk_theme_map` | moi | — |
+| C2 | ✅ Décidé : agriculture → écologie, défense → international (alignés sur nos mots-clés presse) | moi | — |
+| C3 | ✅ Fait en local : RPC `dk_import`, testée avec le zip (import, réimport ignoré, export invalide refusé, remplacement complet) | moi | C1 |
+| C4 | ✅ Fait : fonction `ingest-demos-kratos` (déployée le 18/10, v1) + workflow quotidien qui **importe** chaque export nouveau et valide (depuis le 18/10 ; « Run workflow → à blanc » pour un simple contrôle) | moi | C3, A1 |
+| C5 | ✅ 11 fiches créées (non publiées) + 8 partis ; lien fiche ↔ DK automatique (trigger `trg_candidates_dk_link`, même slug) ; sites officiels repris de DK ; brouillons de bio (14 fiches) à relire dans l'admin | moi + toi (relecture, photos, publication) | C3 |
+| C6 | Attribution « Propulsé par Demos Kratos » + écran Sources (licence, date d'import) | moi | C3 |
+| C9 | ❌ Abandonné : les photos viendront de nos fiches (admin). Les photos DK ne servent qu'aux candidats sans fiche publiée | — | — |
+| C7 | Demander à DK : citation ou `measureIds` qui justifient chaque position du Match | toi | — |
+| C8 | ✅ Mise en prod faite le 18/10 : migration (appliquée en 5 morceaux, `dk_import` collée dans l'éditeur SQL : l'outil MCP bloque sur les `delete`), 1er import (27 thèmes, 23 candidats, 4 116 mesures, 277 synthèses, 883 affinités, 41 affirmations, 315 positions, 12 candidats reliés). Reste : publication des candidats | moi + toi | C3–C6 |
+
+### D. Match v2 (spécification en 4.6)
+| # | Tâche | Qui | Dépend de |
+|---|---|---|---|
+| D1 | ✅ Fait (calcul côté app, `src/lib/matchScoring.ts`) : jouable si ≥ 13 affirmations et ≥ 10 thèmes ; seuils dans `app_config.match.params` | moi | C3 |
+| D2 | ✅ Fait, identique à la simulation Python sur 201 jeux de réponses | moi | D1 |
+| D3 | ✅ Fait (testé : verrou visible à 6 cartes, classement débloqué à 13) | moi | D1 |
+| D4 | ✅ Rubrique « Pas encore assez d'informations » faite ; reste le détail « non abordé » par thème | moi | D2 |
+| D5 | ✅ Fait et testé (nouvel export simulé) sauf la notification push `match_update` | moi | D2 |
+| D6 | ✅ Fait | moi | D2 |
+| D7 | ❌ Pas d'automatisation : je relance `scripts/match_fairness_sim.py` à la main si un export change beaucoup le Match (nombre d'affirmations ou de candidats) et j'ajuste `app_config.match.params` | moi | C4 |
+
+### E. Comparateur v2 (inspiré de demos-kratos.fr, voir 4.5)
+| # | Tâche | Qui | Dépend de |
+|---|---|---|---|
+| E1 | ✅ Sélection de 2 à 3 candidats (sans programme : grisés), mémorisée sur l'appareil | moi | C3 |
+| E2 | ✅ « Ces candidats sont-ils proches ? » : barre convergentes / différentes / opposées par paire (bleu / gris / rouge, palette lisible par les daltoniens, valeurs écrites) + commentaire + détail par thème, qui ouvre le face-à-face | moi | E1 |
+| E3 | ✅ Répartition des mesures par thème : barres groupées triables + vue tableau | moi | E1 |
+| E4 | ✅ Face-à-face par thème (balayage, flèches, clavier) : sujets et verdicts par paire, synthèse, chiffres clés, 3 mesures phares, « le plus convaincant » / « sans préférence », verdict final ; choix gardés sur l'appareil | moi | E1 |
+| E5 | ✅ Fiche programme (depuis le comparateur) : vue d'ensemble, puis par thème synthèse + mesures (phares en tête), citation exacte, source officielle, lien DK (signaler une erreur), ouverte depuis le comparateur et en pleine page depuis l'écran Programmes (qui liste les programmes DK, et nos livrets `candidate_programs` quand ils existent) | moi | C3 |
+
+### G. Fiches et admin (18/10)
+| # | Tâche | Qui | État |
+|---|---|---|---|
+| G1 | Onglet « Prog. » de la fiche candidat alimenté par DK (vue d'ensemble, thèmes, mesures), propositions CAP 2027 en plus | moi | ✅ |
+| G2 | Admin : statut DK par fiche (liste + profil, suggestion du site officiel), onglet Boussole retiré, Programme long / Propositions marqués facultatifs | moi | ✅ (déployé avec l'admin) |
+| G3 | Relire les 14 brouillons de bio (sources et doutes : `bios_lot1.json`, `bios_lot2.json` de la session), ajouter les photos, publier | toi | à faire |
+| G4 | Alias des candidats (presse) : seul Mélenchon en a ; sans alias, les articles ne sont pas rattachés aux candidats | toi (admin) ou moi | à faire |
+| G5 | Fiche Le Pen : à mettre à jour après l'examen par la Cour de cassation (16/12/2026) | toi | à faire |
+| G6 | Mentions « Propulsé par Demos Kratos » : Match (jeu, résultats avec lien par candidat, carte d'accueil), écran Méthodologie et sources (licence, date d'export) ; déjà présentes dans comparateur, programmes et fiches | moi | ✅ |
+| G7 | Actualités : filtres réunis dans un panneau (tiroir mobile, colonne PC), filtres actifs visibles | moi | ✅ |
+| G8 | Alias : 39 candidats + 21 partis ajoutés (noms courants en nom complet seulement), 3 231 liens candidats et 3 253 liens partis ajoutés rétroactivement. Garde-fous : notification « Nouveau post de X » et auteur des posts X réservés au propriétaire du compte (score 100), pas aux candidats cités | moi | ✅ |
+| G9 | Notification « Le Match s'enrichit » (ingest-demos-kratos v2) quand un import ajoute des affirmations ou des candidats ; interrupteur dans l'admin (Config app), **à activer après la sortie de la nouvelle version** | moi (code) + toi (activation) | ✅ code, interrupteur éteint |
+
+### F. Livraison
+| # | Tâche | Qui | Dépend de |
+|---|---|---|---|
+| F1 | Build APK de test → tests → AAB → Play Console | moi (build) + toi (tests, publication) | A3, C8, D, E |
+
+**Ordre conseillé** : A1–A2 (tout de suite) → C1–C3 (socle des données) → D et E en
+parallèle → C8 → F1. B3 (alias) peut avancer à tout moment.

@@ -6,6 +6,7 @@
 // know the dates).
 
 import { useQuery } from '@tanstack/react-query';
+import type { MatchParams } from './matchScoring';
 import { supabase } from './supabase';
 
 export interface ElectionRound {
@@ -37,6 +38,8 @@ export interface AppConfigShape {
   'parrainages.source'?: ParrainagesSource;
   'election.results'?: ElectionResultsConfig;
   'admin.last_change'?: AdminLastChange;
+  /** Seuils du Match (cf. DEFAULT_MATCH_PARAMS) ; une clé absente garde sa valeur par défaut. */
+  'match.params'?: Partial<MatchParams>;
 }
 
 const CACHE_KEY = 'cap2027.appConfig.cache';

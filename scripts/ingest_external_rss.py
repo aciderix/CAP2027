@@ -12,6 +12,10 @@ Required env:
     SUPABASE_URL              public, ok in workflow file
     SUPABASE_PUBLISHABLE_KEY  public anon key, ok in workflow file
     INGEST_FROM_XML_TOKEN     shared secret, MUST be a GitHub secret
+
+Optional env:
+    DRY_RUN=1                 fetch every feed and check the token, but
+                              POST nothing: no write to the database.
 """
 
 from __future__ import annotations
@@ -35,6 +39,19 @@ PER_SOURCE_DELAY_S = 1.0  # be nice to upstream + edge function
 RSS_MAX_BYTES = 10 * 1024 * 1024  # 10 MB hard cap — reject unexpectedly large bodies
 
 _PRIVATE_IP_PREFIXES = ("127.", "10.", "169.254.", "192.168.", "::1", "fc", "fd")
+
+# Instances nitter de repli pour les sources kind=twitter : si l'instance de
+# rss_url tombe (nitter.net : HTTP 410 depuis le 21/08/2026), on essaie les
+# suivantes dans l'ordre. Elles servent le même RSS (guid = id du post, liens
+# /status/<id>#m, images /pic/...). Garder "nitter." dans le nom d'hôte :
+# l'app réécrit ces URLs vers x.com / pbs.twimg.com via une regex sur
+# "nitter." (src/lib/twitter.ts), déjà embarquée dans les APK publiés.
+NITTER_MIRRORS = (
+    "nitter.meowing.monster",
+    "nitter.net",
+    "nitter.poast.org",
+    "nitter.privacydev.net",
+)
 
 
 def _validate_rss_url(url: str) -> None:
@@ -60,7 +77,7 @@ def list_sources(supabase_url: str, key: str) -> list[dict[str, Any]]:
     url = (
         f"{supabase_url}/rest/v1/news_sources"
         "?fetch_via_github=eq.true&is_active=eq.true"
-        "&select=slug,name,rss_url"
+        "&select=slug,name,rss_url,kind"
     )
     req = urllib.request.Request(
         url,
@@ -87,6 +104,27 @@ def fetch_rss(rss_url: str) -> bytes:
     return data
 
 
+def feed_urls(src: dict[str, Any]) -> list[str]:
+    """rss_url, puis pour une source X la même URL sur chaque miroir nitter."""
+    url = src["rss_url"]
+    if src.get("kind") != "twitter":
+        return [url]
+    parsed = urllib.parse.urlparse(url)
+    if "nitter" not in (parsed.hostname or ""):
+        return [url]
+    return [url] + [
+        parsed._replace(scheme="https", netloc=host).geturl()
+        for host in NITTER_MIRRORS
+        if host != parsed.hostname
+    ]
+
+
+def has_items(xml: bytes) -> bool:
+    # Une instance morte ou bloquée répond souvent 200 avec une page HTML
+    # (anti-bot, suspension) : sans <item>/<entry>, on passe à la suivante.
+    return b"<item" in xml or b"<entry" in xml
+
+
 def post_xml(supabase_url: str, slug: str, token: str, xml: bytes) -> tuple[int, dict[str, Any]]:
     url = f"{supabase_url}/functions/v1/ingest-from-xml?source={urllib.parse.quote(slug)}"
     req = urllib.request.Request(
@@ -106,10 +144,28 @@ def post_xml(supabase_url: str, slug: str, token: str, xml: bytes) -> tuple[int,
             return r.status, {"raw": body.decode("utf-8", errors="replace")[:500]}
 
 
+def check_token(supabase_url: str, token: str) -> bool:
+    """Vérifie le jeton sans rien écrire : sur un slug inexistant, la fonction
+    répond 404 « source not found » si le jeton est bon, 401 sinon (le contrôle
+    du jeton passe avant toute lecture ou écriture)."""
+    try:
+        post_xml(supabase_url, "__dry_run_token_check__", token, b"<rss/>")
+    except urllib.error.HTTPError as e:
+        return e.code == 404
+    return False
+
+
 def main() -> int:
     supabase_url = env("SUPABASE_URL").rstrip("/")
     publishable_key = env("SUPABASE_PUBLISHABLE_KEY")
     ingest_token = env("INGEST_FROM_XML_TOKEN")
+    dry_run = os.environ.get("DRY_RUN") == "1"
+
+    if dry_run:
+        ok = check_token(supabase_url, ingest_token)
+        print(f"DRY RUN — no POST. Ingest token {'accepted' if ok else 'REJECTED'} by ingest-from-xml.")
+        if not ok:
+            return 1
 
     try:
         sources = list_sources(supabase_url, publishable_key)
@@ -124,21 +180,33 @@ def main() -> int:
     summary: list[dict[str, Any]] = []
     for src in sources:
         slug = src["slug"]
-        rss_url = src["rss_url"]
         print(f"\n=== {slug} ({src.get('name')}) ===")
-        print(f"  GET {rss_url}")
-        try:
-            _validate_rss_url(rss_url)
-            xml = fetch_rss(rss_url)
+        xml = None
+        errors: list[str] = []
+        for rss_url in feed_urls(src):
+            print(f"  GET {rss_url}")
+            try:
+                data = fetch_rss(rss_url)
+            except urllib.error.HTTPError as e:
+                errors.append(f"{rss_url}: HTTP {e.code}")
+                print(f"    FETCH FAIL: HTTP {e.code}")
+                continue
+            except Exception as e:
+                errors.append(f"{rss_url}: {e}")
+                print(f"    FETCH FAIL: {e}")
+                continue
+            if not has_items(data):
+                errors.append(f"{rss_url}: no <item>/<entry>")
+                print(f"    FETCH FAIL: {len(data):,} bytes, no <item>/<entry>")
+                continue
+            xml = data
             print(f"  fetched {len(xml):,} bytes")
-        except urllib.error.HTTPError as e:
-            err = f"HTTP {e.code}"
-            print(f"  FETCH FAIL: {err}")
-            summary.append({"slug": slug, "fetch_error": err})
+            break
+        if xml is None:
+            summary.append({"slug": slug, "fetch_error": " | ".join(errors)})
             continue
-        except Exception as e:
-            print(f"  FETCH FAIL: {e}")
-            summary.append({"slug": slug, "fetch_error": str(e)})
+        if dry_run:
+            summary.append({"slug": slug, "dry_run": True, "bytes": len(xml), "items": xml.count(b"<item") + xml.count(b"<entry")})
             continue
 
         try:
@@ -158,13 +226,14 @@ def main() -> int:
     print("\n=== Summary ===")
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 
-    # Exit non-zero only if every source failed — partial success is OK.
+    # Les sources qui marchent sont ingérées quoi qu'il arrive, mais le run
+    # passe en échec dès qu'une source échoue : l'ancienne règle (échec
+    # seulement si TOUT échoue) a masqué la mort de nitter.net pendant deux
+    # mois parce que Le Figaro, lui, répondait.
     failures = [s for s in summary if "fetch_error" in s or "post_error" in s]
-    if failures and len(failures) == len(summary):
-        print("All sources failed — exit 1")
-        return 1
     if failures:
-        print(f"{len(failures)}/{len(summary)} sources failed (partial success)")
+        print(f"{len(failures)}/{len(summary)} sources failed — exit 1")
+        return 1
     return 0
 
 

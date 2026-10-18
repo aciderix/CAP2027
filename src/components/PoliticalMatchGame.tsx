@@ -3,108 +3,59 @@ import { motion, useAnimation, PanInfo } from 'motion/react';
 import {
   ArrowLeft, ArrowRight, ArrowUp,
   CheckCircle, XCircle, HelpCircle,
-  RotateCcw, Trophy, ChevronRight, Share2, Star,
+  RotateCcw, Trophy, ChevronRight, Share2, Star, Sparkles, Lock,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from './ui/Button';
-import { supabase } from '../lib/supabase';
-import type { Tables } from '../lib/database.types';
 import { shareBoussoleResults, preloadShareImages, preloadCandidatePhotos, getLastShareTimings } from '../lib/share';
 import { shouldShowRatePrompt, openRateApp, markRateLater, markRateNever } from '../lib/rateApp';
+import { openLink } from '../lib/openLink';
+import { STABLE_STALE_MS } from '../lib/queryClient';
+import { useAppConfig } from '../lib/appConfig';
 import { InfoTip } from './ui/InfoTip';
+import { DkCredit } from './comparateurUi';
+import {
+  DEFAULT_MATCH_PARAMS, coverageByCandidate, isPlayable, nextStatement, scoreCandidates, textHash,
+  unlockProgress, type Answer, type CandidateResult, type Coverage, type MatchParams,
+} from '../lib/matchScoring';
+import {
+  MATCH_QUERY_KEY, fetchMatchData, loadSeen, loadStoredAnswers, restoreMatchStateIfMissing,
+  saveSeen, saveStoredAnswers, validAnswers, type MatchCandidate, type MatchData, type StoredAnswers,
+} from '../lib/matchData';
 
-type Stance = 'pour' | 'contre' | 'neutre';
 type Phase = 'tutorial' | 'loading' | 'resume_prompt' | 'game' | 'results' | 'error';
-
-interface ThemeLite {
-  slug: string;
-  name: string;
-  color: string | null;
-}
-
-interface PartyLite {
-  name: string | null;
-  abbreviation: string | null;
-  color: string | null;
-}
-
-interface CandidateLite {
-  id: string;
-  first_name: string;
-  last_name: string;
-  gender: string | null;
-  photo_url: string | null;
-  parties: PartyLite | null;
-}
-
-interface Proposition {
-  id: string;
-  text: string;
-  candidate_id: string;
-  theme: ThemeLite | null;
-}
-
-interface CandidateScore {
-  candidate: CandidateLite;
-  total: number;          // sum of +1 / 0 / -1
-  agree: number;
-  disagree: number;
-  neutral: number;
-  answered: number;       // out of totalProps
-  totalProps: number;
-}
+type Statement = MatchData['statements'][number];
 
 const TUTORIAL_DONE_KEY = 'cap2027.matchTutorialDone';
-const ANSWERS_KEY = 'cap2027.matchAnswers.v2';
 
-function loadAnswers(): Record<string, Stance> {
-  if (typeof window === 'undefined') return {};
-  try {
-    const raw = localStorage.getItem(ANSWERS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-// Mirror to Capacitor Preferences (native storage) so the answers
-// survive a WebView storage wipe, an Android backup/restore, or any
-// other event that might empty localStorage. localStorage stays the
-// fast read path; Preferences is a write-through backup.
-async function mirrorAnswersToPreferences(answers: Record<string, Stance>) {
-  try {
-    const { Capacitor } = await import('@capacitor/core');
-    if (!Capacitor.isNativePlatform()) return;
-    const { Preferences } = await import('@capacitor/preferences');
-    await Preferences.set({ key: ANSWERS_KEY, value: JSON.stringify(answers) });
-  } catch {
-    // best-effort
-  }
-}
-async function restoreAnswersFromPreferencesIfMissing(): Promise<void> {
-  if (typeof window === 'undefined') return;
-  try {
-    if (localStorage.getItem(ANSWERS_KEY)) return;
-    const { Capacitor } = await import('@capacitor/core');
-    if (!Capacitor.isNativePlatform()) return;
-    const { Preferences } = await import('@capacitor/preferences');
-    const { value } = await Preferences.get({ key: ANSWERS_KEY });
-    if (value) localStorage.setItem(ANSWERS_KEY, value);
-  } catch {
-    // best-effort
-  }
-}
-function saveAnswers(a: Record<string, Stance>) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(ANSWERS_KEY, JSON.stringify(a));
-  void mirrorAnswersToPreferences(a);
+interface Notice {
+  /** Affirmations nouvelles (ou reformulées) depuis la dernière partie. */
+  newChoices: number;
+  /** Candidats devenus jouables depuis la dernière partie. */
+  joined: string[];
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
+function fallbackPhoto(c: MatchCandidate) {
+  return c.gender === 'F' ? '/card_red.png' : '/card_blue.png';
+}
+
+// Photo du candidat, avec repli sur la vignette par défaut si elle ne charge
+// pas (photos demos-kratos.fr : serveur tiers, parfois limité en débit).
+function CandidatePhoto({ c }: { c: MatchCandidate }) {
+  return (
+    <img
+      decoding="async"
+      src={c.photoUrl || fallbackPhoto(c)}
+      alt=""
+      className="w-full h-full object-cover"
+      onError={(e) => {
+        const img = e.currentTarget;
+        if (img.dataset.fallback) return;
+        img.dataset.fallback = '1';
+        img.src = fallbackPhoto(c);
+      }}
+    />
+  );
 }
 
 export function PoliticalMatchGame({ onClose }: { onClose: () => void }) {
@@ -113,127 +64,119 @@ export function PoliticalMatchGame({ onClose }: { onClose: () => void }) {
       ? 'loading' : 'tutorial';
   const [phase, setPhase] = useState<Phase>(initialPhase);
   const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<MatchData | null>(null);
+  const [stored, setStored] = useState<StoredAnswers>(loadStoredAnswers);
+  const [current, setCurrent] = useState<Statement | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const queryClient = useQueryClient();
+  const appConfig = useAppConfig();
 
-  const [propositions, setPropositions] = useState<Proposition[]>([]);
-  const [candidates, setCandidates] = useState<CandidateLite[]>([]);
-  const [answers, setAnswers] = useState<Record<string, Stance>>(loadAnswers);
-  const [deck, setDeck] = useState<Proposition[]>([]);   // remaining cards (shuffled)
-  const [deckIndex, setDeckIndex] = useState(0);
+  // Seuils réglables depuis app_config ('match.params') sans nouvelle version.
+  const params: MatchParams = useMemo(
+    () => ({ ...DEFAULT_MATCH_PARAMS, ...(appConfig.data?.['match.params'] ?? {}) }),
+    [appConfig.data],
+  );
 
-  // Load propositions + candidates when entering loading phase
+  // Tout ce qui découle des données et des réponses.
+  const view = useMemo(() => {
+    if (!data) return null;
+    const coverage = coverageByCandidate(data.statements, data.stances);
+    const playable = data.candidates.filter((c) => isPlayable(coverage.get(c.id), params));
+    const playableIds = new Set(playable.map((c) => c.id));
+    const notPlayable = data.candidates
+      .filter((c) => !playableIds.has(c.id))
+      .map((c) => ({ candidate: c, coverage: coverage.get(c.id) ?? { statements: 0, themes: 0 } }))
+      .sort((a, b) => b.coverage.statements - a.coverage.statements);
+    // Seules comptent les affirmations sur lesquelles un candidat jouable est positionné.
+    const relevant = data.statements.filter((s) =>
+      Object.keys(data.stances[s.id] ?? {}).some((cid) => playableIds.has(cid)));
+    const answers = validAnswers(stored, relevant);
+    const remaining = relevant.filter((s) => !(s.id in answers));
+    const results = scoreCandidates(data.statements, data.stances, answers, [...playableIds], params);
+    return {
+      coverage, playable, playableIds, notPlayable, relevant, answers, remaining, results,
+      unlock: unlockProgress(results, params),
+    };
+  }, [data, stored, params]);
+
+  // Chargement : données partagées avec la carte d'accueil (même queryKey).
   useEffect(() => {
     if (phase !== 'loading') return;
     let cancelled = false;
     (async () => {
-      // Restore from native Preferences first if localStorage was
-      // cleared (Android backup/restore, manual wipe, etc.).
-      await restoreAnswersFromPreferencesIfMissing();
-      const [propsRes, candRes] = await Promise.all([
-        supabase
-          .from('candidate_match_propositions')
-          .select('id, text, candidate_id, themes(slug, name, color)')
-          .eq('is_active', true),
-        supabase
-          .from('candidates')
-          .select('id, first_name, last_name, gender, photo_url, parties(name, abbreviation, color)')
-          .eq('is_published', true),
-      ]);
-      if (cancelled) return;
-      if (propsRes.error || candRes.error) {
-        setError(propsRes.error?.message || candRes.error?.message || 'Erreur inconnue');
+      await restoreMatchStateIfMissing();
+      let d: MatchData;
+      try {
+        d = await queryClient.fetchQuery({ queryKey: MATCH_QUERY_KEY, queryFn: fetchMatchData, staleTime: STABLE_STALE_MS });
+      } catch (e) {
+        if (cancelled) return;
+        setError((e as Error)?.message ?? 'Erreur inconnue');
         setPhase('error');
         return;
       }
-      const props: Proposition[] = (propsRes.data ?? []).map((row) => ({
-        id: row.id,
-        text: row.text,
-        candidate_id: row.candidate_id,
-        theme: row.themes as unknown as ThemeLite | null,
-      }));
-      const cands = (candRes.data ?? []) as unknown as CandidateLite[];
-      setPropositions(props);
-      setCandidates(cands);
-
-      // Warm the CORS image cache early so the share image is
-      // ready instantly when the user reaches the Results screen.
-      preloadCandidatePhotos(cands);
-
-      const current = loadAnswers();
-      setAnswers(current);
-      const remaining = props.filter((p) => !(p.id in current));
-      const answeredAny = Object.keys(current).length > 0;
-
-      if (props.length === 0) {
-        setError('Aucune proposition disponible.');
-        setPhase('error');
-      } else if (remaining.length === 0) {
-        setPhase('results');
-      } else if (answeredAny) {
-        setDeck(shuffle(remaining));
-        setDeckIndex(0);
-        setPhase('resume_prompt');
-      } else {
-        setDeck(shuffle(remaining));
-        setDeckIndex(0);
-        setPhase('game');
-      }
+      if (cancelled) return;
+      const st = loadStoredAnswers();
+      setStored(st);
+      setData(d);
+      preloadCandidatePhotos(d.candidates.filter((c) => c.photoIsOurs).map((c) => ({ photo_url: c.photoUrl, gender: c.gender })));
     })();
     return () => { cancelled = true; };
-  }, [phase]);
+  }, [phase, queryClient]);
 
-  function recordAnswer(propId: string, stance: Stance) {
-    setAnswers((prev) => {
-      const next = { ...prev, [propId]: stance };
-      saveAnswers(next);
-      return next;
-    });
-    if (deckIndex >= deck.length - 1) {
-      setPhase('results');
-    } else {
-      setDeckIndex((i) => i + 1);
+  // Une fois les données là : annonce des nouveautés, puis aiguillage.
+  useEffect(() => {
+    if (phase !== 'loading' || !data || !view) return;
+    const seen = loadSeen();
+    if (seen && seen.version !== data.version) {
+      const before = new Set(seen.playable);
+      const joined = view.playable.filter((c) => !before.has(c.id)).map((c) => c.fullName);
+      if (view.remaining.length > 0 || joined.length > 0) setNotice({ newChoices: view.remaining.length, joined });
     }
+    saveSeen({ version: data.version, playable: view.playable.map((c) => c.id) });
+
+    if (view.relevant.length === 0) {
+      setError("Le Match n'est pas encore disponible : aucun candidat n'est assez positionné.");
+      setPhase('error');
+    } else if (view.remaining.length === 0) {
+      setPhase('results');
+    } else if (Object.keys(view.answers).length > 0) {
+      setPhase('resume_prompt');
+    } else {
+      startGame();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, data, view]);
+
+  function pickNext(answers: Record<string, Answer>): Statement | null {
+    if (!data || !view) return null;
+    const remaining = view.relevant.filter((s) => !(s.id in answers));
+    return nextStatement(remaining, data.stances, answers, data.statements, view.playableIds) as Statement | null;
+  }
+
+  function startGame() {
+    const next = view ? pickNext(view.answers) : null;
+    setCurrent(next);
+    setPhase(next ? 'game' : 'results');
+  }
+
+  function recordAnswer(statementId: string, answer: Answer) {
+    if (!view) return;
+    const st = view.relevant.find((s) => s.id === statementId);
+    if (!st) return;
+    const nextStored = { ...stored, [statementId]: { a: answer, h: textHash(st.text) } };
+    saveStoredAnswers(nextStored);
+    setStored(nextStored);
+    const next = pickNext({ ...view.answers, [statementId]: answer });
+    if (next) setCurrent(next);
+    else setPhase('results');
   }
 
   function resetAll() {
-    saveAnswers({});
-    setAnswers({});
+    saveStoredAnswers({});
+    setStored({});
+    setNotice(null);
     setPhase('loading');
   }
-
-  function continueGame() {
-    setPhase('game');
-  }
-
-  function jumpToResults() {
-    setPhase('results');
-  }
-
-  const scores: CandidateScore[] = useMemo(() => {
-    if (phase !== 'results' && phase !== 'resume_prompt') return [];
-    const byCandidate = new Map<string, Proposition[]>();
-    for (const p of propositions) {
-      if (!byCandidate.has(p.candidate_id)) byCandidate.set(p.candidate_id, []);
-      byCandidate.get(p.candidate_id)!.push(p);
-    }
-    const list: CandidateScore[] = candidates.map((c) => {
-      const props = byCandidate.get(c.id) ?? [];
-      let total = 0, agree = 0, disagree = 0, neutral = 0, answered = 0;
-      for (const p of props) {
-        const s = answers[p.id];
-        if (!s) continue;
-        answered++;
-        if (s === 'pour') { total++; agree++; }
-        else if (s === 'contre') { total--; disagree++; }
-        else { neutral++; }
-      }
-      return { candidate: c, total, agree, disagree, neutral, answered, totalProps: props.length };
-    });
-    list.sort((a, b) => b.total - a.total);
-    return list;
-  }, [phase, candidates, propositions, answers]);
-
-  const totalAnswered = Object.keys(answers).length;
-  const totalProps = propositions.length;
 
   if (phase === 'tutorial') {
     return (
@@ -250,15 +193,6 @@ export function PoliticalMatchGame({ onClose }: { onClose: () => void }) {
     );
   }
 
-  if (phase === 'loading') {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 px-6 gap-3">
-        <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-[#102a5c] animate-spin" />
-        <div className="text-sm text-slate-500">Chargement des propositions...</div>
-      </div>
-    );
-  }
-
   if (phase === 'error') {
     return (
       <div className="flex flex-col items-center justify-center py-12 px-6 text-center gap-4">
@@ -270,26 +204,50 @@ export function PoliticalMatchGame({ onClose }: { onClose: () => void }) {
     );
   }
 
+  if (phase === 'loading' || !data || !view) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-6 gap-3">
+        <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-[#102a5c] animate-spin" />
+        <div className="text-sm text-slate-500">Chargement des affirmations...</div>
+      </div>
+    );
+  }
+
+  const totalAnswered = Object.keys(view.answers).length;
+  const totalProps = view.relevant.length;
+
   if (phase === 'resume_prompt') {
-    const remaining = totalProps - totalAnswered;
+    const remaining = view.remaining.length;
     return (
       <div className="flex flex-col items-center justify-center py-8 px-4 text-center gap-5">
         <div className="w-16 h-16 rounded-full bg-[#102a5c]/10 flex items-center justify-center">
-          <ChevronRight className="w-8 h-8 text-[#102a5c]" />
+          {notice ? <Sparkles className="w-8 h-8 text-[#102a5c]" /> : <ChevronRight className="w-8 h-8 text-[#102a5c]" />}
         </div>
         <div>
-          <h3 className="text-xl font-bold text-[#102a5c]">Reprendre le test ?</h3>
+          <h3 className="text-xl font-bold text-[#102a5c]">
+            {notice ? 'Le Match s’enrichit' : 'Reprendre le test ?'}
+          </h3>
+          {notice && (
+            <div className="text-sm text-slate-600 mt-2 max-w-sm flex flex-col gap-1">
+              {notice.newChoices > 0 && (
+                <p><strong>{notice.newChoices}</strong> nouveau{notice.newChoices > 1 ? 'x' : ''} choix disponible{notice.newChoices > 1 ? 's' : ''}.</p>
+              )}
+              {notice.joined.length > 0 && (
+                <p>{notice.joined.join(', ')} {notice.joined.length > 1 ? 'rejoignent' : 'rejoint'} le Match.</p>
+              )}
+            </div>
+          )}
           <p className="text-sm text-slate-500 mt-2 max-w-sm">
-            Vous avez déjà répondu à <strong>{totalAnswered}</strong> proposition{totalAnswered > 1 ? 's' : ''} sur <strong>{totalProps}</strong>.
+            Vous avez déjà répondu à <strong>{totalAnswered}</strong> affirmation{totalAnswered > 1 ? 's' : ''} sur <strong>{totalProps}</strong>.
             Il vous en reste <strong>{remaining}</strong>.
           </p>
         </div>
 
         <div className="w-full max-w-sm flex flex-col gap-2 mt-2">
-          <Button onClick={continueGame} className="w-full bg-[#102a5c] hover:bg-[#153b82] text-white py-3 rounded-xl">
-            Continuer ({remaining} restantes)
+          <Button onClick={startGame} className="w-full bg-[#102a5c] hover:bg-[#153b82] text-white py-3 rounded-xl">
+            Continuer ({remaining} restante{remaining > 1 ? 's' : ''})
           </Button>
-          <Button onClick={jumpToResults} variant="outline" className="w-full py-3 rounded-xl gap-2">
+          <Button onClick={() => setPhase('results')} variant="outline" className="w-full py-3 rounded-xl gap-2">
             <Trophy className="w-4 h-4" /> Voir mes scores actuels
           </Button>
           <button
@@ -304,21 +262,20 @@ export function PoliticalMatchGame({ onClose }: { onClose: () => void }) {
   }
 
   if (phase === 'results') {
+    const byId = new Map(data.candidates.map((c) => [c.id, c]));
     return (
       <Results
-        scores={scores}
+        rows={view.results.map((r) => ({ result: r, candidate: byId.get(r.candidateId)!, coverage: view.coverage.get(r.candidateId)! }))}
+        notPlayable={view.notPlayable}
+        unlock={view.unlock}
+        params={params}
         totalAnswered={totalAnswered}
         totalProps={totalProps}
-        onResume={
-          totalAnswered < totalProps
-            ? () => {
-                const remaining = propositions.filter((p) => !(p.id in answers));
-                setDeck(shuffle(remaining));
-                setDeckIndex(0);
-                setPhase('game');
-              }
-            : null
-        }
+        statementsCount={data.statements.length}
+        sourceUrl={data.sourceUrl}
+        methodologyUrl={data.methodologyUrl}
+        onResume={view.remaining.length > 0 ? startGame : null}
+        remainingCount={view.remaining.length}
         onReset={resetAll}
         onClose={onClose}
       />
@@ -326,11 +283,10 @@ export function PoliticalMatchGame({ onClose }: { onClose: () => void }) {
   }
 
   // phase === 'game'
-  if (deck.length === 0 || deckIndex >= deck.length) {
+  if (!current) {
     setPhase('results');
     return null;
   }
-  const current = deck[deckIndex];
   return (
     <GameCard
       key={current.id}
@@ -338,7 +294,8 @@ export function PoliticalMatchGame({ onClose }: { onClose: () => void }) {
       answeredCount={totalAnswered}
       totalCount={totalProps}
       onAnswer={recordAnswer}
-      onJumpToResults={jumpToResults}
+      onJumpToResults={() => setPhase('results')}
+      sourceUrl={data.sourceUrl}
     />
   );
 }
@@ -413,22 +370,27 @@ function Tutorial({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }
         </div>
         <h3 className="text-2xl font-bold text-[#102a5c] mb-2">Tutoriel terminé !</h3>
         <p className="text-slate-600 mb-6 max-w-sm">
-          Chaque proposition est attribuée à un candidat (que vous ne voyez pas pendant le test).
-          Le classement final révèlera vos affinités.
+          Chaque affirmation est soumise à tous les candidats, positionnés d’après leur programme
+          (analyse Demos Kratos). Le classement s’affiche dès que chacun a pu être comparé sur
+          plusieurs thèmes.
         </p>
 
         <div className="w-full bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6">
           <p className="text-sm font-semibold text-slate-700 mb-2">Barème :</p>
           <div className="flex justify-between items-center text-sm py-1">
-            <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-emerald-500" /> Accord</span>
+            <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-emerald-500" /> Même avis qu’un candidat</span>
             <span className="font-bold text-emerald-600">+1 pt</span>
           </div>
           <div className="flex justify-between items-center text-sm py-1">
-            <span className="flex items-center gap-1.5"><HelpCircle className="w-4 h-4 text-slate-500" /> Sans avis</span>
-            <span className="font-bold text-slate-600">0 pt</span>
+            <span className="flex items-center gap-1.5 text-slate-600">… s’il n’est que « plutôt » de cet avis</span>
+            <span className="font-bold text-slate-600">±0,5 pt</span>
           </div>
           <div className="flex justify-between items-center text-sm py-1">
-            <span className="flex items-center gap-1.5"><XCircle className="w-4 h-4 text-rose-500" /> Désaccord</span>
+            <span className="flex items-center gap-1.5"><HelpCircle className="w-4 h-4 text-slate-500" /> Sans avis</span>
+            <span className="font-bold text-slate-600">non compté</span>
+          </div>
+          <div className="flex justify-between items-center text-sm py-1">
+            <span className="flex items-center gap-1.5"><XCircle className="w-4 h-4 text-rose-500" /> Avis opposé</span>
             <span className="font-bold text-rose-600">-1 pt</span>
           </div>
         </div>
@@ -493,18 +455,19 @@ function Tutorial({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }
 // ----------------------- Game card ----------------------------
 
 function GameCard({
-  proposition, answeredCount, totalCount, onAnswer, onJumpToResults,
+  proposition, answeredCount, totalCount, onAnswer, onJumpToResults, sourceUrl,
 }: {
-  proposition: Proposition;
+  proposition: Statement;
   answeredCount: number;
   totalCount: number;
-  onAnswer: (propId: string, stance: Stance) => void;
+  onAnswer: (propId: string, stance: Answer) => void;
   onJumpToResults: () => void;
+  sourceUrl: string;
 }) {
   const controls = useAnimation();
   const answeredRef = useRef(false);
 
-  const handle = async (stance: Stance) => {
+  const handle = async (stance: Answer) => {
     if (answeredRef.current) return;
     answeredRef.current = true;
     let x = 0, y = 0;
@@ -524,7 +487,7 @@ function GameCard({
     else controls.start({ x: 0, y: 0, transition: { type: 'spring', stiffness: 300, damping: 20 } });
   };
 
-  const themeColor = proposition.theme?.color || '#94a3b8';
+  const themeColor = proposition.themeColor || '#94a3b8';
   const progressPct = Math.round((answeredCount / Math.max(1, totalCount)) * 100);
 
   return (
@@ -533,10 +496,10 @@ function GameCard({
       <div className="w-full max-w-[300px] flex flex-col items-center gap-2 mb-4">
         <div className="flex items-center justify-between w-full text-[10px] font-bold uppercase tracking-wider text-slate-400">
           <span>{answeredCount} / {totalCount}</span>
-          {proposition.theme && (
+          {proposition.themeLabel && (
             <span className="inline-flex items-center gap-1.5 text-slate-600">
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: themeColor }} />
-              {proposition.theme.name}
+              {proposition.themeLabel}
             </span>
           )}
         </div>
@@ -615,29 +578,43 @@ function GameCard({
           Voir mes scores actuels
         </button>
       )}
+
+      <div className="mt-3">
+        <DkCredit url={sourceUrl} />
+      </div>
     </div>
   );
 }
 
 // ----------------------- Results ------------------------------
 
+interface ResultRow { result: CandidateResult; candidate: MatchCandidate; coverage: Coverage }
+
 function Results({
-  scores, totalAnswered, totalProps, onResume, onReset, onClose,
+  rows, notPlayable, unlock, params, totalAnswered, totalProps, statementsCount,
+  sourceUrl, methodologyUrl, onResume, remainingCount, onReset, onClose,
 }: {
-  scores: CandidateScore[];
+  rows: ResultRow[];
+  notPlayable: { candidate: MatchCandidate; coverage: Coverage }[];
+  unlock: { unlocked: boolean; ratio: number };
+  params: MatchParams;
   totalAnswered: number;
   totalProps: number;
+  statementsCount: number;
+  sourceUrl: string;
+  methodologyUrl: string;
   onResume: (() => void) | null;
+  remainingCount: number;
   onReset: () => void;
   onClose: () => void;
 }) {
-  const top = scores[0];
+  // Classement masqué tant que chaque candidat n'a pas été assez comparé —
+  // sauf s'il ne reste plus de carte (beaucoup de « sans avis ») : on montre
+  // alors ce qu'on a, avec la mention « peu de données ».
+  const locked = !unlock.unlocked && onResume !== null;
+  const top = rows[0];
   const isComplete = totalAnswered === totalProps;
-  const fullName = (c: CandidateLite) => `${c.first_name} ${c.last_name}`.trim();
-  const fallback = (c: CandidateLite) => (c.gender === 'F' ? '/card_red.png' : '/card_blue.png');
-
-  // Determine the highest possible score for bar normalization
-  const maxAbs = Math.max(1, ...scores.map((s) => Math.abs(s.total)));
+  const fewData = (r: CandidateResult) => r.compared < params.unlockComparisons;
 
   return (
     <div className="flex flex-col p-2 sm:p-4 gap-5 animate-in fade-in zoom-in duration-300">
@@ -648,100 +625,143 @@ function Results({
         <h3 className="text-xl sm:text-2xl font-bold text-[#102a5c] mb-1 inline-flex items-center gap-1.5">
           Vos affinités politiques
           <InfoTip label="Comment le score est-il calculé ?">
-            Pour chaque proposition, un accord avec la position d’un candidat ajoute
-            un point, un désaccord en retire un. « Sans avis » ne compte pas. Le
-            classement reflète vos réponses, pas une préférence de l’app.
+            Chaque affirmation est soumise à tous les candidats, positionnés d’après leur
+            programme par Demos Kratos. Être du même avis qu’un candidat rapporte un point
+            (un demi s’il n’est que « plutôt » de cet avis), un avis opposé en retire un ;
+            « sans avis » ne compte pas. Chaque thème pèse de façon équilibrée et le score
+            est amorti tant que peu d’affirmations ont été comparées. Seuls les candidats
+            positionnés sur au moins {params.minStatements} affirmations et {params.minThemes} thèmes
+            sont classés. Calcul propre à CAP 2027, différent de celui de demos-kratos.fr.
           </InfoTip>
         </h3>
         <p className="text-sm text-slate-500">
-          {totalAnswered} / {totalProps} propositions répondues
+          {totalAnswered} / {totalProps} affirmations répondues
           {!isComplete && ' (test partiel)'}
         </p>
       </div>
 
-      {top && top.answered > 0 && (
-        <div className="bg-gradient-to-br from-[#102a5c] to-[#1a56db] rounded-2xl p-5 text-white shadow-lg">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider opacity-80 mb-3">
-            <Trophy className="w-4 h-4" /> Votre meilleur match
+      {locked ? (
+        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 text-center flex flex-col items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center">
+            <Lock className="w-5 h-5 text-[#102a5c]" />
           </div>
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full overflow-hidden bg-white/10 shrink-0 border-2 border-white/30">
-              <img decoding="async" src={top.candidate.photo_url || fallback(top.candidate)} alt="" className="w-full h-full object-cover" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-bold text-lg leading-tight truncate">{fullName(top.candidate)}</div>
-              <div className="text-sm opacity-80 truncate">
-                {top.candidate.parties?.name || top.candidate.parties?.abbreviation || '—'}
-              </div>
-              <div className="text-[11px] opacity-70 mt-1">
-                {top.agree} accords • {top.disagree} désaccords • {top.neutral} sans avis
-              </div>
-            </div>
-            <div className="text-3xl font-black tabular-nums shrink-0">
-              {top.total > 0 ? '+' : ''}{top.total}
-            </div>
+          <p className="font-bold text-[#102a5c]">Encore quelques cartes pour un résultat équitable</p>
+          <p className="text-xs text-slate-500 max-w-xs">
+            Le classement s’affiche quand chaque candidat a pu être comparé à vos réponses sur
+            au moins {params.unlockComparisons} affirmations et {params.unlockThemes} thèmes.
+          </p>
+          <div className="w-full max-w-xs h-1.5 bg-slate-200 rounded-full overflow-hidden">
+            <div className="h-full bg-[#102a5c] transition-all" style={{ width: `${Math.round(unlock.ratio * 100)}%` }} />
           </div>
-          <ShareInline scores={scores} totalAnswered={totalAnswered} totalProps={totalProps} />
         </div>
-      )}
-
-      <div className="flex flex-col gap-2">
-        {scores.map((s, i) => {
-          const empty = s.answered === 0;
-          const sign = s.total > 0 ? '+' : '';
-          const widthPct = empty ? 0 : Math.round((Math.abs(s.total) / maxAbs) * 100);
-          const positive = s.total >= 0;
-          return (
-            <div
-              key={s.candidate.id}
-              className={`bg-white rounded-2xl p-3 sm:p-4 border border-slate-100 ${i === 0 ? 'ring-2 ring-[#1a56db]/20' : ''}`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="text-slate-400 font-bold w-5 text-center text-sm">{i + 1}</div>
-                <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-50 shrink-0">
-                  <img decoding="async" src={s.candidate.photo_url || fallback(s.candidate)} alt="" className="w-full h-full object-cover" />
+      ) : (
+        <>
+          {top && top.result.compared > 0 && (
+            <div className="bg-gradient-to-br from-[#102a5c] to-[#1a56db] rounded-2xl p-5 text-white shadow-lg">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider opacity-80 mb-3">
+                <Trophy className="w-4 h-4" /> Votre meilleur match
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-full overflow-hidden bg-white/10 shrink-0 border-2 border-white/30">
+                  <CandidatePhoto c={top.candidate} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-bold text-[#102a5c] truncate">{fullName(s.candidate)}</div>
-                    <div className={`text-sm font-bold tabular-nums shrink-0 ${empty ? 'text-slate-400' : positive ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {empty ? '—' : `${sign}${s.total}`}
+                  <div className="font-bold text-lg leading-tight truncate">{top.candidate.fullName}</div>
+                  <div className="text-sm opacity-80 truncate">{top.candidate.party || '—'}</div>
+                  <div className="text-[11px] opacity-70 mt-1">
+                    {top.result.agree} accords • {top.result.disagree} désaccords • {top.result.compared} comparées
+                  </div>
+                </div>
+                <div className="text-3xl font-black tabular-nums shrink-0">{top.result.pct}%</div>
+              </div>
+              <ShareInline rows={rows} totalAnswered={totalAnswered} totalProps={totalProps} />
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2">
+            {rows.map(({ result: r, candidate: c, coverage }, i) => {
+              const empty = r.compared === 0;
+              const positive = r.pct >= 50;
+              return (
+                <div
+                  key={c.id}
+                  className={`bg-white rounded-2xl p-3 sm:p-4 border border-slate-100 ${i === 0 ? 'ring-2 ring-[#1a56db]/20' : ''}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="text-slate-400 font-bold w-5 text-center text-sm">{i + 1}</div>
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-50 shrink-0">
+                      <CandidatePhoto c={c} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-bold text-[#102a5c] truncate">{c.fullName}</div>
+                        <div className={`text-sm font-bold tabular-nums shrink-0 ${empty ? 'text-slate-400' : positive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {empty ? '—' : `${r.pct}%`}
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        {empty
+                          ? 'Pas encore de réponse sur ce candidat'
+                          : <>
+                              <span className="text-emerald-600 font-semibold">{r.agree}</span> accord{r.agree > 1 ? 's' : ''}
+                              {' • '}
+                              <span className="text-rose-600 font-semibold">{r.disagree}</span> désaccord{r.disagree > 1 ? 's' : ''}
+                              {' • '}
+                              <span className="text-slate-500">{r.compared}/{coverage.statements} comparées</span>
+                              {fewData(r) && <span className="ml-1 text-amber-600 font-semibold">· peu de données</span>}
+                            </>}
+                      </div>
+                      <DkCredit url={c.dkUrl} label="Son programme sur Demos Kratos" />
                     </div>
                   </div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">
-                    {empty
-                      ? 'Pas encore de réponse sur ce candidat'
-                      : <>
-                          <span className="text-emerald-600 font-semibold">{s.agree}</span> accord{s.agree > 1 ? 's' : ''}
-                          {' • '}
-                          <span className="text-rose-600 font-semibold">{s.disagree}</span> désaccord{s.disagree > 1 ? 's' : ''}
-                          {' • '}
-                          <span className="text-slate-500">{s.answered}/{s.totalProps}</span>
-                        </>}
+                  {!empty && (
+                    <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full transition-all"
+                        style={{ width: `${r.pct}%`, backgroundColor: positive ? '#10b981' : '#ef4444' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {notPlayable.length > 0 && (
+        <div className="rounded-2xl border border-dashed border-slate-200 p-3 sm:p-4">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+            Pas encore assez d’informations pour le Match
+          </p>
+          <p className="text-[11px] text-slate-500 mb-3 leading-snug">
+            Leur programme n’aborde pas encore assez de sujets pour une comparaison équitable
+            (au moins {params.minStatements} affirmations et {params.minThemes} thèmes). Ils rejoindront
+            le Match dès que ce sera le cas.
+          </p>
+          <div className="flex flex-col gap-2">
+            {notPlayable.map(({ candidate: c, coverage }) => (
+              <div key={c.id} className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-50 shrink-0 opacity-70">
+                  <CandidatePhoto c={c} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-slate-600 truncate">{c.fullName}</div>
+                  <div className="text-[11px] text-slate-400">
+                    {coverage.statements} affirmation{coverage.statements > 1 ? 's' : ''} sur {statementsCount}
+                    {' • '}{coverage.themes} thème{coverage.themes > 1 ? 's' : ''}
                   </div>
                 </div>
               </div>
-
-              {!empty && (
-                <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full transition-all"
-                    style={{
-                      width: `${widthPct}%`,
-                      backgroundColor: positive ? '#10b981' : '#ef4444',
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-2 mt-2">
         {onResume && (
           <Button onClick={onResume} className="flex-1 bg-[#102a5c] hover:bg-[#153b82] text-white py-2.5 rounded-xl gap-2">
-            <ChevronRight className="w-4 h-4" /> Continuer ({totalProps - totalAnswered} restantes)
+            <ChevronRight className="w-4 h-4" /> Continuer ({remainingCount} restante{remainingCount > 1 ? 's' : ''})
           </Button>
         )}
         <Button onClick={onReset} variant="outline" className="flex-1 py-2.5 rounded-xl gap-2">
@@ -752,7 +772,18 @@ function Results({
         </Button>
       </div>
 
-      {top && top.answered > 0 && <RatePromptInline />}
+      <p className="text-[11px] text-slate-400 text-center leading-snug">
+        Affirmations et positions des candidats :{' '}
+        <button type="button" onClick={() => void openLink(sourceUrl)} className="underline font-semibold text-slate-500">
+          propulsé par Demos Kratos
+        </button>
+        {' · '}
+        <button type="button" onClick={() => void openLink(methodologyUrl)} className="underline">
+          leur méthode
+        </button>
+      </p>
+
+      {!locked && top && top.result.compared > 0 && <RatePromptInline />}
     </div>
   );
 }
@@ -801,9 +832,22 @@ function RatePromptInline() {
   );
 }
 
+function toShareScores(rows: ResultRow[], totalProps: number) {
+  return rows.map(({ result: r, candidate: c }) => ({
+    candidate: {
+      // Photo demos-kratos.fr inutilisable dans le canvas (pas de CORS) : vignette par défaut.
+      id: c.id, first_name: c.fullName, last_name: '', gender: c.gender, photo_url: c.photoIsOurs ? c.photoUrl : null,
+      parties: c.party ? { name: c.party, abbreviation: null, color: null } : null,
+    },
+    total: r.points, pct: r.pct, agree: r.agree, disagree: r.disagree, neutral: 0,
+    answered: r.compared, totalProps,
+  }));
+}
+
 function ShareInline({
-  scores, totalAnswered, totalProps,
-}: { scores: CandidateScore[]; totalAnswered: number; totalProps: number }) {
+  rows, totalAnswered, totalProps,
+}: { rows: ResultRow[]; totalAnswered: number; totalProps: number }) {
+  const scores = useMemo(() => toShareScores(rows, totalProps), [rows, totalProps]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [timings, setTimings] = useState<{ total: number; image: number; b64: number; write: number; share: number; size: number } | null>(null);

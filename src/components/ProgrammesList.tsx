@@ -1,22 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Search, BookOpen } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowLeft, BookOpen, ChevronRight, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { Tables } from '../lib/database.types';
+import { COMPARATEUR_QUERY_KEY, fetchComparateurBase, type CompCandidate } from '../lib/comparateurData';
+import { STABLE_STALE_MS } from '../lib/queryClient';
 import { ProgrammeDetail } from './ProgrammeDetail';
+import { DkProgrammeView } from './DkProgrammeSheet';
+import { CandidateAvatar, DkCredit } from './comparateurUi';
 import { Button } from './ui/Button';
 
 type CandidateRow = Tables<'candidates'>;
 type PartyLite = Pick<Tables<'parties'>, 'name' | 'abbreviation' | 'color'>;
 type CandidateWithParty = CandidateRow & { parties: PartyLite | null };
 
-type CandidateWithCount = CandidateWithParty & { themeCount: number };
+type OurCandidate = CandidateWithParty & { themeCount: number };
+
+/** Une ligne de la liste : programme analysé par Demos Kratos, et/ou notre
+ *  livret (candidate_programs, saisi dans l'admin) pour un candidat publié. */
+interface Entry {
+  key: string;
+  name: string;
+  party: string | null;
+  photo: { photoUrl: string | null; gender: string | null };
+  dk: CompCandidate | null;
+  ours: OurCandidate | null;
+}
+
+type Selection = { kind: 'dk'; id: string } | { kind: 'ours'; id: string };
 
 function fullName(c: CandidateRow) {
   return `${c.first_name} ${c.last_name}`.trim();
-}
-
-function fallbackPhoto(c: CandidateRow) {
-  return c.gender === 'F' ? '/card_red.png' : '/card_blue.png';
 }
 
 /** Lowercase + strip diacritics so "Pecresse" matches "Pécresse". */
@@ -24,58 +38,114 @@ function normaliseSearch(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 }
 
+async function fetchOurProgrammes(): Promise<OurCandidate[]> {
+  const [candRes, progRes] = await Promise.all([
+    supabase
+      .from('candidates')
+      .select('*, parties(name, abbreviation, color)')
+      .eq('is_published', true),
+    supabase.from('candidate_programs').select('candidate_id'),
+  ]);
+  if (candRes.error) throw candRes.error;
+  const counts = new Map<string, number>();
+  for (const row of progRes.data ?? []) {
+    counts.set(row.candidate_id, (counts.get(row.candidate_id) ?? 0) + 1);
+  }
+  return ((candRes.data ?? []) as CandidateWithParty[])
+    .map((c) => ({ ...c, themeCount: counts.get(c.id) ?? 0 }));
+}
+
 export function ProgrammesList() {
-  const [candidates, setCandidates] = useState<CandidateWithCount[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Selection | null>(null);
+
+  const baseQuery = useQuery({
+    queryKey: COMPARATEUR_QUERY_KEY,
+    queryFn: fetchComparateurBase,
+    staleTime: STABLE_STALE_MS,
+  });
+  const oursQuery = useQuery({
+    queryKey: ['ourProgrammes'],
+    queryFn: fetchOurProgrammes,
+    staleTime: STABLE_STALE_MS,
+  });
+  const base = baseQuery.data;
+  const loading = baseQuery.isLoading || oursQuery.isLoading;
+  const error = baseQuery.error || oursQuery.error;
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const [candRes, progRes] = await Promise.all([
-        supabase
-          .from('candidates')
-          .select('*, parties(name, abbreviation, color)')
-          .eq('is_published', true),
-        supabase.from('candidate_programs').select('candidate_id'),
-      ]);
-      if (cancelled) return;
-      if (candRes.error) {
-        setError(candRes.error.message);
-        setLoading(false);
-        return;
-      }
-      const counts = new Map<string, number>();
-      for (const row of progRes.data ?? []) {
-        counts.set(row.candidate_id, (counts.get(row.candidate_id) ?? 0) + 1);
-      }
-      const enriched: CandidateWithCount[] = ((candRes.data ?? []) as CandidateWithParty[])
-        .map((c) => ({ ...c, themeCount: counts.get(c.id) ?? 0 }))
-        .sort((a, b) => a.last_name.localeCompare(b.last_name, 'fr', { sensitivity: 'base' }));
-      setCandidates(enriched);
-      setLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    if (selected) window.scrollTo({ top: 0 });
+  }, [selected]);
+
+  const entries = useMemo(() => {
+    const ours = oursQuery.data ?? [];
+    const oursBySlug = new Map(ours.map((c) => [c.slug, c]));
+    const linked = new Set<string>();
+    const list: Entry[] = (base?.candidates ?? []).map((dk) => {
+      const o = dk.ourSlug ? oursBySlug.get(dk.ourSlug) ?? null : null;
+      if (o) linked.add(o.id);
+      return { key: `dk:${dk.id}`, name: dk.fullName, party: dk.party, photo: dk, dk, ours: o };
+    });
+    for (const o of ours) {
+      if (linked.has(o.id)) continue;
+      list.push({
+        key: `ours:${o.id}`,
+        name: fullName(o),
+        party: o.parties?.name || o.parties?.abbreviation || null,
+        photo: { photoUrl: o.photo_url, gender: o.gender },
+        dk: null,
+        ours: o,
+      });
+    }
+    // Programmes disponibles d'abord, puis par nom.
+    const available = (e: Entry) => (e.dk?.measureCount ?? 0) > 0 || (e.ours?.themeCount ?? 0) > 0;
+    return list.sort((a, b) => Number(available(b)) - Number(available(a))
+      || a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
+  }, [base, oursQuery.data]);
 
   const filtered = useMemo(() => {
     const q = normaliseSearch(search);
-    if (!q) return candidates;
-    return candidates.filter((c) => {
-      const name = normaliseSearch(fullName(c));
-      const party = normaliseSearch(c.parties?.name || c.parties?.abbreviation || '');
-      return name.includes(q) || party.includes(q);
-    });
-  }, [candidates, search]);
+    if (!q) return entries;
+    return entries.filter((e) => normaliseSearch(e.name).includes(q) || normaliseSearch(e.party ?? '').includes(q));
+  }, [entries, search]);
 
-  if (selectedId) {
+  if (selected?.kind === 'ours') {
+    return <ProgrammeDetail candidateId={selected.id} onBack={() => setSelected(null)} />;
+  }
+
+  const dkSelected = selected?.kind === 'dk' ? entries.find((e) => e.dk?.id === selected.id) : undefined;
+  if (dkSelected?.dk && base) {
+    const o = dkSelected.ours;
     return (
-      <ProgrammeDetail
-        candidateId={selectedId}
-        onBack={() => setSelectedId(null)}
-      />
+      <div className="flex flex-col gap-4 w-full animate-in fade-in duration-300">
+        <button
+          onClick={() => setSelected(null)}
+          className="flex items-center gap-2 text-[#1a56db] font-medium hover:underline w-fit px-2"
+        >
+          <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Retour aux programmes
+        </button>
+        <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-6">
+          <DkProgrammeView
+            candidate={dkSelected.dk}
+            initialThemeId={null}
+            themes={base.themes}
+            attribution={base.attribution}
+            generatedAt={base.generatedAt}
+            withName
+          >
+            {o && o.themeCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelected({ kind: 'ours', id: o.id })}
+                className="self-start inline-flex items-center gap-1.5 text-xs font-bold text-[#1a56db] hover:underline"
+              >
+                <BookOpen className="w-3.5 h-3.5" /> Synthèse CAP 2027 ({o.themeCount} thème{o.themeCount > 1 ? 's' : ''})
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </DkProgrammeView>
+        </div>
+      </div>
     );
   }
 
@@ -99,7 +169,7 @@ export function ProgrammesList() {
 
       {error && (
         <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl p-3 text-sm">
-          Impossible de charger les programmes : {error}
+          Impossible de charger les programmes : {(error as Error).message}
         </div>
       )}
 
@@ -120,35 +190,41 @@ export function ProgrammesList() {
           </div>
         ))}
 
-        {filtered.map((c) => {
-          const party = c.parties?.abbreviation || c.parties?.name || '—';
-          const empty = c.themeCount === 0;
+        {filtered.map((e) => {
+          const measures = e.dk?.measureCount ?? 0;
+          const dkThemes = e.dk ? Object.values(e.dk.themeCounts).filter((n) => n > 0).length : 0;
+          const ourThemes = e.ours?.themeCount ?? 0;
+          const empty = measures === 0 && ourThemes === 0;
+          const open = () => {
+            if (measures > 0) setSelected({ kind: 'dk', id: e.dk!.id });
+            else if (ourThemes > 0) setSelected({ kind: 'ours', id: e.ours!.id });
+          };
           return (
             <button
-              key={c.id}
-              onClick={() => !empty && setSelectedId(c.id)}
+              key={e.key}
+              onClick={open}
               disabled={empty}
               className={`bg-white rounded-2xl p-4 border border-slate-100 flex items-center gap-4 text-left transition-all w-full ${
                 empty ? 'opacity-60 cursor-not-allowed' : 'hover:shadow-md hover:border-slate-200 cursor-pointer'
               }`}
             >
-              <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-50 shrink-0">
-                <img decoding="async"
-                  src={c.photo_url || fallbackPhoto(c)}
-                  alt={fullName(c)}
-                  className="w-full h-full object-cover"
-                />
-              </div>
+              <CandidateAvatar c={e.photo} className="w-12 h-12" />
               <div className="flex-1 min-w-0">
-                <div className="font-bold text-[#102a5c] truncate">{fullName(c)}</div>
-                <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
-                  <span className="font-semibold uppercase tracking-wider">{party}</span>
-                  <span className="text-slate-300">•</span>
-                  <span className="inline-flex items-center gap-1">
+                <div className="font-bold text-[#102a5c] truncate">{e.name}</div>
+                <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 min-w-0">
+                  {e.party && (
+                    <>
+                      <span className="font-semibold uppercase tracking-wider truncate">{e.party}</span>
+                      <span className="text-slate-300">•</span>
+                    </>
+                  )}
+                  <span className="inline-flex items-center gap-1 shrink-0">
                     <BookOpen className="w-3 h-3" />
-                    {empty
-                      ? 'Programme à venir'
-                      : `${c.themeCount} thème${c.themeCount > 1 ? 's' : ''}`}
+                    {measures > 0
+                      ? `${measures} mesures · ${dkThemes} thèmes`
+                      : ourThemes > 0
+                        ? `${ourThemes} thème${ourThemes > 1 ? 's' : ''}`
+                        : 'Programme à venir'}
                   </span>
                 </div>
               </div>
@@ -158,9 +234,16 @@ export function ProgrammesList() {
         })}
       </div>
 
-      {!loading && !error && filtered.length > 0 && (
-        <div className="text-center pt-2">
-          <Button variant="outline" onClick={() => setSearch('')} className={search ? '' : 'invisible'}>
+      {base && !loading && (
+        <div className="flex flex-col items-center gap-1 text-center">
+          <p className="text-[11px] text-slate-400 leading-snug">{base.attribution}</p>
+          <DkCredit url={base.sourceUrl} />
+        </div>
+      )}
+
+      {!loading && !error && filtered.length > 0 && search && (
+        <div className="text-center">
+          <Button variant="outline" onClick={() => setSearch('')}>
             Effacer la recherche
           </Button>
         </div>

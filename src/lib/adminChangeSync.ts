@@ -57,9 +57,10 @@ export function useAdminChangeSync() {
       // (article_press / article_social) wiring in push.ts.
       qc.invalidateQueries({ queryKey: ['candidatesList'] });
       qc.invalidateQueries({ queryKey: ['candidateDetail'] });
-      qc.invalidateQueries({ queryKey: ['comparateurCandidates'] });
+      qc.invalidateQueries({ queryKey: ['dkComparateur'] });
       qc.invalidateQueries({ queryKey: ['candidatesByIds'] });
-      qc.invalidateQueries({ queryKey: ['matchPropositions'] });
+      qc.invalidateQueries({ queryKey: ['dkMatch'] });
+      qc.invalidateQueries({ queryKey: ['ourProgrammes'] });
       qc.invalidateQueries({ queryKey: ['electionResults'] });
       qc.invalidateQueries({ queryKey: ['parrainagesLatest'] });
       qc.invalidateQueries({ queryKey: ['parrainagesAll'] });

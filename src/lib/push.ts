@@ -176,13 +176,14 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
             case 'candidate_published':
               await Promise.all([
                 queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
-                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['dkComparateur'] }),
+                queryClient.invalidateQueries({ queryKey: ['ourProgrammes'] }),
                 queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
-                queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
+                queryClient.invalidateQueries({ queryKey: ['dkMatch'] }),
               ]);
               break;
             case 'match_proposition_change':
-              await queryClient.invalidateQueries({ queryKey: ['matchPropositions'] });
+              await queryClient.invalidateQueries({ queryKey: ['dkMatch'] });
               break;
             case 'candidate_updated':
               // Emitted by notify_candidate_content_change on changes to
@@ -192,16 +193,18 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
               await Promise.all([
                 queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
                 queryClient.invalidateQueries({ queryKey: ['candidateDetail'] }),
-                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['dkComparateur'] }),
+                queryClient.invalidateQueries({ queryKey: ['ourProgrammes'] }),
                 queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
               ]);
               break;
             case 'new_programme':
-              // Programmes are loaded via a useEffect in ProgrammesList /
-              // ProgrammeDetail (no TanStack key). They re-fetch on
-              // remount; nothing else to invalidate here. The fiche
-              // candidate detail cache covers proposals separately.
-              await queryClient.invalidateQueries({ queryKey: ['candidateDetail'] });
+              // ProgrammeDetail re-fetches on remount; the list of our
+              // livrets (ProgrammesList) and the fiche detail are cached.
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['candidateDetail'] }),
+                queryClient.invalidateQueries({ queryKey: ['ourProgrammes'] }),
+              ]);
               break;
             case 'date_official':
               await queryClient.invalidateQueries({ queryKey: ['appConfig'] });
@@ -223,9 +226,10 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
                 queryClient.invalidateQueries({ queryKey: ['electionResults'] }),
                 queryClient.invalidateQueries({ queryKey: ['appConfig'] }),
                 queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
-                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['dkComparateur'] }),
+                queryClient.invalidateQueries({ queryKey: ['ourProgrammes'] }),
                 queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
-                queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
+                queryClient.invalidateQueries({ queryKey: ['dkMatch'] }),
               ]);
               break;
             case 'article_press':
@@ -269,24 +273,29 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
             case 'candidate_published':
               await Promise.all([
                 queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
-                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['dkComparateur'] }),
+                queryClient.invalidateQueries({ queryKey: ['ourProgrammes'] }),
                 queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
-                queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
+                queryClient.invalidateQueries({ queryKey: ['dkMatch'] }),
               ]);
               break;
             case 'match_proposition_change':
-              await queryClient.invalidateQueries({ queryKey: ['matchPropositions'] });
+              await queryClient.invalidateQueries({ queryKey: ['dkMatch'] });
               break;
             case 'candidate_updated':
               await Promise.all([
                 queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
                 queryClient.invalidateQueries({ queryKey: ['candidateDetail'] }),
-                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['dkComparateur'] }),
+                queryClient.invalidateQueries({ queryKey: ['ourProgrammes'] }),
                 queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
               ]);
               break;
             case 'new_programme':
-              await queryClient.invalidateQueries({ queryKey: ['candidateDetail'] });
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['candidateDetail'] }),
+                queryClient.invalidateQueries({ queryKey: ['ourProgrammes'] }),
+              ]);
               break;
             case 'date_official':
               await queryClient.invalidateQueries({ queryKey: ['appConfig'] });
@@ -304,9 +313,10 @@ export async function registerPushNotifications(): Promise<{ ok: boolean; error?
                 queryClient.invalidateQueries({ queryKey: ['electionResults'] }),
                 queryClient.invalidateQueries({ queryKey: ['appConfig'] }),
                 queryClient.invalidateQueries({ queryKey: ['candidatesList'] }),
-                queryClient.invalidateQueries({ queryKey: ['comparateurCandidates'] }),
+                queryClient.invalidateQueries({ queryKey: ['dkComparateur'] }),
+                queryClient.invalidateQueries({ queryKey: ['ourProgrammes'] }),
                 queryClient.invalidateQueries({ queryKey: ['candidatesByIds'] }),
-                queryClient.invalidateQueries({ queryKey: ['matchPropositions'] }),
+                queryClient.invalidateQueries({ queryKey: ['dkMatch'] }),
               ]);
               break;
             case 'article_press':

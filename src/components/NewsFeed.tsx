@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import {
   Newspaper, BadgeCheck, Search, X, ExternalLink,
   SlidersHorizontal, Sparkles,
@@ -7,7 +8,7 @@ import Fuse from 'fuse.js';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
-import { TwitterPostCard } from './TwitterPostCard';
+import { TwitterPostCard, postAuthor } from './TwitterPostCard';
 import { useFollowedOrientations } from '../lib/orientationFollows';
 import { useFollowedThemes, POLITICS_THEME_SLUG } from '../lib/themeFollows';
 import { openLink } from '../lib/openLink';
@@ -25,6 +26,7 @@ interface SourceLite {
 }
 interface ThemeLite { id: string; slug: string; name: string; color: string | null }
 interface CandidateLite { id: string; slug: string; first_name: string; last_name: string }
+interface CandidateOption extends CandidateLite { photo_url: string | null; gender: string | null }
 interface PartyLite { id: string; name: string; abbreviation: string | null; color: string | null }
 
 interface ArticleRow {
@@ -39,13 +41,13 @@ interface ArticleRow {
   kind: string | null;
   source: SourceLite | null;
   article_themes: { theme: ThemeLite | null }[];
-  article_candidates: { candidate: CandidateLite | null }[];
+  article_candidates: { score: number | null; candidate: CandidateLite | null }[];
   article_parties: { party: PartyLite | null }[];
 }
 
 interface FilterOption {
   themes: ThemeLite[];
-  candidates: CandidateLite[];
+  candidates: CandidateOption[];
   parties: PartyLite[];
   orientations: string[];
 }
@@ -86,7 +88,8 @@ function fullName(c: CandidateLite) {
 
 export function NewsFeed({ mode }: { mode: Mode }) {
   const [search, setSearch] = useState('');
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Panneau de filtres : tiroir sur mobile (sur PC, colonne toujours visible).
+  const [drawerOpen, setDrawerOpen] = useState(false);
   // Persistent multi-select sets. Both drive the in-app feed filter AND
   // the push-broadcast filter for press notifs. Empty set = "no filter,
   // receive everything" (opt-in restrictif with lenient default).
@@ -112,8 +115,32 @@ export function NewsFeed({ mode }: { mode: Mode }) {
     setSelectedCandidate(null);
     setSelectedParty(null);
     setSearch('');
-    setAdvancedOpen(false);
+    setDrawerOpen(false);
   }, [mode]);
+
+  // Tiroir ouvert : page figée derrière, Échap (web) ou bouton retour
+  // (Android) pour le fermer.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const close = () => setDrawerOpen(false);
+    let removeBack: (() => void) | null = null;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    if (Capacitor.isNativePlatform()) {
+      void import('@capacitor/app').then(async ({ App }) => {
+        const handle = await App.addListener('backButton', close);
+        removeBack = () => { void handle.remove(); };
+      });
+    } else {
+      window.addEventListener('keydown', onKey);
+    }
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+      removeBack?.();
+    };
+  }, [drawerOpen]);
 
   // Articles: 30 min stale (server cron runs hourly), focus refetch.
   const articlesQuery = useQuery({
@@ -126,7 +153,7 @@ export function NewsFeed({ mode }: { mode: Mode }) {
           id, url, title, summary, image_url, published_at, is_factcheck, verdict, kind,
           source:news_sources(slug, name, orientation, color, homepage_url),
           article_themes(theme:themes(id, slug, name, color)),
-          article_candidates(candidate:candidates(id, slug, first_name, last_name)),
+          article_candidates(score, candidate:candidates(id, slug, first_name, last_name)),
           article_parties(party:parties(id, name, abbreviation, color))
         `)
         .eq('is_factcheck', mode === 'factcheck')
@@ -144,7 +171,8 @@ export function NewsFeed({ mode }: { mode: Mode }) {
     queryFn: async (): Promise<FilterOption> => {
       const [tRes, cRes, pRes, sRes] = await Promise.all([
         supabase.from('themes').select('id, slug, name, color').order('order_index'),
-        supabase.from('candidates').select('id, slug, first_name, last_name').eq('is_published', true),
+        supabase.from('candidates').select('id, slug, first_name, last_name, photo_url, gender')
+          .eq('is_published', true).order('last_name'),
         supabase.from('parties').select('id, name, abbreviation, color').order('order_index'),
         supabase.from('news_sources').select('orientation').eq('is_active', true),
       ]);
@@ -153,7 +181,7 @@ export function NewsFeed({ mode }: { mode: Mode }) {
       const orientations = [...orientationSet].sort((a, b) => order.indexOf(a) - order.indexOf(b));
       return {
         themes: (tRes.data ?? []) as ThemeLite[],
-        candidates: (cRes.data ?? []) as CandidateLite[],
+        candidates: (cRes.data ?? []) as CandidateOption[],
         parties: (pRes.data ?? []) as PartyLite[],
         orientations,
       };
@@ -205,7 +233,9 @@ export function NewsFeed({ mode }: { mode: Mode }) {
     return fuse.search(q).map((r) => r.item);
   }, [chipFiltered, fuse, search]);
 
-  const advancedFilterCount = (selectedCandidate ? 1 : 0) + (selectedParty ? 1 : 0);
+  const activeFilterCount =
+    (isFactcheck ? 0 : followedOrientations.size) + followedThemes.size
+    + (selectedCandidate ? 1 : 0) + (selectedParty ? 1 : 0);
 
   const headerCount = filtered.length;
   const totalCount = articles.length;
@@ -220,6 +250,32 @@ export function NewsFeed({ mode }: { mode: Mode }) {
     setSelectedParty(null);
     setSearch('');
   };
+
+  const panelProps: FilterPanelProps | null = filters && {
+    filters, isFactcheck,
+    followedOrientations, toggleOrientation, clearOrientations,
+    followedThemes, themeFollowed, toggleTheme, clearThemes, setOnlyThemes,
+    selectedCandidate, setSelectedCandidate, selectedParty, setSelectedParty,
+  };
+
+  // Filtres actifs, en puces retirables (mobile).
+  const activeChips: { key: string; label: string; dot?: string; remove: () => void }[] = [];
+  if (filters) {
+    if (!isFactcheck) {
+      for (const o of filters.orientations) {
+        if (followedOrientations.has(o)) {
+          activeChips.push({ key: `o-${o}`, label: ORIENTATION_META[o]?.label ?? o, dot: ORIENTATION_META[o]?.dot, remove: () => toggleOrientation(o) });
+        }
+      }
+    }
+    for (const t of filters.themes) {
+      if (themeFollowed(t.slug)) activeChips.push({ key: `t-${t.id}`, label: t.name, dot: t.color ?? undefined, remove: () => toggleTheme(t.slug) });
+    }
+    const c = filters.candidates.find((x) => x.id === selectedCandidate);
+    if (c) activeChips.push({ key: 'c', label: fullName(c), remove: () => setSelectedCandidate(null) });
+    const p = filters.parties.find((x) => x.id === selectedParty);
+    if (p) activeChips.push({ key: 'p', label: p.abbreviation || p.name, dot: p.color ?? undefined, remove: () => setSelectedParty(null) });
+  }
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5 w-full animate-in fade-in duration-300">
@@ -248,9 +304,28 @@ export function NewsFeed({ mode }: { mode: Mode }) {
           : <Newspaper className="absolute -right-6 -bottom-6 w-40 h-40 opacity-10" strokeWidth={1.5} />}
       </div>
 
-      {/* Search + advanced */}
+      <div className="flex flex-col gap-4 sm:gap-5 lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-6 lg:items-start">
+      {/* Filtres, colonne latérale (PC) */}
+      {panelProps && (
+        <aside className="hidden lg:block bg-white rounded-2xl border border-slate-100 p-4" aria-label="Filtres">
+          <div className="flex items-center justify-between mb-3">
+            <span className="inline-flex items-center gap-1.5 text-sm font-bold text-[#102a5c]">
+              <SlidersHorizontal className="w-4 h-4" /> Filtres
+            </span>
+            {activeFilterCount > 0 && (
+              <button onClick={clearAll} className="text-[11px] font-bold text-slate-500 hover:text-slate-700">
+                Tout effacer
+              </button>
+            )}
+          </div>
+          <FilterPanel {...panelProps} />
+        </aside>
+      )}
+
+      <div className="flex flex-col gap-4 sm:gap-5 min-w-0">
+      {/* Search + filtres (mobile) */}
       <div className="flex items-center gap-2">
-        <div className="flex-1 bg-white rounded-full border border-slate-100 shadow-sm px-3 py-2 flex items-center gap-2">
+        <div className="flex-1 min-w-0 bg-white rounded-full border border-slate-100 shadow-sm px-3 py-2 flex items-center gap-2">
           <Search className="w-4 h-4 text-slate-400 shrink-0" />
           <input
             value={search}
@@ -265,146 +340,40 @@ export function NewsFeed({ mode }: { mode: Mode }) {
           )}
         </div>
         <button
-          onClick={() => setAdvancedOpen((v) => !v)}
-          className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold border transition-all ${
-            advancedFilterCount > 0 || advancedOpen
+          onClick={() => setDrawerOpen(true)}
+          aria-haspopup="dialog"
+          className={`lg:hidden shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold border transition-all ${
+            activeFilterCount > 0
               ? 'bg-[#102a5c] text-white border-[#102a5c]'
               : 'bg-white text-slate-700 border-slate-100 hover:border-slate-300'
           }`}
         >
           <SlidersHorizontal className="w-3.5 h-3.5" />
           <span>Filtres</span>
-          {advancedFilterCount > 0 && (
-            <span className="text-[10px] px-1 rounded-full bg-white/20">{advancedFilterCount}</span>
+          {activeFilterCount > 0 && (
+            <span className="text-[10px] px-1.5 rounded-full bg-white/20">{activeFilterCount}</span>
           )}
         </button>
       </div>
 
-      {/* Filter ribbons */}
-      {filters && (
-        <div className="flex flex-col gap-2">
-          {/* Orientations (news only). Multi-select, persisted locally
-              and mirrored to push_token_orientations so the server can
-              filter press notifs the same way. */}
-          {!isFactcheck && filters.orientations.length > 0 && (
-            <ScrollRow
-              label="Orientations suivies"
-              info={
-                <InfoTip label="À quoi servent les orientations ?">
-                  Filtrez le fil par bord politique de la source. « Toutes » affiche
-                  tout. Votre sélection s’applique aussi aux notifications d’actualités.
-                </InfoTip>
-              }
-            >
-              <Chip
-                active={followedOrientations.size === 0}
-                onClick={() => clearOrientations()}
-                label="Toutes"
-              />
-              {filters.orientations.map((o) => {
-                const meta = ORIENTATION_META[o];
-                return (
-                  <Chip
-                    key={o}
-                    active={followedOrientations.has(o)}
-                    onClick={() => toggleOrientation(o)}
-                    label={meta?.short ?? o}
-                    dotColor={meta?.dot}
-                  />
-                );
-              })}
-            </ScrollRow>
-          )}
-
-          {/* Categories (themes). Multi-select, persisted locally and
-              mirrored to push_token_themes so the server filters press
-              notifs by topic the same way. Drives the feed + the notifs. */}
-          {filters.themes.length > 0 && (() => {
-            const politicsOnly = followedThemes.size === 1 && followedThemes.has(POLITICS_THEME_SLUG);
-            return (
-              <ScrollRow
-                label="Catégories suivies"
-                info={
-                  <InfoTip label="À quoi servent les catégories ?">
-                    Filtrez le fil par thème. « Toutes » affiche tout. Votre sélection
-                    s’applique aussi aux notifications d’actualités presse.
-                  </InfoTip>
-                }
-                action={
-                  <button
-                    onClick={() => (politicsOnly ? clearThemes() : setOnlyThemes([POLITICS_THEME_SLUG]))}
-                    className={`text-[10px] font-bold rounded-full px-2 py-1 border transition-colors ${
-                      politicsOnly
-                        ? 'bg-[#102a5c] text-white border-[#102a5c]'
-                        : 'bg-white text-[#1a56db] border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    Politique uniquement
-                  </button>
-                }
-              >
-                <Chip
-                  active={followedThemes.size === 0}
-                  onClick={() => clearThemes()}
-                  label="Toutes"
-                />
-                {filters.themes.map((t) => (
-                  <Chip
-                    key={t.id}
-                    active={themeFollowed(t.slug)}
-                    onClick={() => toggleTheme(t.slug)}
-                    label={t.name}
-                    dotColor={t.color || '#94a3b8'}
-                  />
-                ))}
-              </ScrollRow>
-            );
-          })()}
-        </div>
-      )}
-
-      {/* Advanced drawer */}
-      {advancedOpen && filters && (
-        <div className="bg-white rounded-2xl border border-slate-100 p-3 sm:p-4 flex flex-col gap-3 animate-in slide-in-from-top-2 duration-200">
-          <DrawerRow label="Candidat">
-            <Chip
-              active={selectedCandidate === null}
-              onClick={() => setSelectedCandidate(null)}
-              label="Tous"
-            />
-            {filters.candidates.map((c) => (
-              <Chip
-                key={c.id}
-                active={selectedCandidate === c.id}
-                onClick={() => setSelectedCandidate(selectedCandidate === c.id ? null : c.id)}
-                label={fullName(c)}
-              />
-            ))}
-          </DrawerRow>
-          <DrawerRow label="Parti">
-            <Chip
-              active={selectedParty === null}
-              onClick={() => setSelectedParty(null)}
-              label="Tous"
-            />
-            {filters.parties.map((p) => (
-              <Chip
-                key={p.id}
-                active={selectedParty === p.id}
-                onClick={() => setSelectedParty(selectedParty === p.id ? null : p.id)}
-                label={p.abbreviation || p.name}
-                dotColor={p.color || '#94a3b8'}
-              />
-            ))}
-          </DrawerRow>
-          {(followedThemes.size > 0 || followedOrientations.size > 0 || selectedCandidate || selectedParty || search) && (
+      {/* Filtres actifs (mobile) : visibles sans ouvrir le tiroir. */}
+      {filters && activeFilterCount > 0 && (
+        <div className="lg:hidden flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+          {activeChips.map((c) => (
             <button
-              onClick={clearAll}
-              className="self-start inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-700"
+              key={c.key}
+              onClick={c.remove}
+              aria-label={`Retirer le filtre ${c.label}`}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-full pl-2.5 pr-1.5 py-1 text-xs font-semibold bg-[#102a5c] text-white"
             >
-              <X className="w-3 h-3" /> Effacer tous les filtres
+              {c.dot && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.dot }} />}
+              {c.label}
+              <X className="w-3 h-3 opacity-70" />
             </button>
-          )}
+          ))}
+          <button onClick={clearAll} className="shrink-0 text-[11px] font-bold text-slate-500 px-2">
+            Tout effacer
+          </button>
         </div>
       )}
 
@@ -458,21 +427,13 @@ export function NewsFeed({ mode }: { mode: Mode }) {
               image_url={featured.image_url}
               published_at={featured.published_at}
               source={featured.source}
-              candidateName={
-                featured.article_candidates
-                  .map((x) => x.candidate)
-                  .filter((c): c is CandidateLite => !!c)
-                  .map((c) => fullName(c))[0] ?? null
-              }
+              candidateName={postAuthor(featured.article_candidates)}
             />
           ) : (
             <FeaturedCard article={featured} />
           )}
           {rest.map((a) => {
             if (a.kind === 'twitter_post') {
-              const candidate = a.article_candidates
-                .map((x) => x.candidate)
-                .filter((c): c is CandidateLite => !!c)[0] ?? null;
               return (
                 <TwitterPostCard
                   key={a.id}
@@ -482,12 +443,53 @@ export function NewsFeed({ mode }: { mode: Mode }) {
                   image_url={a.image_url}
                   published_at={a.published_at}
                   source={a.source}
-                  candidateName={candidate ? fullName(candidate) : null}
+                  candidateName={postAuthor(a.article_candidates)}
                 />
               );
             }
             return <CompactCard key={a.id} article={a} />;
           })}
+        </div>
+      )}
+      </div>
+      </div>
+
+      {/* Filtres, tiroir (mobile) */}
+      {drawerOpen && panelProps && (
+        <div className="lg:hidden fixed inset-0 z-[150]" role="dialog" aria-modal="true" aria-label="Filtres">
+          <button
+            aria-label="Fermer les filtres"
+            onClick={() => setDrawerOpen(false)}
+            className="absolute inset-0 bg-slate-900/40 animate-in fade-in duration-200"
+          />
+          <div className="absolute inset-y-0 right-0 w-[88vw] max-w-sm bg-white shadow-xl flex flex-col animate-in slide-in-from-right duration-200 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+              <span className="inline-flex items-center gap-1.5 font-bold text-[#102a5c]">
+                <SlidersHorizontal className="w-4 h-4" /> Filtres
+              </span>
+              <button onClick={() => setDrawerOpen(false)} aria-label="Fermer" className="p-2 -mr-2 rounded-full hover:bg-slate-100 text-slate-500">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              <FilterPanel {...panelProps} />
+            </div>
+            <div className="border-t border-slate-100 px-4 py-3 flex items-center gap-2">
+              <button
+                onClick={clearAll}
+                disabled={activeFilterCount === 0 && !search}
+                className="px-3 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+              >
+                Effacer
+              </button>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                className="flex-1 px-3 py-2.5 rounded-xl text-sm font-bold bg-[#102a5c] text-white hover:bg-[#153b82]"
+              >
+                Voir {headerCount} {isFactcheck ? 'vérification' : 'article'}{headerCount > 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -496,51 +498,163 @@ export function NewsFeed({ mode }: { mode: Mode }) {
 
 // ----------- Sub-components -----------
 
-function ScrollRow({ label, info, action, children }: { label: string; info?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement | null>(null);
+interface FilterPanelProps {
+  filters: FilterOption;
+  isFactcheck: boolean;
+  followedOrientations: Set<string>;
+  toggleOrientation: (o: string) => void;
+  clearOrientations: () => void;
+  followedThemes: Set<string>;
+  themeFollowed: (slug: string) => boolean;
+  toggleTheme: (slug: string) => void;
+  clearThemes: () => void;
+  setOnlyThemes: (slugs: string[]) => void;
+  selectedCandidate: string | null;
+  setSelectedCandidate: (id: string | null) => void;
+  selectedParty: string | null;
+  setSelectedParty: (id: string | null) => void;
+}
+
+/** Toutes les familles de filtres, en grilles. Orientations et catégories
+ *  sont des préférences enregistrées (elles filtrent aussi les notifications) ;
+ *  candidat et parti ne valent que pour la consultation en cours. */
+function FilterPanel(p: FilterPanelProps) {
+  const { filters } = p;
+  const politicsOnly = p.followedThemes.size === 1 && p.followedThemes.has(POLITICS_THEME_SLUG);
   return (
-    <div>
-      <div className="flex items-center justify-between gap-2 mb-1 px-1">
+    <div className="flex flex-col gap-5">
+      {!p.isFactcheck && filters.orientations.length > 0 && (
+        <FilterSection
+          label="Orientations suivies"
+          info={
+            <InfoTip label="À quoi servent les orientations ?">
+              Filtrez le fil par bord politique de la source. « Toutes » affiche
+              tout. Votre sélection s’applique aussi aux notifications d’actualités.
+            </InfoTip>
+          }
+          cols="grid-cols-2"
+        >
+          <GridOption wide active={p.followedOrientations.size === 0} onClick={p.clearOrientations} label="Toutes" />
+          {filters.orientations.map((o) => (
+            <GridOption
+              key={o}
+              active={p.followedOrientations.has(o)}
+              onClick={() => p.toggleOrientation(o)}
+              label={ORIENTATION_META[o]?.label ?? o}
+              dotColor={ORIENTATION_META[o]?.dot}
+            />
+          ))}
+        </FilterSection>
+      )}
+
+      {filters.themes.length > 0 && (
+        <FilterSection
+          label="Catégories suivies"
+          info={
+            <InfoTip label="À quoi servent les catégories ?">
+              Filtrez le fil par thème. « Toutes » affiche tout. Votre sélection
+              s’applique aussi aux notifications d’actualités presse.
+            </InfoTip>
+          }
+          action={
+            <button
+              onClick={() => (politicsOnly ? p.clearThemes() : p.setOnlyThemes([POLITICS_THEME_SLUG]))}
+              className={`text-[10px] font-bold rounded-full px-2 py-1 border transition-colors ${
+                politicsOnly
+                  ? 'bg-[#102a5c] text-white border-[#102a5c]'
+                  : 'bg-white text-[#1a56db] border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              Politique uniquement
+            </button>
+          }
+          cols="grid-cols-2"
+        >
+          <GridOption wide active={p.followedThemes.size === 0} onClick={p.clearThemes} label="Toutes" />
+          {filters.themes.map((t) => (
+            <GridOption
+              key={t.id}
+              active={p.themeFollowed(t.slug)}
+              onClick={() => p.toggleTheme(t.slug)}
+              label={t.name}
+              dotColor={t.color || '#94a3b8'}
+            />
+          ))}
+        </FilterSection>
+      )}
+
+      {filters.candidates.length > 0 && (
+        <FilterSection label="Candidat" cols="grid-cols-2">
+          <GridOption wide active={p.selectedCandidate === null} onClick={() => p.setSelectedCandidate(null)} label="Tous" />
+          {filters.candidates.map((c) => (
+            <GridOption
+              key={c.id}
+              active={p.selectedCandidate === c.id}
+              onClick={() => p.setSelectedCandidate(p.selectedCandidate === c.id ? null : c.id)}
+              label={fullName(c)}
+              avatar={c.photo_url || (c.gender === 'F' ? '/card_red.png' : '/card_blue.png')}
+            />
+          ))}
+        </FilterSection>
+      )}
+
+      {filters.parties.length > 0 && (
+        <FilterSection label="Parti" cols="grid-cols-2">
+          <GridOption wide active={p.selectedParty === null} onClick={() => p.setSelectedParty(null)} label="Tous" />
+          {filters.parties.map((pt) => (
+            <GridOption
+              key={pt.id}
+              active={p.selectedParty === pt.id}
+              onClick={() => p.setSelectedParty(p.selectedParty === pt.id ? null : pt.id)}
+              label={pt.abbreviation || pt.name}
+              title={pt.name}
+              dotColor={pt.color || '#94a3b8'}
+            />
+          ))}
+        </FilterSection>
+      )}
+    </div>
+  );
+}
+
+function FilterSection({
+  label, info, action, cols, children,
+}: { label: string; info?: React.ReactNode; action?: React.ReactNode; cols: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-2 mb-2">
         <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
           {label}
           {info}
         </span>
         {action}
       </div>
-      <div
-        ref={ref}
-        className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1"
-        style={{ scrollbarWidth: 'none' }}
-      >
-        {children}
-      </div>
-    </div>
+      <div className={`grid ${cols} gap-1.5`}>{children}</div>
+    </section>
   );
 }
 
-function DrawerRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">{label}</div>
-      <div className="flex flex-wrap gap-1.5">{children}</div>
-    </div>
-  );
-}
-
-function Chip({
-  active, onClick, label, dotColor,
-}: { active: boolean; onClick: () => void; label: string; dotColor?: string }) {
+function GridOption({
+  active, onClick, label, title, dotColor, avatar, wide = false,
+}: {
+  active: boolean; onClick: () => void; label: string; title?: string; dotColor?: string; avatar?: string;
+  /** Occupe toute la ligne (« Toutes », « Tous »). */
+  wide?: boolean;
+}) {
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition-all whitespace-nowrap ${
+      title={title ?? label}
+      aria-pressed={active}
+      className={`${wide ? 'col-span-full justify-center' : ''} min-w-0 min-h-[36px] inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold border text-left transition-all ${
         active
           ? 'bg-[#102a5c] text-white border-[#102a5c] shadow-sm'
-          : 'bg-white text-slate-700 border-slate-100 hover:border-slate-300'
+          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
       }`}
     >
-      {dotColor && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />}
-      {label}
+      {avatar && <img src={avatar} alt="" loading="lazy" className="w-5 h-5 rounded-full object-cover shrink-0 bg-slate-100" />}
+      {!avatar && dotColor && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />}
+      <span className="line-clamp-2 leading-tight break-words">{label}</span>
     </button>
   );
 }
