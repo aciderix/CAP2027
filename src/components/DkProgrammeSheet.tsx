@@ -31,27 +31,36 @@ export function DkProgrammeSheet({
   return (
     <Modal isOpen={!!candidate} onClose={onClose} title={candidate?.fullName ?? ''}>
       {candidate && (
-        <SheetBody
+        <DkProgrammeView
           key={`${candidate.id}|${initialThemeId ?? ''}`}
           candidate={candidate}
           initialThemeId={initialThemeId}
           themes={themes}
           attribution={attribution}
           generatedAt={generatedAt}
+          stickyChips
         />
       )}
     </Modal>
   );
 }
 
-function SheetBody({
-  candidate, initialThemeId, themes, attribution, generatedAt,
+/** Contenu de la fiche, affiché dans la fenêtre du comparateur ou en pleine
+ *  page depuis l'écran Programmes. */
+export function DkProgrammeView({
+  candidate, initialThemeId, themes, attribution, generatedAt, stickyChips = false, withName = false, children,
 }: {
   candidate: CompCandidate;
   initialThemeId: string | null;
   themes: CompTheme[];
   attribution: string;
   generatedAt: string | null;
+  /** Onglets de thèmes collés en haut de la fenêtre (marges du Modal). */
+  stickyChips?: boolean;
+  /** Nom du candidat dans l'en-tête (en pleine page ; le Modal l'a dans son titre). */
+  withName?: boolean;
+  /** Liens complémentaires sous l'en-tête. */
+  children?: React.ReactNode;
 }) {
   const [themeId, setThemeId] = useState<string>(initialThemeId ?? OVERVIEW);
   const covered = themes.filter((t) => (candidate.themeCounts[t.id] ?? 0) > 0);
@@ -85,12 +94,17 @@ function SheetBody({
       <div className="flex items-center gap-3">
         <CandidateAvatar c={candidate} className="w-14 h-14" />
         <div className="min-w-0">
+          {withName && <h2 className="text-xl font-bold text-[#102a5c] leading-tight">{candidate.fullName}</h2>}
           {candidate.party && <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold truncate">{candidate.party}</div>}
           <div className="text-sm text-slate-600">{candidate.measureCount} mesures analysées</div>
         </div>
       </div>
+      {children}
 
-      <div className="sticky -top-4 sm:-top-6 z-10 bg-white -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 border-b border-slate-100">
+      <div className={stickyChips
+        ? 'sticky -top-4 sm:-top-6 z-10 bg-white -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 border-b border-slate-100'
+        : 'py-1'}
+      >
         <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {[{ id: OVERVIEW, label: "Vue d'ensemble", n: null as number | null }, ...covered.map((t) => ({
             id: t.id, label: t.label, n: candidate.themeCounts[t.id] ?? 0,

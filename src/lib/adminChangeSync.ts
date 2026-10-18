@@ -60,6 +60,7 @@ export function useAdminChangeSync() {
       qc.invalidateQueries({ queryKey: ['dkComparateur'] });
       qc.invalidateQueries({ queryKey: ['candidatesByIds'] });
       qc.invalidateQueries({ queryKey: ['dkMatch'] });
+      qc.invalidateQueries({ queryKey: ['ourProgrammes'] });
       qc.invalidateQueries({ queryKey: ['electionResults'] });
       qc.invalidateQueries({ queryKey: ['parrainagesLatest'] });
       qc.invalidateQueries({ queryKey: ['parrainagesAll'] });

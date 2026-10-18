@@ -503,7 +503,7 @@ sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage
 | C4 | ✅ Fait : fonction `ingest-demos-kratos` (déployée le 18/10, v1) + workflow quotidien à blanc (compare au dernier import) ; import réel via « Run workflow → import » | moi | C3, A1 |
 | C5 | Candidats : rattacher les 12 communs ; créer les 11 absents en non publiés | moi + toi (validation) | C3 |
 | C6 | Attribution « Propulsé par Demos Kratos » + écran Sources (licence, date d'import) | moi | C3 |
-| C9 | Copier les photos des candidats DK dans notre Storage à l'import (leur serveur limite les requêtes et n'envoie pas d'en-tête CORS : photos lentes ou absentes, inutilisables dans l'image de partage) | moi | C4 |
+| C9 | ❌ Abandonné : les photos viendront de nos fiches (admin). Les photos DK ne servent qu'aux candidats sans fiche publiée | — | — |
 | C7 | Demander à DK : citation ou `measureIds` qui justifient chaque position du Match | toi | — |
 | C8 | ✅ Mise en prod faite le 18/10 : migration (appliquée en 5 morceaux, `dk_import` collée dans l'éditeur SQL : l'outil MCP bloque sur les `delete`), 1er import (27 thèmes, 23 candidats, 4 116 mesures, 277 synthèses, 883 affinités, 41 affirmations, 315 positions, 12 candidats reliés). Reste : publication des candidats | moi + toi | C3–C6 |
 
@@ -525,7 +525,7 @@ sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage
 | E2 | ✅ « Ces candidats sont-ils proches ? » : barre convergentes / différentes / opposées par paire (bleu / gris / rouge, palette lisible par les daltoniens, valeurs écrites) + commentaire + détail par thème, qui ouvre le face-à-face | moi | E1 |
 | E3 | ✅ Répartition des mesures par thème : barres groupées triables + vue tableau | moi | E1 |
 | E4 | ✅ Face-à-face par thème (balayage, flèches, clavier) : sujets et verdicts par paire, synthèse, chiffres clés, 3 mesures phares, « le plus convaincant » / « sans préférence », verdict final ; choix gardés sur l'appareil | moi | E1 |
-| E5 | ✅ Fiche programme (depuis le comparateur) : vue d'ensemble, puis par thème synthèse + mesures (phares en tête), citation exacte, source officielle, lien DK (signaler une erreur). Reste : la brancher aussi sur l'écran Programmes | moi | C3 |
+| E5 | ✅ Fiche programme (depuis le comparateur) : vue d'ensemble, puis par thème synthèse + mesures (phares en tête), citation exacte, source officielle, lien DK (signaler une erreur), ouverte depuis le comparateur et en pleine page depuis l'écran Programmes (qui liste les programmes DK, et nos livrets `candidate_programs` quand ils existent) | moi | C3 |
 
 ### F. Livraison
 | # | Tâche | Qui | Dépend de |
