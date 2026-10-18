@@ -8,7 +8,7 @@ import Fuse from 'fuse.js';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
-import { TwitterPostCard } from './TwitterPostCard';
+import { TwitterPostCard, postAuthor } from './TwitterPostCard';
 import { useFollowedOrientations } from '../lib/orientationFollows';
 import { useFollowedThemes, POLITICS_THEME_SLUG } from '../lib/themeFollows';
 import { openLink } from '../lib/openLink';
@@ -41,7 +41,7 @@ interface ArticleRow {
   kind: string | null;
   source: SourceLite | null;
   article_themes: { theme: ThemeLite | null }[];
-  article_candidates: { candidate: CandidateLite | null }[];
+  article_candidates: { score: number | null; candidate: CandidateLite | null }[];
   article_parties: { party: PartyLite | null }[];
 }
 
@@ -153,7 +153,7 @@ export function NewsFeed({ mode }: { mode: Mode }) {
           id, url, title, summary, image_url, published_at, is_factcheck, verdict, kind,
           source:news_sources(slug, name, orientation, color, homepage_url),
           article_themes(theme:themes(id, slug, name, color)),
-          article_candidates(candidate:candidates(id, slug, first_name, last_name)),
+          article_candidates(score, candidate:candidates(id, slug, first_name, last_name)),
           article_parties(party:parties(id, name, abbreviation, color))
         `)
         .eq('is_factcheck', mode === 'factcheck')
@@ -427,21 +427,13 @@ export function NewsFeed({ mode }: { mode: Mode }) {
               image_url={featured.image_url}
               published_at={featured.published_at}
               source={featured.source}
-              candidateName={
-                featured.article_candidates
-                  .map((x) => x.candidate)
-                  .filter((c): c is CandidateLite => !!c)
-                  .map((c) => fullName(c))[0] ?? null
-              }
+              candidateName={postAuthor(featured.article_candidates)}
             />
           ) : (
             <FeaturedCard article={featured} />
           )}
           {rest.map((a) => {
             if (a.kind === 'twitter_post') {
-              const candidate = a.article_candidates
-                .map((x) => x.candidate)
-                .filter((c): c is CandidateLite => !!c)[0] ?? null;
               return (
                 <TwitterPostCard
                   key={a.id}
@@ -451,7 +443,7 @@ export function NewsFeed({ mode }: { mode: Mode }) {
                   image_url={a.image_url}
                   published_at={a.published_at}
                   source={a.source}
-                  candidateName={candidate ? fullName(candidate) : null}
+                  candidateName={postAuthor(a.article_candidates)}
                 />
               );
             }

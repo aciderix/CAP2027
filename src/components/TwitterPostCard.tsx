@@ -22,6 +22,19 @@ interface TwitterPostCardProps {
   candidateName?: string | null;
 }
 
+// L'ingestion donne ce score au candidat propriétaire de la source (son
+// compte X) ; les autres candidats rattachés sont seulement cités (alias).
+const OWNER_SCORE = 100;
+
+/** Auteur d'un post X : le candidat propriétaire du compte, s'il est visible,
+ *  et non un candidat simplement cité. Sinon null (le nom de la source s'affiche). */
+export function postAuthor(
+  links: { score?: number | null; candidate: { first_name: string; last_name: string } | null }[] | null | undefined,
+): string | null {
+  const owner = (links ?? []).find((l) => l.candidate && (l.score ?? 0) >= OWNER_SCORE)?.candidate;
+  return owner ? `${owner.first_name} ${owner.last_name}`.trim() : null;
+}
+
 function relativeTime(iso: string) {
   const d = new Date(iso);
   const diff = Date.now() - d.getTime();

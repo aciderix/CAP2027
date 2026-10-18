@@ -52,8 +52,65 @@ export function AppConfig() {
             value={cfg['push.quiet_hours']}
             onSaved={() => qc.invalidateQueries({ queryKey: ['admin', 'config'] })}
           />
+          <MatchNotifyCard
+            value={cfg['match.notify']}
+            onSaved={() => qc.invalidateQueries({ queryKey: ['admin', 'config'] })}
+          />
         </>
       )}
+    </div>
+  );
+}
+
+// Notification « Le Match s'enrichit », envoyée par ingest-demos-kratos quand
+// l'import quotidien ajoute des affirmations ou des candidats au Match.
+function MatchNotifyCard({
+  value, onSaved,
+}: {
+  value: { enabled?: boolean } | undefined;
+  onSaved: () => void;
+}) {
+  const enabled = !!value?.enabled;
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const toggle = async () => {
+    setSaving(true); setError(null);
+    try {
+      const { error } = await supabase.from('app_config')
+        .upsert({ key: 'match.notify', value: { enabled: !enabled } }, { onConflict: 'key' });
+      if (error) throw error;
+      onSaved();
+    } catch (e: any) {
+      setError(e.message ?? String(e));
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-3">
+      <header className="flex items-center justify-between">
+        <h3 className="font-bold text-ink">Notification « Le Match s'enrichit »</h3>
+        <span className={`text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded ${enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+          {enabled ? 'Activée' : 'Désactivée'}
+        </span>
+      </header>
+      <p className="text-xs text-slate-500 leading-relaxed">
+        Quand l'import quotidien Demos Kratos ajoute des affirmations ou des candidats au Match,
+        une notification part sur le canal « Mises à jour candidats » (désactivable par chaque
+        utilisateur). <b>À activer seulement une fois publiée la version de l'app qui affiche le
+        Match Demos Kratos</b> : l'ancienne version ne montrerait pas ces nouveautés.
+      </p>
+      {error && <div className="text-xs bg-rose-50 text-rose-700 border border-rose-100 rounded-lg p-2">{error}</div>}
+      <div className="flex justify-end">
+        <button
+          onClick={toggle}
+          disabled={saving}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-ink text-white font-bold text-sm hover:bg-accent disabled:opacity-50"
+        >
+          {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+          {enabled ? 'Désactiver' : 'Activer'}
+        </button>
+      </div>
     </div>
   );
 }

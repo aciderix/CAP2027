@@ -1,5 +1,5 @@
 // Companion to ingest-rss: dispatches FCM notifs after each ingest cycle.
-//   1. Per-candidate (twitter_post / youtube_video w/ candidate link) → candidate_id targeting
+//   1. Per-candidate (twitter_post / youtube_video from the candidate's own source) → candidate_id targeting
 //   2. Consolidated press notif (press articles + orphan twitter/youtube) → orientations[] targeting
 //
 // Each call tags data.type so the client can invalidate the right caches.
@@ -50,9 +50,16 @@ interface ArticleRow {
   published_at: string;
   kind: string;
   source?: { orientation: string | null } | null;
-  article_candidates?: Array<{ candidate: Candidate | null }>;
+  article_candidates?: Array<{ score: number | null; candidate: Candidate | null }>;
   article_themes?: Array<{ theme: { slug: string | null } | null }>;
 }
+
+// ingest-rss / ingest-from-xml donnent ce score au candidat propriétaire de
+// la source (son compte X, sa chaîne YouTube). Les autres liens viennent des
+// alias : un post qui *cite* un candidat n'est pas un post *de* ce candidat.
+const OWNER_SCORE = 100;
+const isOwner = (l: { score: number | null; candidate: Candidate | null }) =>
+  !!l.candidate && (l.score ?? 0) >= OWNER_SCORE;
 
 interface PostPayload {
   title: string;
@@ -96,7 +103,7 @@ Deno.serve(async (req) => {
     .select(`
       id, title, summary, url, published_at, kind,
       source:news_sources(orientation),
-      article_candidates(candidate:candidates(id, first_name, last_name)),
+      article_candidates(score, candidate:candidates(id, first_name, last_name)),
       article_themes(theme:themes(slug))
     `)
     .gt("fetched_at", since)
@@ -104,7 +111,7 @@ Deno.serve(async (req) => {
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
-  const articles = (newArticles ?? []) as ArticleRow[];
+  const articles = (newArticles ?? []) as unknown as ArticleRow[];
   const count = articles.length;
   if (count === 0) return Response.json({ count: 0, since, skipped: true });
 
@@ -114,8 +121,8 @@ Deno.serve(async (req) => {
   for (const a of articles) {
     if (a.kind !== "twitter_post" && a.kind !== "youtube_video") continue;
     for (const link of a.article_candidates ?? []) {
-      const c = link.candidate;
-      if (!c) continue;
+      if (!isOwner(link)) continue;
+      const c = link.candidate!;
       let bucket = perCandidate.get(c.id);
       if (!bucket) {
         bucket = { candidate: c, twitter: [], youtube: [] };
@@ -158,13 +165,13 @@ Deno.serve(async (req) => {
   }
 
   const pressArticles = articles.filter((a) => a.kind === "article");
-  // Inclure aussi les twitter/youtube SANS candidat lié (ex: chaîne
-  // YouTube de Brut, post X d'un média généraliste). Ils tombent comme
-  // la presse dans le broadcast par orientation.
+  // Inclure aussi les twitter/youtube SANS candidat propriétaire (ex:
+  // chaîne YouTube de Brut, post X d'un média généraliste, même s'ils
+  // citent un candidat). Ils tombent comme la presse dans le broadcast par
+  // orientation.
   const orphanMedia = articles.filter((a) => {
     if (a.kind !== "twitter_post" && a.kind !== "youtube_video") return false;
-    const linked = (a.article_candidates ?? []).some((l) => !!l.candidate);
-    return !linked;
+    return !(a.article_candidates ?? []).some(isOwner);
   });
   const pressItems = [...pressArticles, ...orphanMedia];
   const pressOrientations = new Set<string>();

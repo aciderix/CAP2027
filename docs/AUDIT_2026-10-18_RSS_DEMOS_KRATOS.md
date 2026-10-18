@@ -537,8 +537,8 @@ sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage
 | G5 | Fiche Le Pen : à mettre à jour après l'examen par la Cour de cassation (16/12/2026) | toi | à faire |
 | G6 | Mentions « Propulsé par Demos Kratos » : Match (jeu, résultats avec lien par candidat, carte d'accueil), écran Méthodologie et sources (licence, date d'export) ; déjà présentes dans comparateur, programmes et fiches | moi | ✅ |
 | G7 | Actualités : filtres réunis dans un panneau (tiroir mobile, colonne PC), filtres actifs visibles | moi | ✅ |
-| G8 | Alias candidats et partis : proposition testée sur les articles en base, en attente de validation ; puis rattachement rétroactif des articles existants | moi après ton OK | en attente |
-| G9 | Notification push « Le Match s'enrichit » à l'import d'un export qui ajoute des affirmations (le badge dans l'app existe déjà) | moi si tu valides | à décider |
+| G8 | Alias : 39 candidats + 21 partis ajoutés (noms courants en nom complet seulement), 3 231 liens candidats et 3 253 liens partis ajoutés rétroactivement. Garde-fous : notification « Nouveau post de X » et auteur des posts X réservés au propriétaire du compte (score 100), pas aux candidats cités | moi | ✅ |
+| G9 | Notification « Le Match s'enrichit » (ingest-demos-kratos v2) quand un import ajoute des affirmations ou des candidats ; interrupteur dans l'admin (Config app), **à activer après la sortie de la nouvelle version** | moi (code) + toi (activation) | ✅ code, interrupteur éteint |
 
 ### F. Livraison
 | # | Tâche | Qui | Dépend de |

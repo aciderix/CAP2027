@@ -9,7 +9,7 @@ import type { Tables, Enums } from '../lib/database.types';
 import { useFollowedCandidates } from '../lib/follows';
 import { openLink } from '../lib/openLink';
 import { CandidateParrainagesInline } from './CandidateParrainagesInline';
-import { TwitterPostCard } from './TwitterPostCard';
+import { TwitterPostCard, postAuthor } from './TwitterPostCard';
 import { STABLE_STALE_MS } from '../lib/queryClient';
 import { COMPARATEUR_QUERY_KEY, fetchComparateurBase } from '../lib/comparateurData';
 import { DkProgrammeView } from './DkProgrammeSheet';
@@ -30,6 +30,7 @@ type NewsArticle = {
   published_at: string;
   kind: string;
   source: { name: string; color: string | null; orientation: string } | null;
+  article_candidates?: { score: number | null; candidate: { first_name: string; last_name: string } | null }[];
 };
 
 type CandidateWithParty = CandidateRow & { parties: Pick<PartyRow, 'name' | 'abbreviation' | 'color'> | null };
@@ -139,7 +140,8 @@ export function CandidatesList() {
           .select(`
             article:news_articles(
               id, url, title, summary, image_url, published_at, kind,
-              source:news_sources(name, color, orientation)
+              source:news_sources(name, color, orientation),
+              article_candidates(score, candidate:candidates(first_name, last_name))
             )
           `)
           .eq('candidate_id', candidateId)
@@ -529,7 +531,7 @@ export function CandidatesList() {
                               image_url={n.image_url}
                               published_at={n.published_at}
                               source={n.source}
-                              candidateName={fullName(selectedCandidate)}
+                              candidateName={postAuthor(n.article_candidates)}
                             />
                           ) : (
                             <CandidateNewsCard key={n.id} article={n} />

@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
 import { useFollowedCandidates } from '../lib/follows';
-import { TwitterPostCard } from './TwitterPostCard';
+import { TwitterPostCard, postAuthor } from './TwitterPostCard';
 import { openLink } from '../lib/openLink';
 
 // 30 days back-window. Articles older than this are aggressively
@@ -42,7 +42,7 @@ interface ArticleRow {
   kind: string;
   is_factcheck: boolean;
   source: SourceLite | null;
-  article_candidates: { candidate: CandidateLite | null }[];
+  article_candidates: { score: number | null; candidate: CandidateLite | null }[];
 }
 
 function fullName(c: CandidateLite) {
@@ -120,7 +120,7 @@ export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
         .select(`
           id, url, title, summary, image_url, published_at, kind, is_factcheck,
           source:news_sources(name, orientation, color),
-          article_candidates!inner(candidate:candidates(id, slug, first_name, last_name, photo_url, gender))
+          article_candidates!inner(score, candidate:candidates(id, slug, first_name, last_name, photo_url, gender))
         `)
         .gt('published_at', cursorIso)
         .in('article_candidates.candidate_id', followedIds)
@@ -287,9 +287,6 @@ export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
         <div className="flex flex-col gap-2.5 pb-4">
           {filtered.map((a) => {
             if (a.kind === 'twitter_post') {
-              const candidate = a.article_candidates
-                .map((x) => x.candidate)
-                .find((c): c is CandidateLite => !!c);
               return (
                 <TwitterPostCard
                   key={a.id}
@@ -299,7 +296,7 @@ export function MyFeed({ onGoToCandidates }: { onGoToCandidates: () => void }) {
                   image_url={a.image_url}
                   published_at={a.published_at}
                   source={a.source}
-                  candidateName={candidate ? `${candidate.first_name} ${candidate.last_name}`.trim() : null}
+                  candidateName={postAuthor(a.article_candidates)}
                 />
               );
             }
