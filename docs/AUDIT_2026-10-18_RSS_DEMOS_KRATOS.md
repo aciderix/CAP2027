@@ -444,7 +444,7 @@ plus un lien vers sa fiche et la page Demos Kratos.
     d'informations ».
 - Badge « Nouveau » sur l'entrée du Match, et en option un push après import
   (`push-broadcast`, type `match_update`, dans le canal « Mises à jour candidats »,
-  désactivable) : « Le Match s'enrichit : 5 nouveaux choix · Gabriel Attal rejoint le
+  désactivable) : « Le Match s'enrichit : 5 nouveaux choix · Olivier Becht rejoint le
   Match ».
 
 `candidate_match_propositions` devient inutile pour le Match. Le `Comparateur.tsx`
