@@ -389,10 +389,12 @@ Paramètres choisis par simulation (`scripts/match_fairness_sim.py`, export du 1
 À stocker dans `app_config` pour les ajuster sans nouvelle version de l'app ; relancer le
 script à chaque nouvel export.
 
-**1. Candidat « jouable »** : au moins **15 affirmations** positionnées **et** au moins
-**10 thèmes** distincts (sur les 18 thèmes du Match).
-- Aujourd'hui : 10 jouables. Non jouables : Gabriel Attal (13 affirmations, 10 thèmes),
-  Olivier Becht (13 / 7), Clara Egger (9 / 3).
+**1. Candidat « jouable »** : au moins **13 affirmations** positionnées **et** au moins
+**10 thèmes** distincts (sur les 18 thèmes du Match). Seuil validé le 18/10 : à 13 plutôt
+que 15, l'équité est meilleure (écart 4,3 pts contre 5,2), la fidélité est de 98 % et le
+classement se débloque en 9 cartes (médiane).
+- Aujourd'hui : 11 jouables, dont Gabriel Attal (13 affirmations, 10 thèmes).
+  Non jouables : Olivier Becht (13 / 7 thèmes), Clara Egger (9 / 3).
 - Un candidat non jouable n'est **pas noté du tout** (ses positions sont ignorées), ce
   qui évite un classement sur 2 ou 3 sujets.
 - Calcul côté serveur à chaque import du fichier `match` (vue `match_candidates` :
@@ -417,7 +419,7 @@ jouable positionné ne sont pas proposées.
 
 **4. Déblocage du classement** : affiché quand **chaque candidat jouable a au moins 6
 comparaisons sur au moins 3 thèmes**. Avant : « Encore quelques cartes pour un résultat
-équitable », avec une barre de progression. Résultat simulé : **8 cartes en médiane, 11
+équitable », avec une barre de progression. Résultat simulé : **9 cartes en médiane, 11
 pour 90 % des joueurs** (contre 17 et 23 avec un ordre au hasard).
 
 **5. Écran de résultats, rubrique « Pas encore assez d'informations pour le Match »** :
@@ -431,7 +433,7 @@ plus un lien vers sa fiche et la page Demos Kratos.
 - À l'ouverture de l'app ou du Match, si la version a changé :
   - **nouvelles affirmations** non répondues et touchant au moins un jouable → badge
     « N nouveaux choix disponibles » ; la reprise ne propose que celles-ci ;
-  - **candidat devenu jouable** → « Gabriel Attal rejoint le Match ». Les affirmations
+  - **candidat devenu jouable** → par exemple « Olivier Becht rejoint le Match ». Les affirmations
     étant communes, les réponses déjà données comptent tout de suite pour lui. On ne
     propose que les cartes où il est positionné et qui n'ont pas encore de réponse ;
   - **affirmation reformulée** (`textHash` différent) → reposée (« affirmation

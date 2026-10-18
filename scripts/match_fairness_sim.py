@@ -103,7 +103,7 @@ def winners(scores):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("match_json")
-    ap.add_argument("--min-statements", type=int, default=15)
+    ap.add_argument("--min-statements", type=int, default=13)
     ap.add_argument("--min-themes", type=int, default=10)
     ap.add_argument("--k", type=float, default=8)
     ap.add_argument("--unlock-comparisons", type=int, default=6)
