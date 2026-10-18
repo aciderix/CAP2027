@@ -482,16 +482,16 @@ sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage
 | A3 | Vérifier facturation / quota Actions du compte : **les builds APK/AAB tournent dans le dépôt privé** | toi | — |
 | A4 | ✅ Fait : `android-release.yml` supprimé | moi | — |
 | A5 | Fusionner la branche CAP2027 dans `main` (config Supabase locale, migration `decode_html_entities`, script RSS, docs) | toi (PR) | — |
-| A6 | Vérifier puis supprimer `diag-fcm` / `diag-parrainages` (fonctions de debug ouvertes en prod) | moi, après ton OK | — |
+| A6 | `diag-fcm` / `diag-parrainages` : déjà neutralisées (répondent 410 « Gone », aucun code actif). Suppression possible depuis le dashboard Supabase (Edge Functions), purement cosmétique | toi (facultatif) | — |
 | A7 | Optionnel : URLs de prod en dur dans les migrations → `app_config` ou Vault | moi | — |
 
 ### B. X / Twitter & sources presse
 | # | Tâche | Qui | Dépend de |
 |---|---|---|---|
 | B1 | Surveiller meowing (le run passe au rouge s'il tombe) ; plan B : API X à l'usage (~1,5 $/mois par compte) | moi | A1 |
-| B2 | Comptes X (et YouTube) des autres candidats : seul Mélenchon en a un | toi (liste), moi (sources) | A1 |
+| B2 | Comptes X (et YouTube) des autres candidats : seul Mélenchon en a un. Format : X `https://nitter.meowing.monster/<compte>/rss` (type twitter), YouTube `https://www.youtube.com/feeds/videos.xml?channel_id=<id>` (type youtube), candidat renseigné | toi (admin, Sources RSS) | A1 |
 | B3 | **Alias des candidats** : seuls ceux de Mélenchon existent, donc aucun article de presse n'est rattaché aux 12 autres | toi + moi | — |
-| B4 | Sources mortes : Politis (flux supprimé), Le Point (anti-bot) → nouvelle URL ou désactivation | moi | — |
+| B4 | Sources mortes : Politis (flux supprimé), Le Point (anti-bot) → nouvelle URL ou désactivation | toi | — |
 | B5 | Optionnel : blogs `melenchon.fr/feed/`, `lafranceinsoumise.fr/feed/` | moi | — |
 
 ### C. Données Demos Kratos (socle du Match et du comparateur)
@@ -516,7 +516,7 @@ sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage
 | D4 | ✅ Rubrique « Pas encore assez d'informations » faite ; reste le détail « non abordé » par thème | moi | D2 |
 | D5 | ✅ Fait et testé (nouvel export simulé) sauf la notification push `match_update` | moi | D2 |
 | D6 | ✅ Fait | moi | D2 |
-| D7 | Recalibrage auto : simulation lancée à chaque nouvel export (dans le workflow DK) | moi | C4 |
+| D7 | ❌ Pas d'automatisation : je relance `scripts/match_fairness_sim.py` à la main si un export change beaucoup le Match (nombre d'affirmations ou de candidats) et j'ajuste `app_config.match.params` | moi | C4 |
 
 ### E. Comparateur v2 (inspiré de demos-kratos.fr, voir 4.5)
 | # | Tâche | Qui | Dépend de |
@@ -535,6 +535,10 @@ sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage
 | G3 | Relire les 14 brouillons de bio (sources et doutes : `bios_lot1.json`, `bios_lot2.json` de la session), ajouter les photos, publier | toi | à faire |
 | G4 | Alias des candidats (presse) : seul Mélenchon en a ; sans alias, les articles ne sont pas rattachés aux candidats | toi (admin) ou moi | à faire |
 | G5 | Fiche Le Pen : à mettre à jour après l'examen par la Cour de cassation (16/12/2026) | toi | à faire |
+| G6 | Mentions « Propulsé par Demos Kratos » : Match (jeu, résultats avec lien par candidat, carte d'accueil), écran Méthodologie et sources (licence, date d'export) ; déjà présentes dans comparateur, programmes et fiches | moi | ✅ |
+| G7 | Actualités : filtres réunis dans un panneau (tiroir mobile, colonne PC), filtres actifs visibles | moi | ✅ |
+| G8 | Alias candidats et partis : proposition testée sur les articles en base, en attente de validation ; puis rattachement rétroactif des articles existants | moi après ton OK | en attente |
+| G9 | Notification push « Le Match s'enrichit » à l'import d'un export qui ajoute des affirmations (le badge dans l'app existe déjà) | moi si tu valides | à décider |
 
 ### F. Livraison
 | # | Tâche | Qui | Dépend de |
