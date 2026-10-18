@@ -4,6 +4,7 @@
 
 import { supabase } from './supabase';
 import { textHash, type Answer, type DkStance, type MatchStatement, type StanceIndex } from './matchScoring';
+import { DK_DEFAULT_ATTRIBUTION, fetchDkThemeColors, fetchOurCandidates } from './dkShared';
 
 export interface MatchCandidate {
   /** id Demos Kratos (clé des positions). */
@@ -38,8 +39,6 @@ export const MATCH_QUERY_KEY = ['dkMatch'] as const;
 
 const DEFAULT_SOURCE_URL = 'https://demos-kratos.fr/swipe/';
 const DEFAULT_METHOD_URL = 'https://demos-kratos.fr/swipe/methode/';
-const DEFAULT_ATTRIBUTION =
-  "Données : demos-kratos.fr — extraites des programmes officiels, de manière neutre, avec des outils utilisant l'IA.";
 
 // PostgREST plafonne les réponses (1 000 lignes sur Supabase) : on pagine
 // les positions, qui grossiront avec les programmes publiés.
@@ -58,59 +57,38 @@ async function fetchAllStances() {
   }
 }
 
-type LinkRow = {
-  dk_candidate_id: string;
-  candidates: {
-    slug: string; first_name: string; last_name: string; gender: string | null; photo_url: string | null;
-    parties: { name: string | null; abbreviation: string | null } | null;
-  } | null;
-};
-
 export async function fetchMatchData(): Promise<MatchData> {
-  const [st, stances, ca, links, map, themes, imp] = await Promise.all([
+  const [st, stances, ca, ours, themeColors, imp] = await Promise.all([
     supabase.from('dk_match_statements').select('id, text, theme_slug, theme_label, theme_id').order('sort_order'),
     fetchAllStances(),
     supabase.from('dk_match_candidates').select('id, full_name, party, photo_url, url'),
-    supabase.from('dk_candidate_links')
-      .select('dk_candidate_id, candidates(slug, first_name, last_name, gender, photo_url, parties(name, abbreviation))'),
-    supabase.from('dk_theme_map').select('dk_theme_id, theme_slug'),
-    supabase.from('themes').select('slug, color'),
+    fetchOurCandidates(),
+    fetchDkThemeColors(),
     supabase.from('dk_imports').select('content_hash, meta').eq('kind', 'match')
       .order('imported_at', { ascending: false }).order('id', { ascending: false }).limit(1),
   ]);
-  for (const r of [st, ca, links, map, themes, imp]) if (r.error) throw r.error;
-
-  // Couleur du thème : celle de notre thème correspondant (dk_theme_map).
-  const colorBySlug = new Map((themes.data ?? []).map((t) => [t.slug, t.color]));
-  const ourThemeByDk = new Map((map.data ?? []).map((m) => [m.dk_theme_id, m.theme_slug]));
+  for (const r of [st, ca, imp]) if (r.error) throw r.error;
 
   const index: StanceIndex = {};
   for (const s of stances) (index[s.statement_id] ??= {})[s.candidate_id] = s.stance as DkStance;
 
-  // Un candidat relié à une de nos fiches publiées prend notre photo (servie
-  // avec CORS, donc utilisable dans l'image de partage) et notre parti.
-  const ours = new Map((links.data as unknown as LinkRow[] ?? [])
-    .filter((l) => l.candidates)
-    .map((l) => [l.dk_candidate_id, l.candidates!]));
-
   const meta = (imp.data?.[0]?.meta ?? {}) as Record<string, unknown>;
   return {
-    statements: (st.data ?? []).map((s) => {
-      const ourTheme = s.theme_id ? ourThemeByDk.get(s.theme_id) : null;
-      return {
-        id: s.id, text: s.text, themeSlug: s.theme_slug, themeLabel: s.theme_label,
-        themeColor: (ourTheme && colorBySlug.get(ourTheme)) || null,
-      };
-    }),
+    statements: (st.data ?? []).map((s) => ({
+      id: s.id, text: s.text, themeSlug: s.theme_slug, themeLabel: s.theme_label,
+      themeColor: (s.theme_id && themeColors.get(s.theme_id)) || null,
+    })),
     stances: index,
+    // Un candidat relié à une de nos fiches publiées prend notre photo (servie
+    // avec CORS, donc utilisable dans l'image de partage) et notre parti.
     candidates: (ca.data ?? []).map((c) => {
       const o = ours.get(c.id);
       return {
         id: c.id,
-        fullName: o ? `${o.first_name} ${o.last_name}`.trim() : c.full_name,
-        party: o?.parties?.name || o?.parties?.abbreviation || c.party,
-        photoUrl: o?.photo_url || c.photo_url,
-        photoIsOurs: !!o?.photo_url,
+        fullName: o?.fullName ?? c.full_name,
+        party: o?.party || c.party,
+        photoUrl: o?.photoUrl || c.photo_url,
+        photoIsOurs: !!o?.photoUrl,
         gender: o?.gender ?? null,
         ourSlug: o?.slug ?? null,
         dkUrl: c.url,
@@ -119,7 +97,7 @@ export async function fetchMatchData(): Promise<MatchData> {
     version: imp.data?.[0]?.content_hash ?? null,
     sourceUrl: typeof meta.url === 'string' ? meta.url : DEFAULT_SOURCE_URL,
     methodologyUrl: typeof meta.methodologyUrl === 'string' ? meta.methodologyUrl : DEFAULT_METHOD_URL,
-    attribution: typeof meta.attribution === 'string' ? meta.attribution : DEFAULT_ATTRIBUTION,
+    attribution: typeof meta.attribution === 'string' ? meta.attribution : DK_DEFAULT_ATTRIBUTION,
   };
 }
 

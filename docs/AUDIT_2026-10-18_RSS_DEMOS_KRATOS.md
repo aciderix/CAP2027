@@ -521,11 +521,11 @@ sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage
 ### E. Comparateur v2 (inspiré de demos-kratos.fr, voir 4.5)
 | # | Tâche | Qui | Dépend de |
 |---|---|---|---|
-| E1 | Sélection de 2 à 3 candidats (sans programme : grisés) | moi | C3 |
-| E2 | « Ces candidats sont-ils proches ? » : barre vert/jaune/rouge par paire + commentaire + détail par thème | moi | E1 |
-| E3 | Répartition des mesures par thème (graphique) | moi | E1 |
-| E4 | Face-à-face en carrousel par thème : synthèse, 3 mesures phares, sujets et verdicts, « le plus convaincant », verdict final | moi | E1 |
-| E5 | Fiches programme : mesures + citation exacte + source officielle + lien DK | moi | C3 |
+| E1 | ✅ Sélection de 2 à 3 candidats (sans programme : grisés), mémorisée sur l'appareil | moi | C3 |
+| E2 | ✅ « Ces candidats sont-ils proches ? » : barre convergentes / différentes / opposées par paire (bleu / gris / rouge, palette lisible par les daltoniens, valeurs écrites) + commentaire + détail par thème, qui ouvre le face-à-face | moi | E1 |
+| E3 | ✅ Répartition des mesures par thème : barres groupées triables + vue tableau | moi | E1 |
+| E4 | ✅ Face-à-face par thème (balayage, flèches, clavier) : sujets et verdicts par paire, synthèse, chiffres clés, 3 mesures phares, « le plus convaincant » / « sans préférence », verdict final ; choix gardés sur l'appareil | moi | E1 |
+| E5 | ✅ Fiche programme (depuis le comparateur) : vue d'ensemble, puis par thème synthèse + mesures (phares en tête), citation exacte, source officielle, lien DK (signaler une erreur). Reste : la brancher aussi sur l'écran Programmes | moi | C3 |
 
 ### F. Livraison
 | # | Tâche | Qui | Dépend de |

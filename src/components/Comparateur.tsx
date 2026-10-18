@@ -1,442 +1,290 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Scale, LayoutGrid, Columns3, Check } from 'lucide-react';
+// Comparateur v2, sur les programmes analysés par Demos Kratos (interface
+// reprise de demos-kratos.fr/comparateur) : sélection de 2 à 3 candidats,
+// proximité des programmes, répartition des mesures par thème, face-à-face
+// thème par thème, et fiche programme de chaque candidat.
+
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { Check, Pencil, Scale, X } from 'lucide-react';
+import {
+  COMPARATEUR_QUERY_KEY, fetchAffinities, fetchComparateurBase, fetchSyntheses, type CompCandidate,
+} from '../lib/comparateurData';
+import { DK_LICENCE_URL } from '../lib/dkShared';
+import { openLink } from '../lib/openLink';
 import { STABLE_STALE_MS } from '../lib/queryClient';
-import type { Tables } from '../lib/database.types';
+import { ComparateurFaceAFace } from './ComparateurFaceAFace';
+import { ComparateurProximite } from './ComparateurProximite';
+import { ComparateurRepartition } from './ComparateurRepartition';
+import { CandidateAvatar, DkCredit, SLOT_COLORS } from './comparateurUi';
+import { DkProgrammeSheet } from './DkProgrammeSheet';
+import { Button } from './ui/Button';
 
-type CandidateRow = Tables<'candidates'>;
-type PartyLite = Pick<Tables<'parties'>, 'name' | 'abbreviation' | 'color'>;
-type CandidateWithParty = CandidateRow & { parties: PartyLite | null };
-type ThemeRow = Tables<'themes'>;
+const MAX_SELECTED = 3;
+const SELECTED_KEY = 'cap2027.comparateur.v2.selected';
 
-interface Statement {
-  id: string;
-  text: string;
-  candidate_id: string;
-  theme_id: string;
-  order_index: number;
-}
-
-type ViewMode = 'cards' | 'columns';
-
-const VIEW_KEY = 'cap2027.comparateur.view';
-const SELECTED_KEY = 'cap2027.comparateur.selected';
-
-function fullName(c: CandidateRow) {
-  return `${c.first_name} ${c.last_name}`.trim();
-}
-function fallbackPhoto(c: CandidateRow) {
-  return c.gender === 'F' ? '/card_red.png' : '/card_blue.png';
-}
-
-function readSelected(): string[] | null {
-  if (typeof window === 'undefined') return null;
+function readSelected(): string[] {
   try {
-    const raw = localStorage.getItem(SELECTED_KEY);
-    if (!raw) return null;
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : null;
-  } catch { return null; }
+    const arr = JSON.parse(localStorage.getItem(SELECTED_KEY) ?? '[]');
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
 }
 
 export function Comparateur() {
-  const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    if (typeof window === 'undefined') return 'cards';
-    return (localStorage.getItem(VIEW_KEY) as ViewMode) || 'cards';
-  });
-  const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set());
-  const [selectionInitialised, setSelectionInitialised] = useState(false);
-
-  const candidatesQuery = useQuery({
-    queryKey: ['comparateurCandidates'],
+  const baseQuery = useQuery({
+    queryKey: COMPARATEUR_QUERY_KEY,
+    queryFn: fetchComparateurBase,
     staleTime: STABLE_STALE_MS,
-    queryFn: async (): Promise<CandidateWithParty[]> => {
-      const { data, error } = await supabase
-        .from('candidates').select('*, parties(name, abbreviation, color)').eq('is_published', true);
-      if (error) throw error;
-      return ((data ?? []) as CandidateWithParty[]).sort((a, b) =>
-        a.last_name.localeCompare(b.last_name, 'fr', { sensitivity: 'base' })
-      );
-    },
   });
+  const base = baseQuery.data;
 
-  const themesQuery = useQuery({
-    queryKey: ['themes'],
+  const [selectedIds, setSelectedIds] = useState<string[]>(readSelected);
+  // Grille ouverte tant que la sélection n'est pas validée (« Comparer ») ou complète.
+  const [pickerOpen, setPickerOpen] = useState(() => readSelected().length < 2);
+  const [sheet, setSheet] = useState<{ candidateId: string; themeId: string | null } | null>(null);
+  const [focus, setFocus] = useState<{ themeId: string; n: number } | null>(null);
+  const faceRef = useRef<HTMLElement>(null);
+
+  // Candidats comparables : ceux dont Demos Kratos a analysé le programme.
+  const byId = useMemo(() => new Map((base?.candidates ?? []).map((c) => [c.id, c])), [base]);
+  const selected = useMemo(
+    () => selectedIds.map((id) => byId.get(id)).filter((c): c is CompCandidate => !!c && c.measureCount > 0),
+    [selectedIds, byId],
+  );
+  const ids = selected.map((c) => c.id);
+  const sortedIds = [...ids].sort();
+
+  useEffect(() => {
+    try { localStorage.setItem(SELECTED_KEY, JSON.stringify(selectedIds)); } catch { /* best-effort */ }
+  }, [selectedIds]);
+
+  // Un candidat retiré de l'export (ou sans programme) sort de la sélection.
+  useEffect(() => {
+    if (!base || selected.length === selectedIds.length) return;
+    setSelectedIds(selected.map((c) => c.id));
+    if (selected.length < 2) setPickerOpen(true);
+  }, [base, selected, selectedIds.length]);
+
+  const showPicker = pickerOpen || selected.length < 2;
+  const comparing = !showPicker;
+
+  const affQuery = useQuery({
+    queryKey: ['dkAffinities', sortedIds],
+    queryFn: () => fetchAffinities(sortedIds),
+    enabled: comparing,
     staleTime: STABLE_STALE_MS,
-    queryFn: async (): Promise<ThemeRow[]> => {
-      const { data, error } = await supabase.from('themes').select('*').order('order_index');
-      if (error) throw error;
-      return (data ?? []) as ThemeRow[];
-    },
   });
-
-  const statementsQuery = useQuery({
-    queryKey: ['matchPropositions'],
+  const synQuery = useQuery({
+    queryKey: ['dkSyntheses', sortedIds],
+    queryFn: () => fetchSyntheses(sortedIds),
+    enabled: comparing,
     staleTime: STABLE_STALE_MS,
-    queryFn: async (): Promise<Statement[]> => {
-      const { data, error } = await supabase
-        .from('candidate_match_propositions')
-        .select('id, text, candidate_id, theme_id, order_index')
-        .eq('is_active', true).order('order_index');
-      if (error) throw error;
-      return (data ?? []) as Statement[];
-    },
   });
 
-  const candidates = candidatesQuery.data ?? [];
-  const themes = themesQuery.data ?? [];
-  const statements = statementsQuery.data ?? [];
-  const loading = candidatesQuery.isLoading || themesQuery.isLoading || statementsQuery.isLoading;
-  const error =
-    candidatesQuery.error?.message ||
-    themesQuery.error?.message ||
-    statementsQuery.error?.message ||
-    null;
-
-  // Initialise candidate selection once candidates are loaded
-  useEffect(() => {
-    if (selectionInitialised || candidates.length === 0) return;
-    const saved = readSelected();
-    const allIds = new Set(candidates.map((c) => c.id));
-    if (saved && saved.length > 0) {
-      setSelectedCandidates(new Set(saved.filter((id) => allIds.has(id))));
-    } else {
-      setSelectedCandidates(allIds);
+  function toggle(c: CompCandidate) {
+    if (c.measureCount === 0) return;
+    if (ids.includes(c.id)) {
+      setSelectedIds(ids.filter((id) => id !== c.id));
+      return;
     }
-    setSelectionInitialised(true);
-  }, [candidates, selectionInitialised]);
+    if (ids.length >= MAX_SELECTED) return;
+    const next = [...ids, c.id];
+    setSelectedIds(next);
+    if (next.length === MAX_SELECTED) setPickerOpen(false);
+  }
 
-  // Persist view mode + selection
-  useEffect(() => {
-    if (typeof window !== 'undefined') localStorage.setItem(VIEW_KEY, viewMode);
-  }, [viewMode]);
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(SELECTED_KEY, JSON.stringify([...selectedCandidates]));
-    }
-  }, [selectedCandidates]);
+  function remove(id: string) {
+    const next = ids.filter((x) => x !== id);
+    setSelectedIds(next);
+    if (next.length < 2) setPickerOpen(true);
+  }
 
-  const themesWithContent = useMemo(() => {
-    const ids = new Set(statements.map((s) => s.theme_id));
-    return themes.filter((t) => ids.has(t.id));
-  }, [themes, statements]);
+  function pickTheme(themeId: string) {
+    setFocus((f) => ({ themeId, n: (f?.n ?? 0) + 1 }));
+    faceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
-  useEffect(() => {
-    if (!selectedThemeId && themesWithContent.length > 0) {
-      setSelectedThemeId(themesWithContent[0].id);
-    }
-  }, [themesWithContent, selectedThemeId]);
-
-  const currentTheme = useMemo(
-    () => themesWithContent.find((t) => t.id === selectedThemeId) ?? null,
-    [themesWithContent, selectedThemeId]
-  );
-
-  const byCandidate = useMemo(() => {
-    const map = new Map<string, Statement[]>();
-    if (!selectedThemeId) return map;
-    for (const s of statements) {
-      if (s.theme_id !== selectedThemeId) continue;
-      if (!map.has(s.candidate_id)) map.set(s.candidate_id, []);
-      map.get(s.candidate_id)!.push(s);
-    }
-    return map;
-  }, [statements, selectedThemeId]);
-
-  // Candidates that have content for this theme AND are selected
-  const visibleCandidates = useMemo(
-    () => candidates.filter((c) => byCandidate.has(c.id) && selectedCandidates.has(c.id)),
-    [candidates, byCandidate, selectedCandidates]
-  );
-
-  // Candidates that have content for this theme (selected or not, used for the chip selector)
-  const candidatesForTheme = useMemo(
-    () => candidates.filter((c) => byCandidate.has(c.id)),
-    [candidates, byCandidate]
-  );
-
-  const toggleCandidate = (id: string) => {
-    setSelectedCandidates((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const error = baseQuery.error || affQuery.error || synQuery.error;
+  const withProgramme = (base?.candidates ?? []).filter((c) => c.measureCount > 0);
+  const withoutProgramme = (base?.candidates ?? []).filter((c) => c.measureCount === 0);
+  const sheetCandidate = sheet ? byId.get(sheet.candidateId) ?? null : null;
 
   return (
-    <div className="flex flex-col gap-3 sm:gap-4 w-full animate-in fade-in duration-300">
-      <div className="flex items-center justify-between gap-3">
+    <div className="flex flex-col gap-4 w-full animate-in fade-in duration-300">
+      <div className="flex flex-col gap-1">
         <h2 className="text-xl font-bold text-[#102a5c] flex items-center gap-2">
           <Scale className="w-5 h-5 text-emerald-600" />
-          Comparateur thématique
+          Comparateur
         </h2>
-
-        {/* View toggle */}
-        <div className="inline-flex items-center bg-slate-100 rounded-full p-0.5 text-xs">
-          <button
-            onClick={() => setViewMode('cards')}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-bold transition-all ${
-              viewMode === 'cards' ? 'bg-white text-[#102a5c] shadow-sm' : 'text-slate-500'
-            }`}
-            aria-label="Vue cartes"
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Cartes</span>
-          </button>
-          <button
-            onClick={() => setViewMode('columns')}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-bold transition-all ${
-              viewMode === 'columns' ? 'bg-white text-[#102a5c] shadow-sm' : 'text-slate-500'
-            }`}
-            aria-label="Vue côte à côte"
-          >
-            <Columns3 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Côte à côte</span>
-          </button>
-        </div>
+        <p className="text-sm text-slate-600">
+          Choisissez 2 ou 3 candidats : proximité de leurs programmes, thèmes privilégiés, et face-à-face thème par thème.
+        </p>
+        {base && <DkCredit url={base.sourceUrl} />}
       </div>
 
       {error && (
         <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl p-3 text-sm">
-          Impossible de charger les données : {error}
+          Impossible de charger les données : {(error as Error).message}
         </div>
       )}
 
-      {/* Themes ribbon */}
-      {!loading && themesWithContent.length > 0 && (
-        <div>
-          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
-            Thématique
-          </div>
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
-            {themesWithContent.map((t) => {
-              const active = t.id === selectedThemeId;
-              const count = statements.filter((s) => s.theme_id === t.id).length;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedThemeId(t.id)}
-                  className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition-all whitespace-nowrap ${
-                    active
-                      ? 'bg-[#102a5c] text-white border-[#102a5c] shadow-sm'
-                      : 'bg-white text-slate-700 border-slate-100 hover:border-slate-300'
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: t.color || '#94a3b8' }} />
-                  {t.name}
-                  <span className={`text-[10px] font-bold ${active ? 'opacity-70' : 'text-slate-400'}`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+      {baseQuery.isLoading && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          {Array.from({ length: 8 }, (_, n) => (
+            <div key={n} className="h-[132px] bg-white rounded-2xl border border-slate-100 animate-pulse" />
+          ))}
         </div>
       )}
 
-      {/* Candidate multi-select */}
-      {!loading && candidatesForTheme.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
-            <span>Candidats</span>
-            <div className="flex items-center gap-2 normal-case tracking-normal">
-              <button
-                onClick={() => setSelectedCandidates(new Set(candidatesForTheme.map((c) => c.id)))}
-                className="text-[10px] font-bold text-[#1a56db] hover:underline"
-              >
-                Tous
-              </button>
-              <span className="text-slate-200">·</span>
-              <button
-                onClick={() => setSelectedCandidates(new Set())}
-                className="text-[10px] font-bold text-slate-500 hover:underline"
-              >
-                Aucun
-              </button>
-            </div>
+      {base && showPicker && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Candidats · {selected.length}/{MAX_SELECTED}
+            </span>
+            {selected.length >= 2 && (
+              <Button size="sm" onClick={() => setPickerOpen(false)} className="rounded-full">
+                Comparer ({selected.length})
+              </Button>
+            )}
           </div>
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
-            {candidatesForTheme.map((c) => {
-              const active = selectedCandidates.has(c.id);
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {withProgramme.map((c) => {
+              const slot = ids.indexOf(c.id);
+              const active = slot >= 0;
+              const full = !active && selected.length >= MAX_SELECTED;
               return (
                 <button
                   key={c.id}
-                  onClick={() => toggleCandidate(c.id)}
-                  className={`shrink-0 inline-flex items-center gap-2 rounded-full pl-1 pr-3 py-1 text-xs font-bold border transition-all whitespace-nowrap ${
-                    active
-                      ? 'bg-[#102a5c] text-white border-[#102a5c] shadow-sm'
-                      : 'bg-white text-slate-500 border-slate-100 opacity-60 hover:opacity-100'
-                  }`}
+                  type="button"
+                  onClick={() => toggle(c)}
+                  disabled={full}
+                  aria-pressed={active}
+                  className={`relative bg-white rounded-2xl border p-3 flex flex-col items-center text-center gap-1.5 transition-all ${
+                    active ? 'border-[#102a5c] ring-2 ring-[#102a5c]/15' : 'border-slate-100 hover:border-slate-300'
+                  } ${full ? 'opacity-40' : ''}`}
                 >
-                  <span className="relative w-7 h-7 rounded-full overflow-hidden bg-slate-100 shrink-0">
-                    <img decoding="async" src={c.photo_url || fallbackPhoto(c)} alt="" className="w-full h-full object-cover" />
-                    {active && (
-                      <span className="absolute inset-0 bg-[#102a5c]/30 flex items-center justify-center">
-                        <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
-                      </span>
-                    )}
-                  </span>
-                  {c.last_name}
+                  {active && (
+                    <span
+                      className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-white"
+                      style={{ backgroundColor: SLOT_COLORS[slot] }}
+                    >
+                      <Check className="w-3 h-3" strokeWidth={3} />
+                    </span>
+                  )}
+                  <CandidateAvatar c={c} className="w-14 h-14" />
+                  <span className="text-sm font-bold text-[#102a5c] leading-tight">{c.fullName}</span>
+                  {c.party && <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold leading-tight line-clamp-2">{c.party}</span>}
+                  <span className="text-[10px] text-slate-400">{c.measureCount} mesures</span>
                 </button>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {/* Loading skeleton */}
-      {loading && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white rounded-2xl p-4 border border-slate-100">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-full bg-slate-100 animate-pulse" />
-                <div className="flex-1 flex flex-col gap-2">
-                  <div className="w-1/3 h-4 bg-slate-200 animate-pulse rounded-full" />
-                  <div className="w-1/4 h-3 bg-slate-100 animate-pulse rounded-full" />
-                </div>
-              </div>
-              {[1, 2, 3].map((j) => (
-                <div key={j} className="w-full h-3 bg-slate-100 animate-pulse rounded-full mb-2" />
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!loading && currentTheme && candidatesForTheme.length === 0 && (
-        <div className="bg-white rounded-2xl p-8 text-center text-slate-500 text-sm border border-slate-100">
-          Aucun candidat ne s'est exprimé sur ce thème pour l'instant.
-        </div>
-      )}
-
-      {!loading && currentTheme && candidatesForTheme.length > 0 && visibleCandidates.length === 0 && (
-        <div className="bg-white rounded-2xl p-8 text-center text-slate-500 text-sm border border-slate-100">
-          Sélectionne au moins un candidat pour comparer.
-        </div>
-      )}
-
-      {/* Cards mode */}
-      {!loading && currentTheme && viewMode === 'cards' && visibleCandidates.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-4">
-          {visibleCandidates.map((c) => (
-            <CandidateCard
-              key={c.id}
-              candidate={c}
-              statements={byCandidate.get(c.id) ?? []}
-              themeColor={currentTheme.color || '#94a3b8'}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Columns (côte à côte) mode */}
-      {!loading && currentTheme && viewMode === 'columns' && visibleCandidates.length > 0 && (
-        <div className="-mx-2 sm:-mx-4 px-2 sm:px-4 overflow-x-auto pb-4" style={{ scrollbarWidth: 'thin' }}>
-          <div className="flex gap-3 snap-x snap-mandatory">
-            {visibleCandidates.map((c) => (
-              <CandidateColumn
+            {withoutProgramme.map((c) => (
+              <div
                 key={c.id}
-                candidate={c}
-                statements={byCandidate.get(c.id) ?? []}
-                themeColor={currentTheme.color || '#94a3b8'}
-                count={visibleCandidates.length}
-              />
+                className="bg-slate-50 rounded-2xl border border-slate-100 p-3 flex flex-col items-center text-center gap-1.5 opacity-60"
+                aria-disabled
+              >
+                <CandidateAvatar c={c} className="w-14 h-14 grayscale" />
+                <span className="text-sm font-bold text-slate-600 leading-tight">{c.fullName}</span>
+                <span className="text-[10px] text-slate-500">Programme non disponible</span>
+              </div>
             ))}
           </div>
         </div>
       )}
-    </div>
-  );
-}
 
-function CandidateCard({
-  candidate, statements, themeColor,
-}: {
-  candidate: CandidateWithParty;
-  statements: Statement[];
-  themeColor: string;
-}) {
-  const partyLabel = candidate.parties?.abbreviation || candidate.parties?.name || '—';
-  return (
-    <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden flex flex-col">
-      <div className="h-1.5 w-full" style={{ backgroundColor: themeColor }} />
-      <div className="p-4 flex items-center gap-3 border-b border-slate-100">
-        <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-50 shrink-0">
-          <img decoding="async" src={candidate.photo_url || fallbackPhoto(candidate)} alt={fullName(candidate)} className="w-full h-full object-cover" />
-        </div>
-        <div className="min-w-0">
-          <div className="font-bold text-[#102a5c] truncate">{fullName(candidate)}</div>
-          <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold mt-0.5 truncate">
-            {partyLabel}
-          </div>
-        </div>
-      </div>
-      <ul className="p-4 space-y-2.5">
-        {statements.map((s) => (
-          <li key={s.id} className="flex items-start gap-2.5 text-sm text-slate-700">
-            <span className="w-1.5 h-1.5 rounded-full shrink-0 mt-2" style={{ backgroundColor: themeColor }} />
-            <span className="leading-snug">{s.text}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function CandidateColumn({
-  candidate, statements, themeColor, count,
-}: {
-  candidate: CandidateWithParty;
-  statements: Statement[];
-  themeColor: string;
-  count: number;
-}) {
-  const partyLabel = candidate.parties?.abbreviation || candidate.parties?.name || '—';
-  // Width: 1 col = full, 2 = ~80%, 3+ = ~70% on mobile so neighbours peek
-  const widthClass =
-    count === 1 ? 'w-full' :
-    count === 2 ? 'w-[85%] sm:w-[48%]' :
-    'w-[80%] sm:w-[44%] lg:w-[30%]';
-
-  return (
-    <div className={`shrink-0 snap-start ${widthClass} bg-white rounded-2xl border border-slate-100 overflow-hidden flex flex-col`}>
-      {/* Sticky header inside column */}
-      <div className="bg-white border-b border-slate-100">
-        <div className="h-1.5 w-full" style={{ backgroundColor: themeColor }} />
-        <div className="p-3 flex flex-col items-center text-center gap-2">
-          <div className="w-14 h-14 rounded-full overflow-hidden bg-slate-50">
-            <img decoding="async" src={candidate.photo_url || fallbackPhoto(candidate)} alt={fullName(candidate)} className="w-full h-full object-cover" />
-          </div>
-          <div className="min-w-0 w-full">
-            <div className="font-bold text-[#102a5c] text-sm leading-tight">{fullName(candidate)}</div>
-            <div
-              className="text-[10px] uppercase tracking-wider font-bold mt-0.5 truncate"
-              style={{ color: candidate.parties?.color || '#475569' }}
-            >
-              {partyLabel}
-            </div>
-          </div>
-        </div>
-      </div>
-      <ul className="p-3 space-y-2 flex-1">
-        {statements.length === 0 && (
-          <li className="text-xs text-slate-400 italic text-center py-4">
-            Pas de position sur ce thème.
-          </li>
-        )}
-        {statements.map((s) => (
-          <li
-            key={s.id}
-            className="text-xs sm:text-sm text-slate-700 leading-snug bg-slate-50 rounded-lg p-2.5 border border-slate-100"
+      {base && !showPicker && (
+        <div className="flex flex-wrap items-center gap-2">
+          {selected.map((c, k) => (
+            <span key={c.id} className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-full pl-1 pr-1 py-1">
+              <button
+                type="button"
+                onClick={() => setSheet({ candidateId: c.id, themeId: null })}
+                className="inline-flex items-center gap-1.5"
+                aria-label={`Programme de ${c.fullName}`}
+              >
+                <CandidateAvatar c={c} className="w-7 h-7" />
+                <span className="w-2 h-2 rounded-[2px]" style={{ backgroundColor: SLOT_COLORS[k] }} />
+                <span className="text-xs font-bold text-[#102a5c]">{c.fullName}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => remove(c.id)}
+                aria-label={`Retirer ${c.fullName}`}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="inline-flex items-center gap-1 text-xs font-bold text-[#1a56db] px-2 py-1.5"
           >
-            {s.text}
-          </li>
-        ))}
-      </ul>
+            <Pencil className="w-3.5 h-3.5" /> Modifier
+          </button>
+        </div>
+      )}
+
+      {base && comparing && (
+        <>
+          <section className="flex flex-col gap-2">
+            <SectionTitle title="Proximité" subtitle="Ces candidats sont-ils proches ?" />
+            <ComparateurProximite
+              selected={selected}
+              affinities={affQuery.data ?? []}
+              themes={base.themes}
+              loading={affQuery.isLoading}
+              onPickTheme={pickTheme}
+            />
+          </section>
+
+          <section className="flex flex-col gap-2">
+            <SectionTitle title="Vue d'ensemble" subtitle="Répartition des mesures par thème" />
+            <ComparateurRepartition selected={selected} themes={base.themes} />
+          </section>
+
+          <section ref={faceRef} className="flex flex-col gap-2 scroll-mt-24">
+            <SectionTitle title="Le face-à-face" subtitle="Thème par thème, qui vous convainc ?" />
+            <ComparateurFaceAFace
+              selected={selected}
+              themes={base.themes}
+              affinities={affQuery.data ?? []}
+              syntheses={synQuery.data ?? []}
+              focus={focus}
+              onOpenSheet={(candidateId, themeId) => setSheet({ candidateId, themeId })}
+            />
+          </section>
+        </>
+      )}
+
+      {base && (
+        <p className="text-[11px] text-slate-400 leading-snug pb-2">
+          {base.attribution}{' '}
+          <button type="button" onClick={() => void openLink(DK_LICENCE_URL)} className="underline">Licence CC BY-NC 4.0</button>
+        </p>
+      )}
+
+      <DkProgrammeSheet
+        candidate={sheetCandidate}
+        initialThemeId={sheet?.themeId ?? null}
+        themes={base?.themes ?? []}
+        attribution={base?.attribution ?? ''}
+        generatedAt={base?.generatedAt ?? null}
+        onClose={() => setSheet(null)}
+      />
+    </div>
+  );
+}
+
+function SectionTitle({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="px-1">
+      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{title}</div>
+      <h3 className="text-base font-bold text-[#102a5c]">{subtitle}</h3>
     </div>
   );
 }
