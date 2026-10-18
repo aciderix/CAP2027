@@ -463,16 +463,70 @@ actuel, qui s'en sert aussi, passera sur les mesures, synthèses et affinités D
 
 ---
 
-## 5. Prochaines étapes proposées (dans l'ordre)
+## 5. Liste des tâches (mise à jour du 18/10)
 
-1. **Toi** : choisir où tournent les runners (dépôt public `cap2027-privacy`, cf. 2.4,
-   ou facturation du dépôt privé) ; y créer les secrets `INGEST_FROM_XML_TOKEN` et
-   `DK_FTP_*` ; dans l'admin, passer la source X sur
-   `https://nitter.meowing.monster/JLMelenchon/rss`.
-2. Supprimer `android-release.yml` et espacer le cron RSS. (Repli multi-instances
-   nitter et échec visible : faits, cf. 2.3.)
-3. Migration `dk_*` + RPC `dk_import`, testée **en local** avec le zip du 16/10.
-4. Job d'import (GitHub Actions + `ftplib`), d'abord en *dry-run* (lecture FTP + rapport,
-   sans écriture).
-5. UI : fiches programme (mesures + citations + attribution), comparateur v2, Boussole v2.
-6. Mise en prod : migration, puis premier import, puis publication des candidats.
+**Déjà fait** : diagnostic RSS ; miroirs nitter de repli + échec visible + mode à blanc ;
+Supabase local ; jeton `INGEST_FROM_XML_TOKEN` renouvelé (Supabase + GitHub) ; workflows
+RSS, contrôle Demos Kratos et keepalive dans `cap2027-privacy` (branche
+`claude/friendly-ritchie-nhjj0m`, testés : RSS à blanc OK, FTPS et export DK valides) ;
+spécification du Match + script de simulation.
+
+### A. Infra & GitHub
+| # | Tâche | Qui | Dépend de |
+|---|---|---|---|
+| A1 | Retirer les déclencheurs de test et fusionner `cap2027-privacy` dans `main` (active RSS toutes les 30 min, contrôle DK quotidien, keepalive) | moi, après ton OK | — |
+| A2 | Admin : source X Mélenchon → `https://nitter.meowing.monster/JLMelenchon/rss` | toi | — |
+| A3 | Vérifier facturation / quota Actions du compte : **les builds APK/AAB tournent dans le dépôt privé** | toi | — |
+| A4 | Supprimer `android-release.yml` (échoue à chaque push, doublon) | moi | — |
+| A5 | Fusionner la branche CAP2027 dans `main` (config Supabase locale, migration `decode_html_entities`, script RSS, docs) | toi (PR) | — |
+| A6 | Vérifier puis supprimer `diag-fcm` / `diag-parrainages` (fonctions de debug ouvertes en prod) | moi, après ton OK | — |
+| A7 | Optionnel : URLs de prod en dur dans les migrations → `app_config` ou Vault | moi | — |
+
+### B. X / Twitter & sources presse
+| # | Tâche | Qui | Dépend de |
+|---|---|---|---|
+| B1 | Surveiller meowing (le run passe au rouge s'il tombe) ; plan B : API X à l'usage (~1,5 $/mois par compte) | moi | A1 |
+| B2 | Comptes X (et YouTube) des autres candidats : seul Mélenchon en a un | toi (liste), moi (sources) | A1 |
+| B3 | **Alias des candidats** : seuls ceux de Mélenchon existent, donc aucun article de presse n'est rattaché aux 12 autres | toi + moi | — |
+| B4 | Sources mortes : Politis (flux supprimé), Le Point (anti-bot) → nouvelle URL ou désactivation | moi | — |
+| B5 | Optionnel : blogs `melenchon.fr/feed/`, `lafranceinsoumise.fr/feed/` | moi | — |
+
+### C. Données Demos Kratos (socle du Match et du comparateur)
+| # | Tâche | Qui | Dépend de |
+|---|---|---|---|
+| C1 | Migration `dk_*` (thèmes, candidats, mesures, synthèses, affinités, Match) + `dk_imports` + `candidates.dk_id` | moi (local) | — |
+| C2 | Correspondance des thèmes DK (27) → nos 15 : trancher agriculture et défense | toi | — |
+| C3 | RPC `dk_import` (une transaction, remplacement complet), testée en local avec le zip | moi | C1 |
+| C4 | Import automatique : le workflow DK pousse l'export si le hash a changé (d'abord à blanc) | moi | C3, A1 |
+| C5 | Candidats : rattacher les 12 communs ; créer les 11 absents en non publiés | moi + toi (validation) | C3 |
+| C6 | Attribution « Propulsé par Demos Kratos » + écran Sources (licence, date d'import) | moi | C3 |
+| C7 | Demander à DK : citation ou `measureIds` qui justifient chaque position du Match | toi | — |
+| C8 | Mise en prod (migration puis 1er import), puis publication des candidats | moi + toi | C3–C6 |
+
+### D. Match v2 (spécification en 4.6)
+| # | Tâche | Qui | Dépend de |
+|---|---|---|---|
+| D1 | Vue `match_candidates` : jouable si ≥ 13 affirmations et ≥ 10 thèmes (seuils dans `app_config`) | moi | C3 |
+| D2 | Score : points ±1 / ±0,5, poids 1/√(affirmations du thème), ÷ (Σ poids + 8), affichage % | moi | D1 |
+| D3 | Paquet de cartes adaptatif ; classement débloqué à ≥ 6 comparaisons sur ≥ 3 thèmes | moi | D1 |
+| D4 | Résultats : rubrique « Pas encore assez d'informations », « non abordé » par thème | moi | D2 |
+| D5 | « Nouveaux choix disponibles » / « X rejoint le Match », affirmations reformulées, badge, push `match_update` optionnel | moi | D2 |
+| D6 | Nouvelle clé de réponses v3, image de partage en %, infobulle méthode + attribution DK | moi | D2 |
+| D7 | Recalibrage auto : simulation lancée à chaque nouvel export (dans le workflow DK) | moi | C4 |
+
+### E. Comparateur v2 (inspiré de demos-kratos.fr, voir 4.5)
+| # | Tâche | Qui | Dépend de |
+|---|---|---|---|
+| E1 | Sélection de 2 à 3 candidats (sans programme : grisés) | moi | C3 |
+| E2 | « Ces candidats sont-ils proches ? » : barre vert/jaune/rouge par paire + commentaire + détail par thème | moi | E1 |
+| E3 | Répartition des mesures par thème (graphique) | moi | E1 |
+| E4 | Face-à-face en carrousel par thème : synthèse, 3 mesures phares, sujets et verdicts, « le plus convaincant », verdict final | moi | E1 |
+| E5 | Fiches programme : mesures + citation exacte + source officielle + lien DK | moi | C3 |
+
+### F. Livraison
+| # | Tâche | Qui | Dépend de |
+|---|---|---|---|
+| F1 | Build APK de test → tests → AAB → Play Console | moi (build) + toi (tests, publication) | A3, C8, D, E |
+
+**Ordre conseillé** : A1–A2 (tout de suite) → C1–C3 (socle des données) → D et E en
+parallèle → C8 → F1. B3 (alias) peut avancer à tout moment.
