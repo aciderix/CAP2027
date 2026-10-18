@@ -9,6 +9,7 @@ import { SettingsModal } from './SettingsModal';
 import { supabase } from '../lib/supabase';
 import { STABLE_STALE_MS } from '../lib/queryClient';
 import { openLink } from '../lib/openLink';
+import { DK_LICENCE_URL, DK_SITE_URL } from '../lib/dkShared';
 
 interface MoreMenuProps {
   onGoToCandidates: () => void;
@@ -178,6 +179,24 @@ function MethodologyModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
     },
   });
 
+  // Dernier export Demos Kratos importé (programmes) : date affichée dans la
+  // section qui leur est consacrée.
+  const dkQuery = useQuery({
+    queryKey: ['dkLastImport'],
+    enabled: isOpen,
+    staleTime: STABLE_STALE_MS,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('dk_imports').select('generated_at, meta').eq('kind', 'programmes')
+        .order('imported_at', { ascending: false }).limit(1);
+      if (error) throw error;
+      return data?.[0] ?? null;
+    },
+  });
+  const dkDate = dkQuery.data?.generated_at
+    ? new Date(dkQuery.data.generated_at).toLocaleDateString('fr-FR')
+    : null;
+
   const sources = sourcesQuery.data ?? [];
   // Group by orientation
   const grouped = sources.reduce<Record<string, SourceRow[]>>((acc, s) => {
@@ -207,6 +226,27 @@ function MethodologyModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
           spécialisées sont identifiées avec leur verdict (vrai, faux, trompeur,
           partiel) quand il est explicite dans le titre.
         </p>
+        <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 flex flex-col gap-2">
+          <p>
+            <b>Programmes, comparateur et Match : propulsés par Demos Kratos</b> — Les
+            mesures des candidats, leurs synthèses par thème, les comparaisons entre
+            programmes et les affirmations du Match viennent de{' '}
+            <button type="button" onClick={() => void openLink(DK_SITE_URL)} className="underline font-semibold">
+              demos-kratos.fr
+            </button>
+            , qui les extrait des programmes officiels, de manière neutre, avec des outils
+            utilisant l'IA. Chaque mesure cite le passage exact du programme et renvoie à sa
+            source officielle et à sa page sur demos-kratos.fr, où l'on peut signaler une erreur.
+          </p>
+          <p className="text-xs text-slate-500">
+            Données mises à jour chaque jour
+            {dkDate && <> (dernier export : {dkDate})</>}, sous licence{' '}
+            <button type="button" onClick={() => void openLink(DK_LICENCE_URL)} className="underline">
+              CC BY-NC 4.0
+            </button>
+            . Le score du Match est calculé par CAP 2027, avec sa propre méthode.
+          </p>
+        </div>
         <p>
           <b>Aucune éditorialisation</b> — Pas de classement caché, pas d'algorithme de mise en
           avant. L'ordre par défaut est strictement chronologique. Le carrousel "À la une"

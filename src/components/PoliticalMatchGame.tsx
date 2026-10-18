@@ -13,6 +13,7 @@ import { openLink } from '../lib/openLink';
 import { STABLE_STALE_MS } from '../lib/queryClient';
 import { useAppConfig } from '../lib/appConfig';
 import { InfoTip } from './ui/InfoTip';
+import { DkCredit } from './comparateurUi';
 import {
   DEFAULT_MATCH_PARAMS, coverageByCandidate, isPlayable, nextStatement, scoreCandidates, textHash,
   unlockProgress, type Answer, type CandidateResult, type Coverage, type MatchParams,
@@ -294,6 +295,7 @@ export function PoliticalMatchGame({ onClose }: { onClose: () => void }) {
       totalCount={totalProps}
       onAnswer={recordAnswer}
       onJumpToResults={() => setPhase('results')}
+      sourceUrl={data.sourceUrl}
     />
   );
 }
@@ -453,13 +455,14 @@ function Tutorial({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }
 // ----------------------- Game card ----------------------------
 
 function GameCard({
-  proposition, answeredCount, totalCount, onAnswer, onJumpToResults,
+  proposition, answeredCount, totalCount, onAnswer, onJumpToResults, sourceUrl,
 }: {
   proposition: Statement;
   answeredCount: number;
   totalCount: number;
   onAnswer: (propId: string, stance: Answer) => void;
   onJumpToResults: () => void;
+  sourceUrl: string;
 }) {
   const controls = useAnimation();
   const answeredRef = useRef(false);
@@ -575,6 +578,10 @@ function GameCard({
           Voir mes scores actuels
         </button>
       )}
+
+      <div className="mt-3">
+        <DkCredit url={sourceUrl} />
+      </div>
     </div>
   );
 }
@@ -704,6 +711,7 @@ function Results({
                               {fewData(r) && <span className="ml-1 text-amber-600 font-semibold">· peu de données</span>}
                             </>}
                       </div>
+                      <DkCredit url={c.dkUrl} label="Son programme sur Demos Kratos" />
                     </div>
                   </div>
                   {!empty && (
@@ -767,7 +775,7 @@ function Results({
       <p className="text-[11px] text-slate-400 text-center leading-snug">
         Affirmations et positions des candidats :{' '}
         <button type="button" onClick={() => void openLink(sourceUrl)} className="underline font-semibold text-slate-500">
-          Demos Kratos
+          propulsé par Demos Kratos
         </button>
         {' · '}
         <button type="button" onClick={() => void openLink(methodologyUrl)} className="underline">

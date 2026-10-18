@@ -9,6 +9,8 @@ import { STABLE_STALE_MS } from '../lib/queryClient';
 import { useAppConfig } from '../lib/appConfig';
 import { DEFAULT_MATCH_PARAMS, coverageByCandidate, isPlayable } from '../lib/matchScoring';
 import { MATCH_QUERY_KEY, fetchMatchData, loadSeen, loadStoredAnswers, validAnswers } from '../lib/matchData';
+import { DK_SITE_URL } from '../lib/dkShared';
+import { DkCredit } from './comparateurUi';
 
 export function PoliticalMatchCard() {
   const [isOpen, setIsOpen] = useState(false);
@@ -83,6 +85,9 @@ export function PoliticalMatchCard() {
           >
             Lancer le test
           </Button>
+          <div className="mt-2">
+            <DkCredit url={matchQuery.data?.sourceUrl ?? DK_SITE_URL} />
+          </div>
         </div>
 
         {/* Right Illustration */}
