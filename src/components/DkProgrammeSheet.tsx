@@ -48,7 +48,8 @@ export function DkProgrammeSheet({
 /** Contenu de la fiche, affiché dans la fenêtre du comparateur ou en pleine
  *  page depuis l'écran Programmes. */
 export function DkProgrammeView({
-  candidate, initialThemeId, themes, attribution, generatedAt, stickyChips = false, withName = false, children,
+  candidate, initialThemeId, themes, attribution, generatedAt, stickyChips = false, withName = false,
+  withHeader = true, children,
 }: {
   candidate: CompCandidate;
   initialThemeId: string | null;
@@ -59,6 +60,8 @@ export function DkProgrammeView({
   stickyChips?: boolean;
   /** Nom du candidat dans l'en-tête (en pleine page ; le Modal l'a dans son titre). */
   withName?: boolean;
+  /** En-tête photo / parti / nombre de mesures (absent dans la fiche candidat, qui l'a déjà). */
+  withHeader?: boolean;
   /** Liens complémentaires sous l'en-tête. */
   children?: React.ReactNode;
 }) {
@@ -91,14 +94,16 @@ export function DkProgrammeView({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-3">
-        <CandidateAvatar c={candidate} className="w-14 h-14" />
-        <div className="min-w-0">
-          {withName && <h2 className="text-xl font-bold text-[#102a5c] leading-tight">{candidate.fullName}</h2>}
-          {candidate.party && <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold truncate">{candidate.party}</div>}
-          <div className="text-sm text-slate-600">{candidate.measureCount} mesures analysées</div>
+      {withHeader && (
+        <div className="flex items-center gap-3">
+          <CandidateAvatar c={candidate} className="w-14 h-14" />
+          <div className="min-w-0">
+            {withName && <h2 className="text-xl font-bold text-[#102a5c] leading-tight">{candidate.fullName}</h2>}
+            {candidate.party && <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold truncate">{candidate.party}</div>}
+            <div className="text-sm text-slate-600">{candidate.measureCount} mesures analysées</div>
+          </div>
         </div>
-      </div>
+      )}
       {children}
 
       <div className={stickyChips

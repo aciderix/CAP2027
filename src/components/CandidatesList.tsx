@@ -11,6 +11,8 @@ import { openLink } from '../lib/openLink';
 import { CandidateParrainagesInline } from './CandidateParrainagesInline';
 import { TwitterPostCard } from './TwitterPostCard';
 import { STABLE_STALE_MS } from '../lib/queryClient';
+import { COMPARATEUR_QUERY_KEY, fetchComparateurBase } from '../lib/comparateurData';
+import { DkProgrammeView } from './DkProgrammeSheet';
 import { ShareButton } from './ui/ShareButton';
 import { shareCandidate, type ShareOutcome } from '../lib/share';
 
@@ -159,6 +161,19 @@ export function CandidatesList() {
 
   const detail = candidateDetailQuery.data ?? null;
   const detailLoading = candidateDetailQuery.isLoading && !!selectedCandidate;
+
+  // Programme analysé par Demos Kratos, si la fiche y est reliée (même socle
+  // que le comparateur et l'écran Programmes, donc déjà en cache le plus souvent).
+  const dkBaseQuery = useQuery({
+    queryKey: COMPARATEUR_QUERY_KEY,
+    queryFn: fetchComparateurBase,
+    staleTime: STABLE_STALE_MS,
+    enabled: !!selectedCandidate,
+  });
+  const dkBase = dkBaseQuery.data ?? null;
+  const dkProgramme = selectedCandidate && dkBase
+    ? dkBase.candidates.find((c) => c.ourSlug === selectedCandidate.slug && c.measureCount > 0) ?? null
+    : null;
 
   const filteredCandidates = useMemo(() => {
     const q = normaliseSearch(searchQuery);
@@ -409,11 +424,30 @@ export function CandidatesList() {
                     </div>
                   )}
 
-                  {!detailLoading && detail && activeTab === 'programme' && (
-                    proposalsByTheme.length === 0 ? (
-                      <EmptyTab message="Aucune proposition publiée pour le moment." />
+                  {!detailLoading && detail && activeTab === 'programme' && dkBaseQuery.isLoading && <DetailSkeleton />}
+
+                  {!detailLoading && detail && activeTab === 'programme' && !dkBaseQuery.isLoading && (
+                    proposalsByTheme.length === 0 && !dkProgramme ? (
+                      <EmptyTab message="Programme pas encore disponible." />
                     ) : (
                       <div className="space-y-5">
+                        {dkProgramme && dkBase && (
+                          <DkProgrammeView
+                            candidate={dkProgramme}
+                            initialThemeId={null}
+                            themes={dkBase.themes}
+                            attribution={dkBase.attribution}
+                            generatedAt={dkBase.generatedAt}
+                            withHeader={false}
+                          >
+                            <p className="text-xs text-slate-500">
+                              {dkProgramme.measureCount} mesures analysées par Demos Kratos, thème par thème.
+                            </p>
+                          </DkProgrammeView>
+                        )}
+                        {dkProgramme && proposalsByTheme.length > 0 && (
+                          <h4 className="font-bold text-[#102a5c] pt-2 border-t border-slate-100">Propositions suivies par CAP 2027</h4>
+                        )}
                         {proposalsByTheme.map((g, idx) => (
                           <section key={idx}>
                             <h4 className="font-bold text-[#102a5c] mb-2 flex items-center gap-2">

@@ -500,8 +500,8 @@ sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage
 | C1 | ✅ Fait en local : migration `dk_*` + `dk_imports` + `dk_candidate_links` + `dk_theme_map` | moi | — |
 | C2 | ✅ Décidé : agriculture → écologie, défense → international (alignés sur nos mots-clés presse) | moi | — |
 | C3 | ✅ Fait en local : RPC `dk_import`, testée avec le zip (import, réimport ignoré, export invalide refusé, remplacement complet) | moi | C1 |
-| C4 | ✅ Fait : fonction `ingest-demos-kratos` (déployée le 18/10, v1) + workflow quotidien à blanc (compare au dernier import) ; import réel via « Run workflow → import » | moi | C3, A1 |
-| C5 | Candidats : rattacher les 12 communs ; créer les 11 absents en non publiés | moi + toi (validation) | C3 |
+| C4 | ✅ Fait : fonction `ingest-demos-kratos` (déployée le 18/10, v1) + workflow quotidien qui **importe** chaque export nouveau et valide (depuis le 18/10 ; « Run workflow → à blanc » pour un simple contrôle) | moi | C3, A1 |
+| C5 | ✅ 11 fiches créées (non publiées) + 8 partis ; lien fiche ↔ DK automatique (trigger `trg_candidates_dk_link`, même slug) ; sites officiels repris de DK ; brouillons de bio (14 fiches) à relire dans l'admin | moi + toi (relecture, photos, publication) | C3 |
 | C6 | Attribution « Propulsé par Demos Kratos » + écran Sources (licence, date d'import) | moi | C3 |
 | C9 | ❌ Abandonné : les photos viendront de nos fiches (admin). Les photos DK ne servent qu'aux candidats sans fiche publiée | — | — |
 | C7 | Demander à DK : citation ou `measureIds` qui justifient chaque position du Match | toi | — |
@@ -526,6 +526,15 @@ sur 20 articles ; la v3 était coupée par la limite de 2 s de CPU au rattrapage
 | E3 | ✅ Répartition des mesures par thème : barres groupées triables + vue tableau | moi | E1 |
 | E4 | ✅ Face-à-face par thème (balayage, flèches, clavier) : sujets et verdicts par paire, synthèse, chiffres clés, 3 mesures phares, « le plus convaincant » / « sans préférence », verdict final ; choix gardés sur l'appareil | moi | E1 |
 | E5 | ✅ Fiche programme (depuis le comparateur) : vue d'ensemble, puis par thème synthèse + mesures (phares en tête), citation exacte, source officielle, lien DK (signaler une erreur), ouverte depuis le comparateur et en pleine page depuis l'écran Programmes (qui liste les programmes DK, et nos livrets `candidate_programs` quand ils existent) | moi | C3 |
+
+### G. Fiches et admin (18/10)
+| # | Tâche | Qui | État |
+|---|---|---|---|
+| G1 | Onglet « Prog. » de la fiche candidat alimenté par DK (vue d'ensemble, thèmes, mesures), propositions CAP 2027 en plus | moi | ✅ |
+| G2 | Admin : statut DK par fiche (liste + profil, suggestion du site officiel), onglet Boussole retiré, Programme long / Propositions marqués facultatifs | moi | ✅ (déployé avec l'admin) |
+| G3 | Relire les 14 brouillons de bio (sources et doutes : `bios_lot1.json`, `bios_lot2.json` de la session), ajouter les photos, publier | toi | à faire |
+| G4 | Alias des candidats (presse) : seul Mélenchon en a ; sans alias, les articles ne sont pas rattachés aux candidats | toi (admin) ou moi | à faire |
+| G5 | Fiche Le Pen : à mettre à jour après l'examen par la Cour de cassation (16/12/2026) | toi | à faire |
 
 ### F. Livraison
 | # | Tâche | Qui | Dépend de |
