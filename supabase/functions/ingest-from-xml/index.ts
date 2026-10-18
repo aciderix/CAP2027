@@ -167,21 +167,34 @@ function makePattern(keyword: string): RegExp {
   return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu");
 }
 
-interface CandidateAlias { candidate_id: string; alias: string; regex: RegExp }
-interface PartyAlias    { party_id: string;    alias: string; regex: RegExp }
-interface ThemeKeyword  { theme_id: string;    keyword: string; regex: RegExp }
+// needle : mot-clé sans accents et en minuscules, pour le préfiltre de tagArticle.
+function makeNeedle(keyword: string): string {
+  return stripAccents(keyword).toLowerCase();
+}
+
+interface CandidateAlias { candidate_id: string; alias: string; needle: string; regex: RegExp }
+interface PartyAlias    { party_id: string;    alias: string; needle: string; regex: RegExp }
+interface ThemeKeyword  { theme_id: string;    keyword: string; needle: string; regex: RegExp }
 interface Refs { candidateAliases: CandidateAlias[]; partyAliases: PartyAlias[]; themeKeywords: ThemeKeyword[] }
 
 function tagArticle(title: string, summary: string, refs: Refs) {
   const titleAscii = stripAccents(title);
   const summaryAscii = stripAccents(summary);
-  const score = (regex: RegExp) => (regex.test(titleAscii) ? 2 : 0) + (regex.test(summaryAscii) ? 1 : 0);
+  const titleLower = titleAscii.toLowerCase();
+  const summaryLower = summaryAscii.toLowerCase();
+  // Préfiltre par sous-chaîne : la regex (frontières de mot Unicode, coûteuse)
+  // ne tourne que si le mot-clé apparaît dans le texte. Même résultat, mais
+  // ~1 000 regex par article dépassaient les 2 s de CPU d'une Edge Function sur
+  // un lot de 20 articles (Le Figaro après une semaine sans ingestion).
+  const score = (needle: string, regex: RegExp) =>
+    (titleLower.includes(needle) && regex.test(titleAscii) ? 2 : 0) +
+    (summaryLower.includes(needle) && regex.test(summaryAscii) ? 1 : 0);
   const cMap = new Map<string, number>();
-  for (const a of refs.candidateAliases) { const s = score(a.regex); if (s) cMap.set(a.candidate_id, (cMap.get(a.candidate_id) ?? 0) + s); }
+  for (const a of refs.candidateAliases) { const s = score(a.needle, a.regex); if (s) cMap.set(a.candidate_id, (cMap.get(a.candidate_id) ?? 0) + s); }
   const pMap = new Map<string, number>();
-  for (const a of refs.partyAliases) { const s = score(a.regex); if (s) pMap.set(a.party_id, (pMap.get(a.party_id) ?? 0) + s); }
+  for (const a of refs.partyAliases) { const s = score(a.needle, a.regex); if (s) pMap.set(a.party_id, (pMap.get(a.party_id) ?? 0) + s); }
   const tMap = new Map<string, number>();
-  for (const k of refs.themeKeywords) { const s = score(k.regex); if (s) tMap.set(k.theme_id, (tMap.get(k.theme_id) ?? 0) + s); }
+  for (const k of refs.themeKeywords) { const s = score(k.needle, k.regex); if (s) tMap.set(k.theme_id, (tMap.get(k.theme_id) ?? 0) + s); }
   return {
     candidates: [...cMap.entries()].map(([id, s]) => ({ id, score: s })),
     parties:    [...pMap.entries()].map(([id, s]) => ({ id, score: s })),
@@ -197,9 +210,9 @@ async function loadRefs(): Promise<Refs> {
   ]);
   if (c.error) throw c.error; if (p.error) throw p.error; if (t.error) throw t.error;
   return {
-    candidateAliases: (c.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias) })),
-    partyAliases:     (p.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias) })),
-    themeKeywords:    (t.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.keyword) })),
+    candidateAliases: (c.data ?? []).map((r: any) => ({ ...r, needle: makeNeedle(r.alias), regex: makePattern(r.alias) })),
+    partyAliases:     (p.data ?? []).map((r: any) => ({ ...r, needle: makeNeedle(r.alias), regex: makePattern(r.alias) })),
+    themeKeywords:    (t.data ?? []).map((r: any) => ({ ...r, needle: makeNeedle(r.keyword), regex: makePattern(r.keyword) })),
   };
 }
 
