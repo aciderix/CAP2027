@@ -54,6 +54,11 @@ interface ArticleRow {
   article_themes?: Array<{ theme: { slug: string | null } | null }>;
 }
 
+// Un élément publié il y a plus longtemps n'est pas une nouveauté : c'est
+// l'arriéré d'une source qu'on vient d'ajouter ou de réactiver (les 15
+// dernières vidéos d'une chaîne YouTube, les 20 derniers posts d'un compte X).
+const MAX_ITEM_AGE_HOURS = 6;
+
 // ingest-rss / ingest-from-xml donnent ce score au candidat propriétaire de
 // la source (son compte X, sa chaîne YouTube). Les autres liens viennent des
 // alias : un post qui *cite* un candidat n'est pas un post *de* ce candidat.
@@ -97,6 +102,7 @@ Deno.serve(async (req) => {
   const dryRun = url.searchParams.get("dry") === "1";
 
   const since = new Date(Date.now() - minutes * 60 * 1000).toISOString();
+  const publishedSince = new Date(Date.now() - MAX_ITEM_AGE_HOURS * 3600 * 1000).toISOString();
 
   const { data: newArticles, error } = await supabase
     .from("news_articles")
@@ -107,6 +113,7 @@ Deno.serve(async (req) => {
       article_themes(theme:themes(slug))
     `)
     .gt("fetched_at", since)
+    .gt("published_at", publishedSince)
     .order("published_at", { ascending: false });
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
