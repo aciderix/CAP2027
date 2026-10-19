@@ -32,6 +32,9 @@ async function isAuthorized(req: Request): Promise<boolean> {
   return !!expected && token === expected;
 }
 
+// Sources read per cron call (?limit=N overrides, capped at 100).
+const DEFAULT_BATCH = 20;
+
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -555,9 +558,18 @@ Deno.serve(async (req) => {
     // source from the dashboard for testing.
     sourcesQuery.eq("slug", onlySlug);
   } else {
-    // Hourly cron path: skip GitHub-handled sources to avoid wasted
-    // 30 s timeouts on endpoints that block the Supabase IP.
-    sourcesQuery.eq("fetch_via_github", false);
+    // Cron path: skip GitHub-handled sources to avoid wasted 30 s timeouts
+    // on endpoints that block the Supabase IP. Sources are processed in
+    // batches (least recently fetched first, new ones before all others):
+    // one call for every active source exceeded the edge function's
+    // compute limit (WORKER_RESOURCE_LIMIT). The cron runs every 15 min,
+    // so each source is still read about once an hour.
+    const rawLimit = Number(url.searchParams.get("limit") ?? DEFAULT_BATCH);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : DEFAULT_BATCH;
+    sourcesQuery
+      .eq("fetch_via_github", false)
+      .order("last_fetched_at", { ascending: true, nullsFirst: true })
+      .limit(limit);
   }
   const { data: sources, error: srcErr } = await sourcesQuery;
   if (srcErr) return new Response(JSON.stringify({ error: srcErr.message }), { status: 500 });
