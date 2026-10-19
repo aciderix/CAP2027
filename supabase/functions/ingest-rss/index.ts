@@ -284,9 +284,20 @@ function makePattern(keyword: string): RegExp {
   return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu");
 }
 
-interface CandidateAlias { candidate_id: string; alias: string; regex: RegExp }
-interface PartyAlias    { party_id: string;    alias: string; regex: RegExp }
-interface ThemeKeyword  { theme_id: string;    keyword: string; regex: RegExp }
+// `needle` (accent-stripped, lower-case) is a cheap substring pre-check:
+// the Unicode word-boundary regex only runs when the word is present at
+// all. ~1 000 regexes per item otherwise exhausted the CPU budget.
+interface CandidateAlias { candidate_id: string; alias: string; regex: RegExp; needle: string }
+interface PartyAlias    { party_id: string;    alias: string; regex: RegExp; needle: string }
+interface ThemeKeyword  { theme_id: string;    keyword: string; regex: RegExp; needle: string }
+
+const needleOf = (s: string) => stripAccents(s).toLowerCase();
+
+// Same result as `ref.regex.test(ascii)`, without running the regex when
+// the word cannot match (`lower` is `ascii` in lower case).
+function hits(ref: { regex: RegExp; needle: string }, ascii: string, lower: string): boolean {
+  return lower.includes(ref.needle) && ref.regex.test(ascii);
+}
 
 interface Refs {
   candidateAliases: CandidateAlias[];
@@ -299,26 +310,28 @@ function tagArticle(title: string, summary: string, refs: Refs) {
   // "Melenchon" in an article still matches the alias "Mélenchon".
   const titleAscii = stripAccents(title);
   const summaryAscii = stripAccents(summary);
+  const titleLower = titleAscii.toLowerCase();
+  const summaryLower = summaryAscii.toLowerCase();
 
   const candidateScores = new Map<string, number>();
   for (const a of refs.candidateAliases) {
     let score = 0;
-    if (a.regex.test(titleAscii)) score += 2;
-    if (a.regex.test(summaryAscii)) score += 1;
+    if (hits(a, titleAscii, titleLower)) score += 2;
+    if (hits(a, summaryAscii, summaryLower)) score += 1;
     if (score > 0) candidateScores.set(a.candidate_id, (candidateScores.get(a.candidate_id) ?? 0) + score);
   }
   const partyScores = new Map<string, number>();
   for (const a of refs.partyAliases) {
     let score = 0;
-    if (a.regex.test(titleAscii)) score += 2;
-    if (a.regex.test(summaryAscii)) score += 1;
+    if (hits(a, titleAscii, titleLower)) score += 2;
+    if (hits(a, summaryAscii, summaryLower)) score += 1;
     if (score > 0) partyScores.set(a.party_id, (partyScores.get(a.party_id) ?? 0) + score);
   }
   const themeScores = new Map<string, number>();
   for (const k of refs.themeKeywords) {
     let score = 0;
-    if (k.regex.test(titleAscii)) score += 2;
-    if (k.regex.test(summaryAscii)) score += 1;
+    if (hits(k, titleAscii, titleLower)) score += 2;
+    if (hits(k, summaryAscii, summaryLower)) score += 1;
     if (score > 0) themeScores.set(k.theme_id, (themeScores.get(k.theme_id) ?? 0) + score);
   }
   // "Variante douce" pour les thèmes: quand plusieurs thèmes ont matché
@@ -350,9 +363,9 @@ async function loadRefs(): Promise<Refs> {
   if (p.error) throw p.error;
   if (t.error) throw t.error;
   return {
-    candidateAliases: (c.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias) })),
-    partyAliases:     (p.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias) })),
-    themeKeywords:    (t.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.keyword) })),
+    candidateAliases: (c.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias), needle: needleOf(r.alias) })),
+    partyAliases:     (p.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias), needle: needleOf(r.alias) })),
+    themeKeywords:    (t.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.keyword), needle: needleOf(r.keyword) })),
   };
 }
 
