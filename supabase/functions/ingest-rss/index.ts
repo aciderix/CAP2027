@@ -32,6 +32,14 @@ async function isAuthorized(req: Request): Promise<boolean> {
   return !!expected && token === expected;
 }
 
+// Sources read per cron call (?limit=N overrides, capped at 100). The edge
+// function has a small CPU budget (« CPU Time exceeded »): parsing big feeds
+// and tagging every new item against all aliases/keywords is what costs.
+const DEFAULT_BATCH = 12;
+// New items kept per source and per call, most recent first. A source added
+// with a 100–200 item backlog would otherwise exhaust the budget on its own.
+const MAX_FRESH_PER_SOURCE = 25;
+
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -276,9 +284,20 @@ function makePattern(keyword: string): RegExp {
   return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu");
 }
 
-interface CandidateAlias { candidate_id: string; alias: string; regex: RegExp }
-interface PartyAlias    { party_id: string;    alias: string; regex: RegExp }
-interface ThemeKeyword  { theme_id: string;    keyword: string; regex: RegExp }
+// `needle` (accent-stripped, lower-case) is a cheap substring pre-check:
+// the Unicode word-boundary regex only runs when the word is present at
+// all. ~1 000 regexes per item otherwise exhausted the CPU budget.
+interface CandidateAlias { candidate_id: string; alias: string; regex: RegExp; needle: string }
+interface PartyAlias    { party_id: string;    alias: string; regex: RegExp; needle: string }
+interface ThemeKeyword  { theme_id: string;    keyword: string; regex: RegExp; needle: string }
+
+const needleOf = (s: string) => stripAccents(s).toLowerCase();
+
+// Same result as `ref.regex.test(ascii)`, without running the regex when
+// the word cannot match (`lower` is `ascii` in lower case).
+function hits(ref: { regex: RegExp; needle: string }, ascii: string, lower: string): boolean {
+  return lower.includes(ref.needle) && ref.regex.test(ascii);
+}
 
 interface Refs {
   candidateAliases: CandidateAlias[];
@@ -291,26 +310,28 @@ function tagArticle(title: string, summary: string, refs: Refs) {
   // "Melenchon" in an article still matches the alias "Mélenchon".
   const titleAscii = stripAccents(title);
   const summaryAscii = stripAccents(summary);
+  const titleLower = titleAscii.toLowerCase();
+  const summaryLower = summaryAscii.toLowerCase();
 
   const candidateScores = new Map<string, number>();
   for (const a of refs.candidateAliases) {
     let score = 0;
-    if (a.regex.test(titleAscii)) score += 2;
-    if (a.regex.test(summaryAscii)) score += 1;
+    if (hits(a, titleAscii, titleLower)) score += 2;
+    if (hits(a, summaryAscii, summaryLower)) score += 1;
     if (score > 0) candidateScores.set(a.candidate_id, (candidateScores.get(a.candidate_id) ?? 0) + score);
   }
   const partyScores = new Map<string, number>();
   for (const a of refs.partyAliases) {
     let score = 0;
-    if (a.regex.test(titleAscii)) score += 2;
-    if (a.regex.test(summaryAscii)) score += 1;
+    if (hits(a, titleAscii, titleLower)) score += 2;
+    if (hits(a, summaryAscii, summaryLower)) score += 1;
     if (score > 0) partyScores.set(a.party_id, (partyScores.get(a.party_id) ?? 0) + score);
   }
   const themeScores = new Map<string, number>();
   for (const k of refs.themeKeywords) {
     let score = 0;
-    if (k.regex.test(titleAscii)) score += 2;
-    if (k.regex.test(summaryAscii)) score += 1;
+    if (hits(k, titleAscii, titleLower)) score += 2;
+    if (hits(k, summaryAscii, summaryLower)) score += 1;
     if (score > 0) themeScores.set(k.theme_id, (themeScores.get(k.theme_id) ?? 0) + score);
   }
   // "Variante douce" pour les thèmes: quand plusieurs thèmes ont matché
@@ -342,9 +363,9 @@ async function loadRefs(): Promise<Refs> {
   if (p.error) throw p.error;
   if (t.error) throw t.error;
   return {
-    candidateAliases: (c.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias) })),
-    partyAliases:     (p.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias) })),
-    themeKeywords:    (t.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.keyword) })),
+    candidateAliases: (c.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias), needle: needleOf(r.alias) })),
+    partyAliases:     (p.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias), needle: needleOf(r.alias) })),
+    themeKeywords:    (t.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.keyword), needle: needleOf(r.keyword) })),
   };
 }
 
@@ -371,6 +392,13 @@ function articleKindFor(sourceKind: string): string {
 }
 
 async function ingestSource(source: SourceRow, refs: Refs) {
+  // Claim the source first: if the worker is killed while processing it,
+  // it moves to the back of the queue instead of blocking every next batch.
+  await supabase
+    .from("news_sources")
+    .update({ last_fetched_at: new Date().toISOString() })
+    .eq("id", source.id);
+
   let items: NormalizedItem[];
   try {
     items = await fetchSourceItems(source.rss_url);
@@ -398,7 +426,10 @@ async function ingestSource(source: SourceRow, refs: Refs) {
     .in("guid", guids);
   const existingSet = new Set((existing ?? []).map((e) => e.guid));
 
-  const fresh = items.filter((i) => !existingSet.has(i.guid));
+  const fresh = items
+    .filter((i) => !existingSet.has(i.guid))
+    .sort((a, b) => b.published_at.localeCompare(a.published_at))
+    .slice(0, MAX_FRESH_PER_SOURCE);
   const articleKind = articleKindFor(source.kind);
   let inserted = 0;
   for (const item of fresh) {
@@ -555,9 +586,18 @@ Deno.serve(async (req) => {
     // source from the dashboard for testing.
     sourcesQuery.eq("slug", onlySlug);
   } else {
-    // Hourly cron path: skip GitHub-handled sources to avoid wasted
-    // 30 s timeouts on endpoints that block the Supabase IP.
-    sourcesQuery.eq("fetch_via_github", false);
+    // Cron path: skip GitHub-handled sources to avoid wasted 30 s timeouts
+    // on endpoints that block the Supabase IP. Sources are processed in
+    // batches (least recently fetched first, new ones before all others):
+    // one call for every active source exceeded the edge function's
+    // compute limit (WORKER_RESOURCE_LIMIT). The cron runs every 10 min,
+    // so each source is still read about once an hour.
+    const rawLimit = Number(url.searchParams.get("limit") ?? DEFAULT_BATCH);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : DEFAULT_BATCH;
+    sourcesQuery
+      .eq("fetch_via_github", false)
+      .order("last_fetched_at", { ascending: true, nullsFirst: true })
+      .limit(limit);
   }
   const { data: sources, error: srcErr } = await sourcesQuery;
   if (srcErr) return new Response(JSON.stringify({ error: srcErr.message }), { status: 500 });

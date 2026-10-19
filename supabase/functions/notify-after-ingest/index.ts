@@ -54,6 +54,25 @@ interface ArticleRow {
   article_themes?: Array<{ theme: { slug: string | null } | null }>;
 }
 
+// Un élément publié il y a plus longtemps n'est pas une nouveauté : c'est
+// l'arriéré d'une source qu'on vient d'ajouter ou de réactiver (les 15
+// dernières vidéos d'une chaîne YouTube, les 20 derniers posts d'un compte X).
+const MAX_ITEM_AGE_HOURS = 6;
+
+// Le cron passe à xx:16. Chaque passage traite le créneau horaire fixe qui
+// se termine à la dernière minute 16 (ex. 15:16 → 16:16) : un article n'est
+// vu que par un seul passage, même si le cron démarre avec du retard.
+// L'ancienne fenêtre glissante de 90 min notifiait deux fois les articles
+// récupérés dans la demi-heure précédant chaque passage.
+const SLOT_MINUTE = 16;
+function currentSlot(now: Date): { since: Date; until: Date } {
+  const until = new Date(now);
+  until.setUTCSeconds(0, 0);
+  if (until.getUTCMinutes() < SLOT_MINUTE) until.setUTCHours(until.getUTCHours() - 1);
+  until.setUTCMinutes(SLOT_MINUTE);
+  return { since: new Date(until.getTime() - 3600 * 1000), until };
+}
+
 // ingest-rss / ingest-from-xml donnent ce score au candidat propriétaire de
 // la source (son compte X, sa chaîne YouTube). Les autres liens viennent des
 // alias : un post qui *cite* un candidat n'est pas un post *de* ce candidat.
@@ -90,13 +109,25 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url);
-  const rawWindow = Number(url.searchParams.get("window_min") ?? "90");
-  // Clamp to [1, 1440] min so a caller can't replay notifs over a huge
-  // history window.
-  const minutes = Number.isFinite(rawWindow) ? Math.min(Math.max(rawWindow, 1), 1440) : 90;
   const dryRun = url.searchParams.get("dry") === "1";
 
-  const since = new Date(Date.now() - minutes * 60 * 1000).toISOString();
+  // Par défaut (cron) : le créneau horaire fixe. ?window_min=N (appel manuel)
+  // garde l'ancienne fenêtre glissante, bornée à [1, 1440] min pour qu'un
+  // appelant ne puisse pas rejouer les notifications sur tout l'historique.
+  const windowParam = url.searchParams.get("window_min");
+  let sinceDate: Date;
+  let untilDate: Date;
+  if (windowParam !== null) {
+    const rawWindow = Number(windowParam);
+    const minutes = Number.isFinite(rawWindow) ? Math.min(Math.max(rawWindow, 1), 1440) : 60;
+    untilDate = new Date();
+    sinceDate = new Date(untilDate.getTime() - minutes * 60 * 1000);
+  } else {
+    ({ since: sinceDate, until: untilDate } = currentSlot(new Date()));
+  }
+  const since = sinceDate.toISOString();
+  const until = untilDate.toISOString();
+  const publishedSince = new Date(Date.now() - MAX_ITEM_AGE_HOURS * 3600 * 1000).toISOString();
 
   const { data: newArticles, error } = await supabase
     .from("news_articles")
@@ -106,14 +137,16 @@ Deno.serve(async (req) => {
       article_candidates(score, candidate:candidates(id, first_name, last_name)),
       article_themes(theme:themes(slug))
     `)
-    .gt("fetched_at", since)
+    .gte("fetched_at", since)
+    .lt("fetched_at", until)
+    .gt("published_at", publishedSince)
     .order("published_at", { ascending: false });
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
   const articles = (newArticles ?? []) as unknown as ArticleRow[];
   const count = articles.length;
-  if (count === 0) return Response.json({ count: 0, since, skipped: true });
+  if (count === 0) return Response.json({ count: 0, since, until, skipped: true });
 
   const dispatched: any[] = [];
 
@@ -202,7 +235,7 @@ Deno.serve(async (req) => {
   }
 
   return Response.json({
-    count, since,
+    count, since, until,
     per_candidate: perCandidate.size,
     press_articles: pressArticles.length,
     orphan_media: orphanMedia.length,
