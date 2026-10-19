@@ -16,9 +16,9 @@ export interface MatchCandidate {
    *  l'image de partage. Les photos demos-kratos.fr n'ont pas d'en-tête CORS ;
    *  on ne les précharge pas, pour ne pas multiplier les requêtes chez eux. */
   photoIsOurs: boolean;
-  /** Connu seulement si le candidat est relié à une de nos fiches publiées. */
+  /** Genre renseigné sur notre fiche. */
   gender: string | null;
-  /** Notre fiche, si elle existe et est publiée. */
+  /** Notre fiche (publiée) : seuls ces candidats entrent dans le Match. */
   ourSlug: string | null;
   /** Page du candidat sur demos-kratos.fr. */
   dkUrl: string;
@@ -69,8 +69,14 @@ export async function fetchMatchData(): Promise<MatchData> {
   ]);
   for (const r of [st, ca, imp]) if (r.error) throw r.error;
 
+  // Seuls les candidats reliés à une de nos fiches publiées entrent dans le
+  // Match : un candidat DK sans fiche, ou dont la fiche n'est pas (encore)
+  // publiée, n'est ni proposé ni classé.
+  const published = (ca.data ?? []).filter((c) => ours.has(c.id));
   const index: StanceIndex = {};
-  for (const s of stances) (index[s.statement_id] ??= {})[s.candidate_id] = s.stance as DkStance;
+  for (const s of stances) {
+    if (ours.has(s.candidate_id)) (index[s.statement_id] ??= {})[s.candidate_id] = s.stance as DkStance;
+  }
 
   const meta = (imp.data?.[0]?.meta ?? {}) as Record<string, unknown>;
   return {
@@ -79,18 +85,18 @@ export async function fetchMatchData(): Promise<MatchData> {
       themeColor: (s.theme_id && themeColors.get(s.theme_id)) || null,
     })),
     stances: index,
-    // Un candidat relié à une de nos fiches publiées prend notre photo (servie
-    // avec CORS, donc utilisable dans l'image de partage) et notre parti.
-    candidates: (ca.data ?? []).map((c) => {
-      const o = ours.get(c.id);
+    // Notre photo (servie avec CORS, donc utilisable dans l'image de partage)
+    // et notre parti priment ; ceux de DK servent de repli.
+    candidates: published.map((c) => {
+      const o = ours.get(c.id)!;
       return {
         id: c.id,
-        fullName: o?.fullName ?? c.full_name,
-        party: o?.party || c.party,
-        photoUrl: o?.photoUrl || c.photo_url,
-        photoIsOurs: !!o?.photoUrl,
-        gender: o?.gender ?? null,
-        ourSlug: o?.slug ?? null,
+        fullName: o.fullName,
+        party: o.party || c.party,
+        photoUrl: o.photoUrl || c.photo_url,
+        photoIsOurs: !!o.photoUrl,
+        gender: o.gender,
+        ourSlug: o.slug,
         dkUrl: c.url,
       };
     }),

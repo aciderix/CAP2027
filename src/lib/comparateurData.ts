@@ -21,7 +21,7 @@ export interface CompCandidate {
   fullName: string;
   party: string | null;
   photoUrl: string | null;
-  /** Connu seulement si le candidat est relié à une de nos fiches publiées. */
+  /** Genre renseigné sur notre fiche (publiée). */
   gender: string | null;
   ourSlug: string | null;
   officialSiteUrl: string | null;
@@ -93,17 +93,20 @@ export async function fetchComparateurBase(): Promise<ComparateurBase> {
 
   const meta = (imp.data?.[0]?.meta ?? {}) as Record<string, unknown>;
   return {
+    // Comparateur et Programmes ne montrent que les candidats reliés à une de
+    // nos fiches publiées.
     candidates: (ca.data ?? [])
+      .filter((c) => ours.has(c.id))
       .map((c) => {
-        const o = ours.get(c.id);
+        const o = ours.get(c.id)!;
         return {
           id: c.id,
           slug: c.slug,
-          fullName: o?.fullName ?? c.full_name,
-          party: o?.party || c.party,
-          photoUrl: o?.photoUrl || c.photo_url,
-          gender: o?.gender ?? null,
-          ourSlug: o?.slug ?? null,
+          fullName: o.fullName,
+          party: o.party || c.party,
+          photoUrl: o.photoUrl || c.photo_url,
+          gender: o.gender,
+          ourSlug: o.slug,
           officialSiteUrl: c.official_site_url,
           measureCount: c.measure_count,
           themeCounts: (c.theme_counts ?? {}) as Record<string, number>,
