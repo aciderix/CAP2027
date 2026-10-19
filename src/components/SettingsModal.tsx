@@ -113,7 +113,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   };
 
-  const handleClearData = () => {
+  const handleClearData = async () => {
     if (!confirmClear) {
       setConfirmClear(true);
       return;
@@ -123,6 +123,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       try {
         Object.keys(window.sessionStorage).forEach((k) => sessionStorage.removeItem(k));
       } catch { /* noop */ }
+      // Sur Android, réponses au Match, suivis et réglages de notifications
+      // sont aussi copiés dans les Preferences natives (lues par le worker
+      // de notifications ; le Match s'en restaure au démarrage) : sans ce
+      // nettoyage, ils survivraient à l'effacement.
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const { Preferences } = await import('@capacitor/preferences');
+          await Preferences.clear();
+        } catch { /* best-effort */ }
+      }
       window.location.reload();
     }
   };
@@ -297,7 +307,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div>
               <p className="font-bold text-[#102a5c] text-sm">Effacer mes données locales</p>
               <p className="text-xs text-slate-500 leading-snug mt-0.5">
-                Supprime vos candidats suivis, vos résultats de boussole, l'onboarding et le cache.
+                Supprime vos candidats suivis, vos réponses au Match, vos comparaisons, l'onboarding et le cache.
               </p>
             </div>
           </div>
