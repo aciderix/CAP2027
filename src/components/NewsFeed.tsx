@@ -89,6 +89,48 @@ function fullName(c: CandidateLite) {
   return `${c.first_name} ${c.last_name}`;
 }
 
+// Source diversity: at most DIVERSITY_MAX items from one source in any
+// DIVERSITY_WINDOW consecutive items, so a source publishing 100 articles a
+// day (Le Parisien) cannot fill the screen. An item over the limit moves down
+// to the first place where it fits; none is removed. A narrow filter that
+// leaves too few sources to fill a window keeps the plain chronological order.
+const DIVERSITY_WINDOW = 10;
+const DIVERSITY_MAX = 2;
+
+function diversifySources(items: ArticleRow[]): ArticleRow[] {
+  const sourceOf = (a: ArticleRow) => a.source?.slug ?? a.id;
+  if (new Set(items.map(sourceOf)).size < DIVERSITY_WINDOW / DIVERSITY_MAX) return items;
+  const out: ArticleRow[] = [];
+  const waiting: ArticleRow[] = [];
+  const fits = (a: ArticleRow) => {
+    const s = sourceOf(a);
+    let n = 0;
+    for (let i = Math.max(0, out.length - DIVERSITY_WINDOW + 1); i < out.length; i++) {
+      if (sourceOf(out[i]) === s) n++;
+    }
+    return n < DIVERSITY_MAX;
+  };
+  // Waiting items are newer than anything not yet placed: they go first.
+  const placeWaiting = () => {
+    let i = 0;
+    while (i < waiting.length) {
+      if (fits(waiting[i])) {
+        out.push(waiting.splice(i, 1)[0]);
+        i = 0;
+      } else {
+        i++;
+      }
+    }
+  };
+  for (const a of items) {
+    placeWaiting();
+    if (fits(a)) out.push(a);
+    else waiting.push(a);
+  }
+  placeWaiting();
+  return out.concat(waiting);
+}
+
 export function NewsFeed({ mode }: { mode: Mode }) {
   const [search, setSearch] = useState('');
   // Panneau de filtres : tiroir sur mobile (sur PC, colonne toujours visible).
@@ -231,9 +273,11 @@ export function NewsFeed({ mode }: { mode: Mode }) {
     ignoreDiacritics: true,
   }), [chipFiltered]);
 
+  // Search results keep Fuse's relevance order; the default list is
+  // chronological with the source-diversity rule.
   const filtered = useMemo(() => {
     const q = search.trim();
-    if (q.length < 2) return chipFiltered;
+    if (q.length < 2) return diversifySources(chipFiltered);
     return fuse.search(q).map((r) => r.item);
   }, [chipFiltered, fuse, search]);
 

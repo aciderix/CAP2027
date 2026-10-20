@@ -261,8 +261,11 @@ function MethodologyModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
         </div>
         <p>
           <b>Aucune éditorialisation</b> — Pas de classement caché, pas d'algorithme de mise en
-          avant. L'ordre par défaut est strictement chronologique. Le carrousel "À la une"
-          remonte les candidats que <i>vous</i> suivez en premier.
+          avant. L'ordre par défaut est chronologique, avec une seule règle : pas plus de
+          2 articles d'un même média sur 10 consécutifs, pour qu'un média qui publie beaucoup
+          n'occupe pas tout l'écran. Les articles en trop descendent un peu plus bas, aucun
+          n'est retiré. La règle ne s'applique pas quand un filtre ne laisse que quelques médias.
+          Le carrousel "À la une" remonte les candidats que <i>vous</i> suivez en premier.
         </p>
 
         <div>
