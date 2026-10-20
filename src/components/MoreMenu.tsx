@@ -229,8 +229,9 @@ function MethodologyModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
           son article Wikipédia le caractérise. Les médias généralistes et de service
           public, pour lesquels Wikipédia n'indique pas d'orientation, sont classés au
           centre. Les comptes des candidats suivent le positionnement de leur parti sur
-          Wikipédia. « Extrême » n'est retenu que lorsque Wikipédia l'indique sans
-          nuance, à gauche comme à droite. « Transverse » regroupe les médias qui se
+          Wikipédia ; quand il s'agit d'une fourchette, on retient son milieu, ou sa
+          borne la plus modérée. « Extrême » n'est retenu que lorsque Wikipédia l'indique
+          sans nuance, à gauche comme à droite. « Transverse » regroupe les médias qui se
           situent hors du clivage gauche-droite ou dont le positionnement est contesté.
         </p>
         <p>
