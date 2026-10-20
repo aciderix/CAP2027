@@ -16,6 +16,7 @@ interface Source {
   kind: string;
   candidate_id: string | null;
   fetch_via_github: boolean;
+  filter_off_topic: boolean;
   last_fetched_at: string | null;
   last_fetch_error: string | null;
 }
@@ -131,6 +132,11 @@ export function Sources() {
                     Via GitHub
                   </span>
                 )}
+                {s.filter_off_topic && (
+                  <span className="text-[9px] uppercase tracking-widest font-bold text-sky-700 bg-sky-100 px-1.5 py-0.5 rounded">
+                    Hors-sujet filtré
+                  </span>
+                )}
               </div>
               <a
                 href={s.rss_url} target="_blank" rel="noopener noreferrer"
@@ -208,6 +214,7 @@ function SourceEditor({
     kind: 'press',
     candidate_id: null,
     fetch_via_github: false,
+    filter_off_topic: false,
     last_fetched_at: null,
     last_fetch_error: null,
   });
@@ -231,6 +238,7 @@ function SourceEditor({
         kind: form.kind,
         candidate_id: form.candidate_id || null,
         fetch_via_github: form.fetch_via_github,
+        filter_off_topic: form.filter_off_topic,
       };
       if (isNew) {
         const { error } = await supabase.from('news_sources').insert(payload);
@@ -299,6 +307,12 @@ function SourceEditor({
             <label className="inline-flex items-center gap-2 mt-2">
               <input type="checkbox" checked={form.fetch_via_github} onChange={(e) => set('fetch_via_github', e.target.checked)} />
               <span className="text-sm">Fetch côté GitHub puis POST à <code className="text-[10px]">ingest-from-xml</code></span>
+            </label>
+          </Field>
+          <Field label="Filtrer le hors-sujet ?" wide hint="pour une chaîne généraliste qui publie aussi du divertissement (Sud Radio, Brut)">
+            <label className="inline-flex items-center gap-2 mt-2">
+              <input type="checkbox" checked={form.filter_off_topic} onChange={(e) => set('filter_off_topic', e.target.checked)} />
+              <span className="text-sm">Garder seulement ce qui cite un candidat, un parti ou un thème politique</span>
             </label>
           </Field>
           <Field
