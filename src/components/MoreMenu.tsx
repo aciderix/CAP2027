@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { STABLE_STALE_MS } from '../lib/queryClient';
 import { openLink } from '../lib/openLink';
 import { DK_LICENCE_URL, DK_SITE_URL } from '../lib/dkShared';
+import { ORIENTATION_ORDER } from '../lib/orientationFollows';
 
 interface MoreMenuProps {
   onGoToCandidates: () => void;
@@ -24,10 +25,13 @@ interface SourceRow {
 }
 
 const ORIENTATION_LABELS: Record<string, string> = {
+  'extreme-gauche': 'Extrême gauche',
   gauche: 'Gauche',
+  'centre-gauche': 'Centre-gauche',
   centre: 'Centre',
   'centre-droit': 'Centre-droit',
   droite: 'Droite',
+  'extreme-droite': 'Extrême droite',
   transverse: 'Transverse',
   factcheck: 'Fact-checking',
 };
@@ -205,8 +209,7 @@ function MethodologyModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
     return acc;
   }, {});
 
-  const order = ['gauche', 'centre', 'centre-droit', 'droite', 'transverse', 'factcheck'];
-  const groupKeys = order.filter((k) => grouped[k]?.length);
+  const groupKeys = ORIENTATION_ORDER.filter((k) => grouped[k]?.length);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Méthodologie et sources">
@@ -220,6 +223,15 @@ function MethodologyModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
           candidats, partis et thématiques qu'il mentionne, pour qu'il apparaisse
           au bon endroit dans la fiche d'un candidat ou dans le filtre d'un
           thème. L'écriture sans accent fonctionne aussi.
+        </p>
+        <p>
+          <b>Orientation des sources</b> — Chaque média est classé d'après la façon dont
+          son article Wikipédia le caractérise. Les médias généralistes et de service
+          public, pour lesquels Wikipédia n'indique pas d'orientation, sont classés au
+          centre. Les comptes des candidats suivent le positionnement de leur parti sur
+          Wikipédia. « Extrême » n'est retenu que lorsque Wikipédia l'indique sans
+          nuance, à gauche comme à droite. « Transverse » regroupe les médias qui se
+          situent hors du clivage gauche-droite ou dont le positionnement est contesté.
         </p>
         <p>
           <b>Fact-checking</b> — Les vérifications publiées par les rédactions

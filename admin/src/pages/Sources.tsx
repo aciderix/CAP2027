@@ -20,7 +20,10 @@ interface Source {
   last_fetch_error: string | null;
 }
 
-const ORIENTATIONS = ['gauche', 'centre', 'centre-droit', 'droite', 'transverse', 'factcheck'];
+const ORIENTATIONS = [
+  'extreme-gauche', 'gauche', 'centre-gauche', 'centre', 'centre-droit', 'droite', 'extreme-droite',
+  'transverse', 'factcheck',
+];
 const KINDS = ['press', 'youtube', 'twitch', 'mastodon', 'bluesky', 'twitter'];
 
 export function Sources() {
