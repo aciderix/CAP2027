@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { ARTICLE_STALE_MS, STABLE_STALE_MS } from '../lib/queryClient';
 import { TwitterPostCard, postAuthor } from './TwitterPostCard';
-import { useFollowedOrientations } from '../lib/orientationFollows';
+import { ORIENTATION_ORDER, useFollowedOrientations } from '../lib/orientationFollows';
 import { useFollowedThemes, POLITICS_THEME_SLUG } from '../lib/themeFollows';
 import { openLink } from '../lib/openLink';
 import { ShareButton } from './ui/ShareButton';
@@ -53,12 +53,15 @@ interface FilterOption {
 }
 
 const ORIENTATION_META: Record<string, { label: string; short: string; dot: string }> = {
-  'gauche':       { label: 'Gauche',       short: 'Gauche',  dot: '#e2001a' },
-  'centre':       { label: 'Centre',       short: 'Centre',  dot: '#475569' },
-  'centre-droit': { label: 'Centre-droit', short: 'C.-droit',dot: '#3c4ad6' },
-  'droite':       { label: 'Droite',       short: 'Droite',  dot: '#cb1f24' },
-  'transverse':   { label: 'Transverse',   short: 'Transv.', dot: '#7c3aed' },
-  'factcheck':    { label: 'Fact-check',   short: 'Fact',    dot: '#005baa' },
+  'extreme-gauche': { label: 'Extrême gauche', short: 'Ext. g.',  dot: '#8b0000' },
+  'gauche':         { label: 'Gauche',         short: 'Gauche',   dot: '#e2001a' },
+  'centre-gauche':  { label: 'Centre-gauche',  short: 'C.-gauche',dot: '#f472b6' },
+  'centre':         { label: 'Centre',         short: 'Centre',   dot: '#475569' },
+  'centre-droit':   { label: 'Centre-droit',   short: 'C.-droit', dot: '#3c4ad6' },
+  'droite':         { label: 'Droite',         short: 'Droite',   dot: '#cb1f24' },
+  'extreme-droite': { label: 'Extrême droite', short: 'Ext. d.',  dot: '#0b1d51' },
+  'transverse':     { label: 'Transverse',     short: 'Transv.',  dot: '#7c3aed' },
+  'factcheck':      { label: 'Fact-check',     short: 'Fact',     dot: '#005baa' },
 };
 
 const VERDICT_STYLES: Record<string, { label: string; bg: string; text: string }> = {
@@ -84,6 +87,48 @@ function relativeTime(iso: string) {
 
 function fullName(c: CandidateLite) {
   return `${c.first_name} ${c.last_name}`;
+}
+
+// Source diversity: at most DIVERSITY_MAX items from one source in any
+// DIVERSITY_WINDOW consecutive items, so a source publishing 100 articles a
+// day (Le Parisien) cannot fill the screen. An item over the limit moves down
+// to the first place where it fits; none is removed. A narrow filter that
+// leaves too few sources to fill a window keeps the plain chronological order.
+const DIVERSITY_WINDOW = 10;
+const DIVERSITY_MAX = 2;
+
+function diversifySources(items: ArticleRow[]): ArticleRow[] {
+  const sourceOf = (a: ArticleRow) => a.source?.slug ?? a.id;
+  if (new Set(items.map(sourceOf)).size < DIVERSITY_WINDOW / DIVERSITY_MAX) return items;
+  const out: ArticleRow[] = [];
+  const waiting: ArticleRow[] = [];
+  const fits = (a: ArticleRow) => {
+    const s = sourceOf(a);
+    let n = 0;
+    for (let i = Math.max(0, out.length - DIVERSITY_WINDOW + 1); i < out.length; i++) {
+      if (sourceOf(out[i]) === s) n++;
+    }
+    return n < DIVERSITY_MAX;
+  };
+  // Waiting items are newer than anything not yet placed: they go first.
+  const placeWaiting = () => {
+    let i = 0;
+    while (i < waiting.length) {
+      if (fits(waiting[i])) {
+        out.push(waiting.splice(i, 1)[0]);
+        i = 0;
+      } else {
+        i++;
+      }
+    }
+  };
+  for (const a of items) {
+    placeWaiting();
+    if (fits(a)) out.push(a);
+    else waiting.push(a);
+  }
+  placeWaiting();
+  return out.concat(waiting);
 }
 
 export function NewsFeed({ mode }: { mode: Mode }) {
@@ -177,8 +222,9 @@ export function NewsFeed({ mode }: { mode: Mode }) {
         supabase.from('news_sources').select('orientation').eq('is_active', true),
       ]);
       const orientationSet = new Set<string>((sRes.data ?? []).map((r: any) => r.orientation));
-      const order = ['gauche','centre','centre-droit','droite','transverse','factcheck'];
-      const orientations = [...orientationSet].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      const orientations = [...orientationSet].sort(
+        (a, b) => ORIENTATION_ORDER.indexOf(a) - ORIENTATION_ORDER.indexOf(b),
+      );
       return {
         themes: (tRes.data ?? []) as ThemeLite[],
         candidates: (cRes.data ?? []) as CandidateOption[],
@@ -227,14 +273,21 @@ export function NewsFeed({ mode }: { mode: Mode }) {
     ignoreDiacritics: true,
   }), [chipFiltered]);
 
+  // Search results keep Fuse's relevance order; the default list is
+  // chronological with the source-diversity rule.
   const filtered = useMemo(() => {
     const q = search.trim();
-    if (q.length < 2) return chipFiltered;
+    if (q.length < 2) return diversifySources(chipFiltered);
     return fuse.search(q).map((r) => r.item);
   }, [chipFiltered, fuse, search]);
 
+  // Only orientations that currently have a source count: a follow can
+  // outlive its category (see the migration in lib/orientationFollows.ts).
+  const visibleFollowedOrientations = filters
+    ? filters.orientations.filter((o) => followedOrientations.has(o)).length
+    : followedOrientations.size;
   const activeFilterCount =
-    (isFactcheck ? 0 : followedOrientations.size) + followedThemes.size
+    (isFactcheck ? 0 : visibleFollowedOrientations) + followedThemes.size
     + (selectedCandidate ? 1 : 0) + (selectedParty ? 1 : 0);
 
   const headerCount = filtered.length;

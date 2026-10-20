@@ -221,6 +221,23 @@ function normalize(item: any): NormalizedItem | null {
   };
 }
 
+// Some CDNs serve a stale copy of the feed: Europe 1 answered with
+// Age: 65829 (18 h), Public Sénat with a Date header 3 h in the past.
+// Cache-Control: no-cache is enough for the latter. When a response is still
+// older than STALE_SECONDS, it is fetched again with a cache-busting query
+// parameter; a few hosts reject unknown parameters (Atlantico, L'Express:
+// 404, Reporterre: 403), so the stale copy is kept if that fails.
+const STALE_SECONDS = 2 * 3600;
+function staleSeconds(res: Response): number {
+  const age = Number(res.headers.get('age') ?? 0) || 0;
+  const date = Date.parse(res.headers.get('date') ?? '');
+  const behind = Number.isFinite(date) ? (Date.now() - date) / 1000 : 0;
+  return Math.max(age, behind);
+}
+function cacheBusted(url: string): string {
+  return `${url}${url.includes('?') ? '&' : '?'}_cb=${Math.floor(Date.now() / 60_000)}`;
+}
+
 async function fetchSourceItems(rssUrl: string): Promise<NormalizedItem[]> {
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 20_000);
@@ -236,20 +253,31 @@ async function fetchSourceItems(rssUrl: string): Promise<NormalizedItem[]> {
   try {
     for (let i = 0; i < userAgents.length; i++) {
       try {
-        const res = await fetch(rssUrl, {
+        const init: RequestInit = {
           headers: {
             'User-Agent': userAgents[i],
             'Accept': 'application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5',
             'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
           },
           signal: ctrl.signal,
           redirect: 'follow',
-        });
+        };
+        const res = await fetch(rssUrl, init);
         if (!res.ok) {
           lastErr = new Error(`HTTP ${res.status}`);
           continue;
         }
         xml = await res.text();
+        if (staleSeconds(res) > STALE_SECONDS) {
+          try {
+            const fresh = await fetch(cacheBusted(rssUrl), init);
+            if (fresh.ok) xml = await fresh.text();
+          } catch {
+            // keep the stale copy
+          }
+        }
         lastErr = null;
         break;
       } catch (e) {

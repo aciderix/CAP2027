@@ -20,7 +20,23 @@ interface Source {
   last_fetch_error: string | null;
 }
 
-const ORIENTATIONS = ['gauche', 'centre', 'centre-droit', 'droite', 'transverse', 'factcheck'];
+// Left to right, then the off-axis buckets (same order as the app).
+const ORIENTATIONS = [
+  { value: 'extreme-gauche', label: 'Extrême gauche' },
+  { value: 'gauche', label: 'Gauche' },
+  { value: 'centre-gauche', label: 'Centre-gauche' },
+  { value: 'centre', label: 'Centre' },
+  { value: 'centre-droit', label: 'Centre-droit' },
+  { value: 'droite', label: 'Droite' },
+  { value: 'extreme-droite', label: 'Extrême droite' },
+  { value: 'transverse', label: 'Transverse' },
+  { value: 'factcheck', label: 'Fact-check' },
+];
+const orientationRank = (o: string) => {
+  const i = ORIENTATIONS.findIndex((x) => x.value === o);
+  return i === -1 ? ORIENTATIONS.length : i;
+};
+const orientationLabel = (o: string) => ORIENTATIONS.find((x) => x.value === o)?.label ?? o;
 const KINDS = ['press', 'youtube', 'twitch', 'mastodon', 'bluesky', 'twitter'];
 
 export function Sources() {
@@ -31,10 +47,11 @@ export function Sources() {
       const { data, error } = await supabase
         .from('news_sources')
         .select('*')
-        .order('orientation')
         .order('name');
       if (error) throw error;
-      return (data ?? []) as Source[];
+      return ((data ?? []) as Source[]).sort(
+        (a, b) => orientationRank(a.orientation) - orientationRank(b.orientation),
+      );
     },
   });
 
@@ -97,7 +114,7 @@ export function Sources() {
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-bold text-ink">{s.name}</span>
                 <span className="text-[9px] uppercase tracking-widest font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                  {s.orientation}
+                  {orientationLabel(s.orientation)}
                 </span>
                 {s.is_factcheck && (
                   <span className="text-[9px] uppercase tracking-widest font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded">
@@ -252,9 +269,9 @@ function SourceEditor({
               {KINDS.map((k) => <option key={k}>{k}</option>)}
             </select>
           </Field>
-          <Field label="Orientation">
+          <Field label="Orientation" hint="d'après Wikipédia ; compte de candidat : son parti">
             <select value={form.orientation} onChange={(e) => set('orientation', e.target.value)} className="input">
-              {ORIENTATIONS.map((o) => <option key={o}>{o}</option>)}
+              {ORIENTATIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </Field>
           <Field label="Couleur (hex)">

@@ -1,6 +1,5 @@
-// Per-device subscription to news_sources.orientation buckets
-// ("gauche", "centre", "centre-droit", "droite", "transverse",
-// "factcheck"). Drives both the in-app NewsFeed filter and the
+// Per-device subscription to news_sources.orientation buckets (see
+// ORIENTATION_ORDER). Drives both the in-app NewsFeed filter and the
 // push-broadcast filter for press notifs.
 //
 // Semantics: opt-in restrictif but lenient default.
@@ -20,7 +19,25 @@ import { supabase } from './supabase';
 import { getPushToken } from './push';
 import { getWebPushToken } from './pushWeb';
 
+// Left to right, then the off-axis buckets. Media are placed from how
+// their Wikipedia article describes them (see the Méthodologie modal).
+export const ORIENTATION_ORDER = [
+  'extreme-gauche', 'gauche', 'centre-gauche', 'centre', 'centre-droit', 'droite', 'extreme-droite',
+  'transverse', 'factcheck',
+];
+
 const KEY = 'cap2027.followedOrientations';
+
+// October 2026: "extreme-gauche", "centre-gauche" and "extreme-droite"
+// were split out of "gauche", "centre" and "droite". A device that
+// followed one of the old buckets also follows the new one once, so it
+// keeps receiving the sources it chose (Le Monde, Valeurs actuelles…).
+const SPLIT_KEY = 'cap2027.followedOrientations.split2026';
+const SPLITS: Record<string, string> = {
+  gauche: 'extreme-gauche',
+  centre: 'centre-gauche',
+  droite: 'extreme-droite',
+};
 
 // Native FCM token (Android) when present, otherwise the web FCM token,
 // so orientation follow/unfollow targeting works on both platforms.
@@ -32,9 +49,15 @@ function read(): Set<string> {
   if (typeof window === 'undefined') return new Set();
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw);
-    return new Set(Array.isArray(arr) ? arr : []);
+    const arr = raw ? JSON.parse(raw) : [];
+    const set = new Set<string>(Array.isArray(arr) ? arr : []);
+    if (!localStorage.getItem(SPLIT_KEY)) {
+      const before = set.size;
+      for (const [from, to] of Object.entries(SPLITS)) if (set.has(from)) set.add(to);
+      if (set.size !== before) localStorage.setItem(KEY, JSON.stringify([...set]));
+      localStorage.setItem(SPLIT_KEY, '1');
+    }
+    return set;
   } catch {
     return new Set();
   }
