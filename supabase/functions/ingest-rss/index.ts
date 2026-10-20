@@ -331,6 +331,19 @@ interface Refs {
   candidateAliases: CandidateAlias[];
   partyAliases: PartyAlias[];
   themeKeywords: ThemeKeyword[];
+  nonPolicyThemeIds: Set<string>;
+}
+
+// Some generalist channels (Sud Radio, Brut on YouTube) also post
+// entertainment, sport, life advice. For sources flagged filter_off_topic,
+// items are kept only when they cite a candidate or a party, or touch a
+// public-policy theme. Not applied to mostly political channels: keyword
+// tagging misses many political titles, so it would drop relevant videos.
+const NON_POLICY_THEMES = ["culture", "sport", "technologie"];
+
+function isPolicyRelevant(tags: ReturnType<typeof tagArticle>, refs: Refs): boolean {
+  return tags.candidates.length > 0 || tags.parties.length > 0 ||
+    tags.themes.some((t) => !refs.nonPolicyThemeIds.has(t.id));
 }
 
 function tagArticle(title: string, summary: string, refs: Refs) {
@@ -382,18 +395,21 @@ function tagArticle(title: string, summary: string, refs: Refs) {
 }
 
 async function loadRefs(): Promise<Refs> {
-  const [c, p, t] = await Promise.all([
+  const [c, p, t, np] = await Promise.all([
     supabase.from("candidate_aliases").select("candidate_id, alias"),
     supabase.from("party_aliases").select("party_id, alias"),
     supabase.from("theme_keywords").select("theme_id, keyword"),
+    supabase.from("themes").select("id").in("slug", NON_POLICY_THEMES),
   ]);
   if (c.error) throw c.error;
   if (p.error) throw p.error;
   if (t.error) throw t.error;
+  if (np.error) throw np.error;
   return {
     candidateAliases: (c.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias), needle: needleOf(r.alias) })),
     partyAliases:     (p.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.alias), needle: needleOf(r.alias) })),
     themeKeywords:    (t.data ?? []).map((r: any) => ({ ...r, regex: makePattern(r.keyword), needle: needleOf(r.keyword) })),
+    nonPolicyThemeIds: new Set((np.data ?? []).map((r: any) => r.id as string)),
   };
 }
 
@@ -405,6 +421,7 @@ interface SourceRow {
   is_factcheck: boolean;
   kind: string;
   candidate_id: string | null;
+  filter_off_topic: boolean;
 }
 
 const ARTICLE_KIND_FROM_SOURCE: Record<string, string> = {
@@ -460,7 +477,13 @@ async function ingestSource(source: SourceRow, refs: Refs) {
     .slice(0, MAX_FRESH_PER_SOURCE);
   const articleKind = articleKindFor(source.kind);
   let inserted = 0;
+  let offTopic = 0;
   for (const item of fresh) {
+    const tags = tagArticle(item.title, item.summary, refs);
+    if (source.filter_off_topic && !isPolicyRelevant(tags, refs)) {
+      offTopic++;
+      continue;
+    }
     const verdict = source.is_factcheck ? detectVerdict(item.title, item.summary) : null;
     const { data, error } = await supabase
       .from("news_articles")
@@ -481,7 +504,6 @@ async function ingestSource(source: SourceRow, refs: Refs) {
       .single();
     if (error || !data) continue;
     inserted++;
-    const tags = tagArticle(item.title, item.summary, refs);
     // Auto-attribute to source's candidate (high confidence)
     const candidateMap = new Map<string, number>();
     for (const t of tags.candidates) candidateMap.set(t.id, t.score);
@@ -507,7 +529,7 @@ async function ingestSource(source: SourceRow, refs: Refs) {
     .update({ last_fetched_at: new Date().toISOString(), last_fetch_error: null })
     .eq("id", source.id);
 
-  return { source: source.slug, inserted, total: items.length };
+  return { source: source.slug, inserted, total: items.length, ...(offTopic ? { off_topic: offTopic } : {}) };
 }
 
 // ---------- Re-tag mode ----------
@@ -606,7 +628,7 @@ Deno.serve(async (req) => {
 
   const sourcesQuery = supabase
     .from("news_sources")
-    .select("id, slug, name, rss_url, is_factcheck, kind, candidate_id")
+    .select("id, slug, name, rss_url, is_factcheck, kind, candidate_id, filter_off_topic")
     .eq("is_active", true);
   if (onlySlug) {
     // Manual override (?source=<slug>) bypasses the fetch_via_github

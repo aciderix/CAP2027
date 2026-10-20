@@ -53,15 +53,16 @@ interface FilterOption {
 }
 
 const ORIENTATION_META: Record<string, { label: string; short: string; dot: string }> = {
+  // Reds and pink on the left, blues on the right, neutral centre.
   'extreme-gauche': { label: 'Extrême gauche', short: 'Ext. g.',  dot: '#8b0000' },
   'gauche':         { label: 'Gauche',         short: 'Gauche',   dot: '#e2001a' },
   'centre-gauche':  { label: 'Centre-gauche',  short: 'C.-gauche',dot: '#f472b6' },
   'centre':         { label: 'Centre',         short: 'Centre',   dot: '#475569' },
-  'centre-droit':   { label: 'Centre-droit',   short: 'C.-droit', dot: '#3c4ad6' },
-  'droite':         { label: 'Droite',         short: 'Droite',   dot: '#cb1f24' },
+  'centre-droit':   { label: 'Centre-droit',   short: 'C.-droit', dot: '#60a5fa' },
+  'droite':         { label: 'Droite',         short: 'Droite',   dot: '#1d4ed8' },
   'extreme-droite': { label: 'Extrême droite', short: 'Ext. d.',  dot: '#0b1d51' },
   'transverse':     { label: 'Transverse',     short: 'Transv.',  dot: '#7c3aed' },
-  'factcheck':      { label: 'Fact-check',     short: 'Fact',     dot: '#005baa' },
+  'factcheck':      { label: 'Fact-check',     short: 'Fact',     dot: '#0d9488' },
 };
 
 const VERDICT_STYLES: Record<string, { label: string; bg: string; text: string }> = {
